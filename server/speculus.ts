@@ -1,11 +1,12 @@
 import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { Router, type Request } from 'express';
 import { z } from 'zod';
-import { ensureSuperAdminAccess, refreshSessionAccess } from './auth.js';
+import { ensureSuperAdminAccess, refreshSessionAccess, SUPER_ADMIN_DISCORD_ID } from './auth.js';
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import { credentialKey, openCredential } from './provider-settings.js';
 import type { SettingsStore } from './settings.js';
+import { canDirectViewAssetRow } from './world-access.js';
 
 const launchableTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const modelNames = ['xialong-v1', 'glm-4-6'] as const;
@@ -114,11 +115,17 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       if (!config.SPECULUS_BRIDGE_SECRET) return response.status(503).json({ error: 'The Speculus bridge is not configured.' });
 
       const assetResult = await pool.query(
-        `SELECT * FROM library_assets WHERE id = $1 AND type = ANY($2::text[])`,
+        `SELECT a.*, origin.document AS origin_world_document,
+                origin.creator_user_id AS origin_world_creator_user_id
+         FROM library_assets a
+         LEFT JOIN library_assets origin ON origin.id = a.origin_world_id
+         WHERE a.id = $1 AND a.type = ANY($2::text[])`,
         [request.params.id, launchableTypes],
       );
       if (!assetResult.rowCount) return response.status(404).json({ error: 'Record not found.' });
       const asset = assetResult.rows[0];
+      const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
+      if (!canDirectViewAssetRow(asset, request.session.userId, isSuperAdmin)) return response.status(404).json({ error: 'Record not found.' });
       const ownsAsset = asset.creator_user_id === request.session.userId;
       if (asset.content_rating === 'adult' && !request.session.access?.canViewAdult && !ownsAsset) {
         return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
