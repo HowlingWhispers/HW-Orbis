@@ -79,7 +79,7 @@ const compactSummary = (value: unknown) => {
 const sourceIdentity = (type: BackupAssetType, id: string) => `hw-world-backup-v1:${type}:${id}`;
 
 const dependencyCount = (entity: Record<string, unknown>) =>
-  Object.values(entity).reduce((total, value) => total + (Array.isArray(value) ? value.length : 0), 0);
+  Object.values(entity).reduce<number>((total, value) => total + (Array.isArray(value) ? value.length : 0), 0);
 
 function cloneEntity(entity: Record<string, unknown>) {
   return structuredClone(entity);

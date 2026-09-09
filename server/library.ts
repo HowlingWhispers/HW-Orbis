@@ -125,7 +125,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       ]);
       const countMap = Object.fromEntries(assetTypes.map((type) => [type, 0]));
       for (const row of countRows.rows) {
-        if (canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds)) countMap[row.type] += 1;
+        if (canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds)) countMap[row.type] = (countMap[row.type] ?? 0) + 1;
       }
       response.json({
         recent: recent.rows

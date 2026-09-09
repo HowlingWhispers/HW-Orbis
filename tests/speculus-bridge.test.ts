@@ -49,7 +49,7 @@ describe('Speculus security bridge', () => {
       return new Response(JSON.stringify({ launchUrl: 'https://spec.thehowlingwhispers.com/?launch=once' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
     }));
     const pool = { query: vi.fn(async (sql: string) => {
-      if (sql.includes('SELECT * FROM library_assets WHERE id')) return { rowCount: 1, rows: [{
+      if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [{
         id: assetId, type: 'character', name: 'Ragna Holt', summary: 'A boundary warden.',
         creator_user_id: userId, content_rating: 'adult', origin_world_id: null, updated_at: updatedAt,
         tags: ['Werewolf'], document: { description: 'Terse and observant.', personality: 'Protective' },
