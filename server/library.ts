@@ -5,6 +5,7 @@ import { ensureSuperAdminAccess, refreshSessionAccess, requireCreator, SUPER_ADM
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import type { SettingsStore } from './settings.js';
+import { canDirectViewAssetRow, canDiscoverAssetRow } from './world-access.js';
 
 const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const sourceTypes = ['curated', 'user-created', 'imported-v2', 'copied', 'public-curated', 'legacy-import'] as const;
@@ -74,6 +75,8 @@ function mapAsset(row: Record<string, unknown>, userId?: string, isSuperAdmin = 
 
 const selectAssets = `
   SELECT a.*, origin.name AS origin_world_name,
+    origin.document AS origin_world_document,
+    origin.creator_user_id AS origin_world_creator_user_id,
     u.display_name AS author_name, u.avatar_url AS author_avatar_url,
     sc.code AS speculus_code, sc.classification AS speculus_classification,
     (a.content_rating = 'adult' AND NOT $1::boolean AND a.creator_user_id IS DISTINCT FROM $2::uuid) AS restricted
@@ -81,6 +84,13 @@ const selectAssets = `
   LEFT JOIN library_assets origin ON origin.id = a.origin_world_id
   LEFT JOIN users u ON u.id = a.creator_user_id
   LEFT JOIN speculus_catalog_registry sc ON sc.asset_id = a.id`;
+
+const selectAccessRows = `
+  SELECT a.type, a.creator_user_id, a.document,
+    origin.document AS origin_world_document,
+    origin.creator_user_id AS origin_world_creator_user_id
+  FROM library_assets a
+  LEFT JOIN library_assets origin ON origin.id = a.origin_world_id`;
 
 function requestIdentity(request: Request) {
   return {
@@ -106,16 +116,23 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
     try {
       const adult = canViewAdult(request);
       const identity = requestIdentity(request);
-      const [recent, pinned, counts] = await Promise.all([
-        pool.query(`${selectAssets} ORDER BY a.updated_at DESC LIMIT 4`, [adult, identity.userId ?? null]),
+      const [recent, pinned, countRows] = await Promise.all([
+        pool.query(`${selectAssets} ORDER BY a.updated_at DESC LIMIT 40`, [adult, identity.userId ?? null]),
         pool.query(`${selectAssets} WHERE a.pinned = true ORDER BY a.updated_at DESC`, [adult, identity.userId ?? null]),
-        pool.query(`SELECT type, count(*)::int AS count FROM library_assets GROUP BY type`),
+        pool.query(selectAccessRows),
       ]);
       const countMap = Object.fromEntries(assetTypes.map((type) => [type, 0]));
-      for (const row of counts.rows) countMap[row.type] = row.count;
+      for (const row of countRows.rows) {
+        if (canDiscoverAssetRow(row, identity.userId, identity.isSuperAdmin)) countMap[row.type] += 1;
+      }
       response.json({
-        recent: recent.rows.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
-        pinned: pinned.rows.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
+        recent: recent.rows
+          .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.isSuperAdmin))
+          .slice(0, 4)
+          .map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
+        pinned: pinned.rows
+          .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.isSuperAdmin))
+          .map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
         counts: countMap,
       });
     } catch (error) {
@@ -139,8 +156,14 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       }
       const clause = where.length ? ` WHERE ${where.join(' AND ')}` : '';
       const order = request.query.sort === 'name' ? 'a.name ASC' : 'a.updated_at DESC';
-      const result = await pool.query(`${selectAssets}${clause} ORDER BY ${order} LIMIT 200`, values);
-      response.json({ items: result.rows.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)), total: result.rowCount });
+      const result = await pool.query(`${selectAssets}${clause} ORDER BY ${order} LIMIT 400`, values);
+      const visibleRows = result.rows
+        .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.isSuperAdmin))
+        .slice(0, 200);
+      response.json({
+        items: visibleRows.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
+        total: visibleRows.length,
+      });
     } catch (error) {
       next(error);
     }
@@ -152,6 +175,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       const identity = requestIdentity(request);
       const result = await pool.query(`${selectAssets} WHERE a.id = $3`, [canViewAdult(request), identity.userId ?? null, request.params.id]);
       if (!result.rowCount) return response.status(404).json({ error: 'Record not found.' });
+      if (!canDirectViewAssetRow(result.rows[0], identity.userId, identity.isSuperAdmin)) return response.status(404).json({ error: 'Record not found.' });
       if (result.rows[0].restricted) return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
       response.json(mapAsset(result.rows[0], identity.userId, identity.isSuperAdmin));
     } catch (error) {
