@@ -133,7 +133,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
 
       const [providerResult, userResult, relatedResult] = await Promise.all([
         pool.query(`SELECT model FROM user_provider_settings WHERE user_id = $1 AND provider = 'novelai'`, [request.session.userId]),
-        pool.query('SELECT id, display_name FROM users WHERE id = $1', [request.session.userId]),
+        pool.query('SELECT id, display_name, player_pronouns, response_length_mode FROM users WHERE id = $1', [request.session.userId]),
         pool.query(
           `SELECT * FROM library_assets
            WHERE id <> $1
@@ -169,7 +169,9 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
           id: `orbis-user:${userResult.rows[0].id}`,
           name: userResult.rows[0].display_name,
           description: 'The active Orbis user. The simulator must not invent this person\'s actions, thoughts, or dialogue.',
+          pronouns: userResult.rows[0].player_pronouns ?? null,
         },
+        responseLength: userResult.rows[0].response_length_mode ?? 'adaptive',
         scene: card?.scenario || String(asset.summary ?? ''),
         contextBlocks: relatedResult.rows.map((row) => ({
           id: String(row.id),
