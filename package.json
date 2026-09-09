@@ -10,6 +10,7 @@
     "build:web": "tsc -b && vite build",
     "build:api": "tsc -p server/tsconfig.json",
     "import:bitterroot": "node dist-server/import-bitterroot.js",
+    "import:world-backup": "node dist-server/import-world-backup.js",
     "start:api": "node dist-server/index.js",
     "preview": "vite preview",
     "test": "vitest run",
