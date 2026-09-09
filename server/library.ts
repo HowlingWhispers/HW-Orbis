@@ -9,6 +9,7 @@ import type { SettingsStore } from './settings.js';
 const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const sourceTypes = ['curated', 'user-created', 'imported-v2', 'copied', 'public-curated', 'legacy-import'] as const;
 const tones = ['moon', 'forest', 'ember', 'mist', 'violet', 'river'] as const;
+const visibilities = ['public', 'private'] as const;
 const documentSchema = z.record(z.string(), z.unknown()).refine((value) => JSON.stringify(value).length <= 128_000, 'Record content is too large.');
 
 const createAssetSchema = z.object({
@@ -17,6 +18,7 @@ const createAssetSchema = z.object({
   summary: z.string().trim().max(2000).default(''),
   originWorldId: z.string().uuid().nullable().optional(),
   contentRating: z.enum(['sfw', 'adult']).default('sfw'),
+  visibility: z.enum(visibilities).default('public'),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
   visualTone: z.enum(tones).default('moon'),
   document: documentSchema.default({}),
@@ -38,6 +40,7 @@ function mapAsset(row: Record<string, unknown>, userId?: string, isSuperAdmin = 
       updatedAt: row.updated_at,
       sourceType: 'user-created',
       contentRating: 'adult',
+      visibility: row.visibility ?? 'public',
       tags: ['Verification required'],
       dependencyCount: 0,
       pinned: false,
@@ -57,6 +60,7 @@ function mapAsset(row: Record<string, unknown>, userId?: string, isSuperAdmin = 
     updatedAt: row.updated_at,
     sourceType: row.source_type,
     contentRating: row.content_rating,
+    visibility: row.visibility ?? 'public',
     tags: row.tags,
     dependencyCount: row.dependency_count,
     pinned: row.pinned,
@@ -81,6 +85,8 @@ const selectAssets = `
   LEFT JOIN library_assets origin ON origin.id = a.origin_world_id
   LEFT JOIN users u ON u.id = a.creator_user_id
   LEFT JOIN speculus_catalog_registry sc ON sc.asset_id = a.id`;
+
+const visibleAssetClause = `(a.visibility = 'public' OR a.creator_user_id = $2::uuid)`;
 
 function requestIdentity(request: Request) {
   return {
@@ -107,9 +113,9 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       const adult = canViewAdult(request);
       const identity = requestIdentity(request);
       const [recent, pinned, counts] = await Promise.all([
-        pool.query(`${selectAssets} ORDER BY a.updated_at DESC LIMIT 4`, [adult, identity.userId ?? null]),
-        pool.query(`${selectAssets} WHERE a.pinned = true ORDER BY a.updated_at DESC`, [adult, identity.userId ?? null]),
-        pool.query(`SELECT type, count(*)::int AS count FROM library_assets GROUP BY type`),
+        pool.query(`${selectAssets} WHERE ${visibleAssetClause} ORDER BY a.updated_at DESC LIMIT 4`, [adult, identity.userId ?? null]),
+        pool.query(`${selectAssets} WHERE ${visibleAssetClause} AND a.pinned = true ORDER BY a.updated_at DESC`, [adult, identity.userId ?? null]),
+        pool.query(`SELECT type, count(*)::int AS count FROM library_assets a WHERE (a.visibility = 'public' OR a.creator_user_id = $1::uuid) GROUP BY type`, [identity.userId ?? null]),
       ]);
       const countMap = Object.fromEntries(assetTypes.map((type) => [type, 0]));
       for (const row of counts.rows) countMap[row.type] = row.count;
@@ -127,7 +133,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
     try {
       const identity = requestIdentity(request);
       const values: unknown[] = [canViewAdult(request), identity.userId ?? null];
-      const where: string[] = [];
+      const where: string[] = [visibleAssetClause];
       const type = typeof request.query.type === 'string' && assetTypes.includes(request.query.type as typeof assetTypes[number]) ? request.query.type : undefined;
       const sourceType = typeof request.query.sourceType === 'string' && sourceTypes.includes(request.query.sourceType as typeof sourceTypes[number]) ? request.query.sourceType : undefined;
       const search = typeof request.query.search === 'string' ? request.query.search.trim().slice(0, 120) : '';
@@ -137,7 +143,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
         values.push(`%${search}%`);
         where.push(`(a.content_rating = 'adult' AND NOT $1::boolean OR a.name ILIKE $${values.length} OR a.summary ILIKE $${values.length} OR sc.code ILIKE $${values.length} OR $${values.length} = ANY(a.tags))`);
       }
-      const clause = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+      const clause = ` WHERE ${where.join(' AND ')}`;
       const order = request.query.sort === 'name' ? 'a.name ASC' : 'a.updated_at DESC';
       const result = await pool.query(`${selectAssets}${clause} ORDER BY ${order} LIMIT 200`, values);
       response.json({ items: result.rows.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)), total: result.rowCount });
@@ -150,7 +156,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
     try {
       if (request.params.id.startsWith('restricted:')) return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
       const identity = requestIdentity(request);
-      const result = await pool.query(`${selectAssets} WHERE a.id = $3`, [canViewAdult(request), identity.userId ?? null, request.params.id]);
+      const result = await pool.query(`${selectAssets} WHERE a.id = $3 AND ${visibleAssetClause}`, [canViewAdult(request), identity.userId ?? null, request.params.id]);
       if (!result.rowCount) return response.status(404).json({ error: 'Record not found.' });
       if (result.rows[0].restricted) return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
       response.json(mapAsset(result.rows[0], identity.userId, identity.isSuperAdmin));
@@ -162,10 +168,20 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
   router.post('/assets', requireCreator(config, pool, settingsStore), async (request, response, next) => {
     try {
       const asset = createAssetSchema.parse(request.body);
+      if (asset.type === 'world' && asset.originWorldId) return response.status(400).json({ error: 'A world cannot belong to another world.' });
+
+      let visibility = asset.visibility;
+      if (asset.originWorldId) {
+        const world = await pool.query(`SELECT id, creator_user_id, visibility FROM library_assets WHERE id = $1 AND type = 'world'`, [asset.originWorldId]);
+        if (!world.rowCount) return response.status(400).json({ error: 'The selected world does not exist.' });
+        if (world.rows[0].creator_user_id !== request.session.userId) return response.status(403).json({ error: 'Only the world owner can add records to this world.' });
+        visibility = world.rows[0].visibility;
+      }
+
       const result = await pool.query(
-        `INSERT INTO library_assets (id,type,name,summary,origin_world_id,creator_user_id,source_type,content_rating,tags,visual_tone,document)
-         VALUES ($1,$2,$3,$4,$5,$6,'user-created',$7,$8,$9,$10::jsonb) RETURNING *`,
-        [randomUUID(), asset.type, asset.name, asset.summary, asset.originWorldId ?? null, request.session.userId, asset.contentRating, asset.tags, asset.visualTone, JSON.stringify(asset.document)],
+        `INSERT INTO library_assets (id,type,name,summary,origin_world_id,creator_user_id,source_type,content_rating,visibility,tags,visual_tone,document)
+         VALUES ($1,$2,$3,$4,$5,$6,'user-created',$7,$8,$9,$10,$11::jsonb) RETURNING *`,
+        [randomUUID(), asset.type, asset.name, asset.summary, asset.originWorldId ?? null, request.session.userId, asset.contentRating, visibility, asset.tags, asset.visualTone, JSON.stringify(asset.document)],
       );
       const registry = await pool.query('SELECT code, classification FROM speculus_catalog_registry WHERE asset_id = $1', [result.rows[0].id]);
       response.status(201).json(mapAsset({
@@ -192,6 +208,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
         summary: asset.summary ?? current.rows[0].summary,
         origin_world_id: asset.originWorldId === undefined ? current.rows[0].origin_world_id : asset.originWorldId,
         content_rating: asset.contentRating ?? current.rows[0].content_rating,
+        visibility: asset.visibility ?? current.rows[0].visibility ?? 'public',
         tags: asset.tags ?? current.rows[0].tags,
         visual_tone: asset.visualTone ?? current.rows[0].visual_tone,
         document: asset.document ?? current.rows[0].document ?? {},
@@ -200,17 +217,34 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       if (Object.prototype.hasOwnProperty.call(nextAsset.document, 'title')) nextAsset.document.title = nextAsset.name;
       const identity = nextAsset.document.identity;
       if (identity && typeof identity === 'object' && 'name' in (identity as Record<string, unknown>)) (identity as Record<string, unknown>).name = nextAsset.name;
-      const result = await pool.query(
-        `UPDATE library_assets SET name=$2, summary=$3, origin_world_id=$4, content_rating=$5, tags=$6, visual_tone=$7, document=$8::jsonb, updated_at=now()
-         WHERE id=$1 RETURNING *`,
-        [request.params.id, nextAsset.name, nextAsset.summary, nextAsset.origin_world_id, nextAsset.content_rating, nextAsset.tags, nextAsset.visual_tone, JSON.stringify(nextAsset.document)],
-      );
+
+      const client = await pool.connect();
+      let updatedRow: Record<string, unknown>;
+      try {
+        await client.query('BEGIN');
+        const result = await client.query(
+          `UPDATE library_assets SET name=$2, summary=$3, origin_world_id=$4, content_rating=$5, visibility=$6, tags=$7, visual_tone=$8, document=$9::jsonb, updated_at=now()
+           WHERE id=$1 RETURNING *`,
+          [request.params.id, nextAsset.name, nextAsset.summary, nextAsset.origin_world_id, nextAsset.content_rating, nextAsset.visibility, nextAsset.tags, nextAsset.visual_tone, JSON.stringify(nextAsset.document)],
+        );
+        updatedRow = result.rows[0];
+        if (current.rows[0].type === 'world' && current.rows[0].visibility !== nextAsset.visibility) {
+          await client.query('UPDATE library_assets SET visibility = $2, updated_at = now() WHERE origin_world_id = $1', [request.params.id, nextAsset.visibility]);
+        }
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+
       const [author, registry] = await Promise.all([
         pool.query('SELECT display_name, avatar_url FROM users WHERE id = $1', [current.rows[0].creator_user_id]),
         pool.query('SELECT code, classification FROM speculus_catalog_registry WHERE asset_id = $1', [request.params.id]),
       ]);
       response.json(mapAsset({
-        ...result.rows[0],
+        ...updatedRow,
         restricted: false,
         author_name: author.rows[0]?.display_name,
         author_avatar_url: author.rows[0]?.avatar_url,
