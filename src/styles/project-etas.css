@@ -1,0 +1,77 @@
+.project-etas {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.project-eta {
+  min-width: 126px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 7px;
+  row-gap: 1px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(17, 34, 61, .72), rgba(10, 22, 42, .76));
+  box-shadow: inset 0 1px rgba(255,255,255,.025);
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+
+.project-eta:hover,
+.project-eta:focus-visible {
+  border-color: var(--line-strong);
+  background: linear-gradient(180deg, rgba(24, 45, 78, .84), rgba(12, 27, 50, .84));
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.project-eta--speculus {
+  border-color: rgba(217, 170, 112, .23);
+}
+
+.project-eta__name {
+  color: var(--amber);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.project-eta__time {
+  justify-self: end;
+  color: var(--moon-bright);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .055em;
+  white-space: nowrap;
+}
+
+.project-eta small {
+  grid-column: 1 / -1;
+  color: var(--faint);
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+.keeper-badge {
+  margin-left: 0;
+}
+
+@media (max-width: 1220px) {
+  .project-eta--fabula { display: none; }
+}
+
+@media (max-width: 980px) {
+  .project-eta { min-width: 112px; }
+  .project-eta small { display: none; }
+}
+
+@media (max-width: 760px) {
+  .project-etas { display: none; }
+}
