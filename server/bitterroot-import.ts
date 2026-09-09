@@ -1,3 +1,5 @@
+import { applyBitterrootSourceExpansion } from './bitterroot-source-expansion.js';
+
 export type ImportedAssetType = 'world' | 'character' | 'place' | 'faction' | 'species' | 'society' | 'family' | 'memory';
 export type ImportedVisualTone = 'moon' | 'forest' | 'ember' | 'mist' | 'violet' | 'river';
 export const BITTERROOT_OWNER_DISCORD_ID = '1544473372073791602';
@@ -44,7 +46,8 @@ const compactSummary = (value: unknown) => {
 const sourceIdentity = (type: ImportedAssetType, id: string) => `${type}:${id}`;
 const documentOf = (entity: SourceEntity) => structuredClone(entity) as Record<string, unknown>;
 
-export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): BitterrootSeedAsset[] {
+export function buildBitterrootSeedAssets(sourceWorld: BitterrootSourceWorld): BitterrootSeedAsset[] {
+  const world = applyBitterrootSourceExpansion(sourceWorld);
   const common = { createdAt: world.createdAt, updatedAt: world.updatedAt };
   const worldDocument = {
     sourceId: world.id,
