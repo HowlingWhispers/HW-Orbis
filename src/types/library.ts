@@ -13,6 +13,7 @@ export const assetTypes = [
 export type AssetType = (typeof assetTypes)[number];
 export type SourceType = 'curated' | 'user-created' | 'imported-v2' | 'copied' | 'public-curated' | 'legacy-import';
 export type ContentRating = 'sfw' | 'adult';
+export type AssetVisibility = 'public' | 'private';
 
 export interface AssetAuthor {
   id: string;
@@ -31,6 +32,7 @@ export interface LibraryAsset {
   updatedAt: string;
   sourceType: SourceType;
   contentRating?: ContentRating;
+  visibility?: AssetVisibility;
   author?: AssetAuthor;
   tags: string[];
   dependencyCount: number;
@@ -51,6 +53,7 @@ export interface LibraryAssetUpdate {
   name: string;
   summary: string;
   contentRating: ContentRating;
+  visibility?: AssetVisibility;
   tags: string[];
   visualTone: LibraryAsset['visualTone'];
   document: Record<string, unknown>;
