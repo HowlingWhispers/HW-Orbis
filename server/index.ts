@@ -11,6 +11,7 @@ import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { createLibraryRouter } from './library.js';
 import { createProviderSettingsRouter } from './provider-settings.js';
+import { createRuntimePreferencesRouter } from './runtime-preferences.js';
 import { PostgresSettingsStore } from './settings.js';
 import { createSpeculusGenerationRouter, createSpeculusLaunchRouter } from './speculus.js';
 import './types.js';
@@ -62,6 +63,7 @@ app.get('/api/config/public', async (_request, response, next) => {
 });
 app.use('/api/auth', createAuthRouter(config, pool, settingsStore));
 app.use('/api/provider-settings', createProviderSettingsRouter(config, pool));
+app.use('/api/runtime-preferences', createRuntimePreferencesRouter(pool));
 app.use('/api/admin', requireAdmin(config, pool, settingsStore), createAdminRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createLibraryRouter(config, pool, settingsStore));
