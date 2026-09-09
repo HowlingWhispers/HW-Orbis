@@ -16,10 +16,10 @@ describe('Bitterroot canonical import', () => {
     expect(BITTERROOT_OWNER_DISCORD_ID).toBe('1544473372073791602');
   });
 
-  it('maps every canonical Rebrand record into Orbis', () => {
-    expect(assets).toHaveLength(28);
+  it('maps every current Bitterroot source record into Orbis', () => {
+    expect(assets).toHaveLength(30);
     expect(Object.fromEntries(['world', 'species', 'place', 'faction', 'society', 'family', 'memory', 'character'].map((type) => [type, assets.filter((asset) => asset.type === type).length]))).toEqual({
-      world: 1, species: 2, place: 14, faction: 1, society: 6, family: 1, memory: 1, character: 2,
+      world: 1, species: 2, place: 16, faction: 1, society: 6, family: 1, memory: 1, character: 2,
     });
   });
 
@@ -27,6 +27,8 @@ describe('Bitterroot canonical import', () => {
     const sourceIds = assets.map((asset) => asset.sourceAssetId);
     expect(new Set(sourceIds).size).toBe(assets.length);
     expect(sourceIds).toContain('world:public-bitterroot');
+    expect(sourceIds).toContain('place:whispering-lake');
+    expect(sourceIds).toContain('place:wardens-watchtower');
     expect(sourceIds).toContain('character:ragna-holt');
     expect(sourceIds).toContain('character:pip-holt');
   });
