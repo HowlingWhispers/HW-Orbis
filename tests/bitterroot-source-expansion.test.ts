@@ -16,7 +16,7 @@ describe('Bitterroot source expansion', () => {
     expect(woods?.document.soulCanon).toContain('souls remain trapped');
   });
 
-  it('preserves the source locations while replacing placeholder descriptions with established lore', () => {
+  it('preserves source locations while replacing placeholder descriptions with established lore', () => {
     expect(place('shadow-creek')?.summary).toContain('meandering creek');
     expect(place('moonflower-meadow')?.summary).toContain('sunlit clearing');
     expect(place('hidden-haven-cave')?.summary).toContain('secluded cave');
@@ -37,5 +37,20 @@ describe('Bitterroot source expansion', () => {
     const woods = supernatural?.whisperingWoods as Record<string, unknown> | undefined;
     expect(woods?.classification).toBe('Living supernatural forest entity');
     expect(woods?.translationEffect).toContain('agony');
+  });
+
+  it('adds Whispering Lake as a stable source-backed place beneath Bitterroot Peak', () => {
+    const lake = place('whispering-lake');
+    expect(lake).toBeDefined();
+    expect(lake?.document.parentLocationId).toBe('bitterroot-peak');
+    expect(lake?.document.historicalRole).toContain('flood');
+    expect(lake?.document.geographicRelations).toEqual({ northOf: ['whispering-woods'], feeds: ['shadow-creek'] });
+  });
+
+  it("adds the Warden's Watchtower beneath Bitterroot Orphanage", () => {
+    const tower = place('wardens-watchtower');
+    expect(tower).toBeDefined();
+    expect(tower?.document.parentLocationId).toBe('bitterroot-orphanage');
+    expect(tower?.document.historicalRole).toContain('oppressive regime');
   });
 });
