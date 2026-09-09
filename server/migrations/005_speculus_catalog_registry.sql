@@ -93,9 +93,9 @@ BEGIN
 
   INSERT INTO speculus_catalog_sequences (prefix, next_ordinal)
     VALUES (v_prefix, 2)
-  ON CONFLICT (prefix) DO UPDATE
+  ON CONFLICT ON CONSTRAINT speculus_catalog_sequences_pkey DO UPDATE
     SET next_ordinal = speculus_catalog_sequences.next_ordinal + 1
-  RETURNING next_ordinal - 1 INTO v_ordinal;
+  RETURNING speculus_catalog_sequences.next_ordinal - 1 INTO v_ordinal;
 
   v_generation := ((v_ordinal - 1) / v_capacity)::integer + 1;
   v_within_generation := (v_ordinal - 1) % v_capacity;
