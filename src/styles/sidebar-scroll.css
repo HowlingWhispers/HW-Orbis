@@ -1,0 +1,61 @@
+.sidebar {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@media (max-height: 760px) {
+  .sidebar {
+    padding-top: 16px;
+    padding-bottom: 14px;
+  }
+
+  .sidebar__top {
+    padding-bottom: 14px;
+  }
+
+  .library-nav {
+    margin-top: 12px;
+  }
+
+  .library-nav__label {
+    padding-top: 11px;
+    padding-bottom: 5px;
+  }
+
+  .library-nav__item {
+    min-height: 40px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .sidebar__footer {
+    margin-top: 18px;
+  }
+}
+
+@media (max-height: 620px) {
+  .brand__seal {
+    width: 34px;
+    height: 34px;
+  }
+
+  .brand__name {
+    font-size: 22px;
+  }
+
+  .library-nav__item {
+    min-height: 36px;
+  }
+
+  .library-nav__item small {
+    display: none;
+  }
+}

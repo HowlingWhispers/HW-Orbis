@@ -1,0 +1,459 @@
+{
+  "id": "public-bitterroot",
+  "identity": {
+    "name": "Bitterroot",
+    "genre": "Dark fantasy",
+    "tone": "Intimate, dangerous, hopeful",
+    "description": "Bitterroot is a vast, untamed world of ancient forests, drowned valleys, rugged mountains, and isolated settlements. No humans exist here. Its people are intelligent, speaking beastfolk and feral-bodied peoples with many different body forms, cultures, instincts, and ways of life. Civilization remains pre-industrial. Communities survive through hunting, farming, craftsmanship, trade, and knowledge passed between generations. Beyond their borders lie forgotten paths, territorial creatures, old ruins, violent weather, and forces buried beneath the land. Bitterroot is intimate, dangerous, and hopeful. Families can be broken or rebuilt, friendships may become lifelong bonds, and old choices leave scars across generations. Characters are free to grow, travel, form relationships, establish homes, and change the world around them. This is a living reality without a predetermined ending."
+  },
+  "rules": {
+    "technology": "Pre-industrial. Hand tools, fire, animal power, simple water power, craft production, farming, hunting, fishing, trade, and local construction are normal. No modern industry, engines, firearms, electrical infrastructure, or digital technology.",
+    "magicPhysics": "No universal magic system is assumed. Supernatural forces, unusual species traits, and buried phenomena exist only where Bitterroot canon establishes them.",
+    "society": "Communities are organized through families, households, clans, tribes, bands, villages, and other local societies. Authority is local and practical rather than enforced by a single world government.",
+    "constraints": [
+      "No humans exist in Bitterroot.",
+      "All intelligent peoples are beastfolk, anthropomorphic peoples, or intelligent feral-bodied peoples.",
+      "Bitterroot remains pre-industrial unless later canon explicitly changes a place or era.",
+      "Different intelligent peoples may have very different body forms while still speaking, building communities, and participating in society.",
+      "The world has no predetermined ending. Actions and remembered events may permanently change places, families, societies, and relationships."
+    ]
+  },
+  "lore": {
+    "history": "Bitterroot has been shaped by old floods, drowned valleys, changing trails, isolated settlements, and generations of local survival. The Howling Hills carry the scars of a catastrophic flooding remembered across the region. Much of the deeper history remains intentionally open for authored canon rather than being filled with assumptions.",
+    "cultures": "Bitterroot contains many local ways of life rather than one universal culture. Families, clans, tribes, bands, households, and settlements may each preserve their own customs, dialects, loyalties, hunting grounds, seasonal routes, and relationships with neighboring peoples.",
+    "customs": "Customs vary by place and people. Kinship, adoption, guardianship, hospitality, territory, seasonal movement, craft, trade, and shared memory can all matter. Local custom should be authored where needed instead of treated as a single rule for the whole world.",
+    "importantFacts": [
+      "Bitterroot has no human population.",
+      "Whispering Woods, Bitterroot Bluffs, Bitterroot Peak, Howling Hills, and Bitterroot Orphanage are established places.",
+      "Shadow Creek, Moonflower Meadow, and Hidden Haven Cave are established places within Whispering Woods.",
+      "Intelligent inhabitants may be upright, partially anthropomorphic, or feral-bodied.",
+      "The setting is pre-industrial.",
+      "The Howling Hills were changed by a major flood whose effects still shape the landscape and memory of the region."
+    ]
+  },
+  "species": [
+    {
+      "id": "bitterroot-beastfolk",
+      "name": "Bitterroot beastfolk",
+      "description": "The intelligent speaking peoples of Bitterroot. Body form varies widely between peoples and individuals, from strongly anthropomorphic to feral-bodied forms. No human population exists."
+    },
+    {
+      "id": "werewolf-upright-feral",
+      "name": "Werewolf",
+      "description": "Intelligent speaking werewolves of Bitterroot. Ragna Holt and Pip Holt are upright feral werewolves."
+    }
+  ],
+  "locations": [
+    {
+      "id": "bitterroot-continent",
+      "name": "Bitterroot",
+      "kind": "continent",
+      "description": "The greater land and living reality known as Bitterroot, containing the Howling Hills and the established regions nested within them."
+    },
+    {
+      "id": "howling-hills",
+      "name": "Howling Hills",
+      "kind": "major region",
+      "parentLocationId": "bitterroot-continent",
+      "description": "A broad and dangerous major region marked by rugged country, old flood scars, isolated communities, forests, bluffs, and high ground."
+    },
+    {
+      "id": "whispering-woods",
+      "name": "Whispering Woods",
+      "kind": "region",
+      "parentLocationId": "howling-hills",
+      "description": "An old forest region threaded by Shadow Creek. Moonflower Meadow and Hidden Haven Cave lie within the woods. Paths can be difficult to follow and communities live close to the land."
+    },
+    {
+      "id": "moonflower-meadow",
+      "name": "Moonflower Meadow",
+      "kind": "subregion",
+      "parentLocationId": "whispering-woods",
+      "description": "A meadow within Whispering Woods associated with the moonflowers that give it its name."
+    },
+    {
+      "id": "shadow-creek",
+      "name": "Shadow Creek",
+      "kind": "river",
+      "parentLocationId": "whispering-woods",
+      "description": "A creek running through Whispering Woods and forming a natural landmark and route through the forest."
+    },
+    {
+      "id": "hidden-haven-cave",
+      "name": "Hidden Haven Cave",
+      "kind": "landmark",
+      "parentLocationId": "whispering-woods",
+      "description": "A concealed cave within Whispering Woods. Its exact history and uses remain open for authored canon."
+    },
+    {
+      "id": "bitterroot-bluffs",
+      "name": "Bitterroot Bluffs",
+      "kind": "region",
+      "parentLocationId": "howling-hills",
+      "description": "Rugged bluff country within the Howling Hills, with difficult approaches and exposed terrain."
+    },
+    {
+      "id": "bitterroot-peak",
+      "name": "Bitterroot Peak",
+      "kind": "region",
+      "parentLocationId": "howling-hills",
+      "description": "High mountain country rising above the surrounding lands. Weather, elevation, and isolation shape travel here."
+    },
+    {
+      "id": "bitterroot-orphanage",
+      "name": "Bitterroot Orphanage",
+      "kind": "building",
+      "parentLocationId": "howling-hills",
+      "description": "An established orphanage within the Howling Hills. It is a home and institution for young residents without a stable family home, with its deeper history left to Bitterroot canon."
+    },
+    {
+      "id": "splitpine-reach",
+      "name": "Splitpine Reach",
+      "kind": "subregion",
+      "parentLocationId": "howling-hills",
+      "description": "Cold upland country within the Howling Hills. Brackenjaw Enclave lies here, and Boundary Wardens patrol its trails and marked borders."
+    },
+    {
+      "id": "brackenjaw-enclave",
+      "name": "Brackenjaw Enclave",
+      "kind": "settlement",
+      "parentLocationId": "splitpine-reach",
+      "description": "A pre-industrial settlement in Splitpine Reach. Ragna Holt and Pip Holt live here among the Brackenjaw community."
+    },
+    {
+      "id": "brackenjaw-ranger-station",
+      "name": "Brackenjaw Ranger Station",
+      "kind": "building",
+      "parentLocationId": "brackenjaw-enclave",
+      "description": "The ranger station used by Brackenjaw Boundary Wardens. Ragna works from here, and Pip has grown up around patrol maps, gear, chores, and ranger routines."
+    },
+    {
+      "id": "brackenjaw-eastern-boundary",
+      "name": "Brackenjaw Eastern Boundary",
+      "kind": "territory",
+      "parentLocationId": "splitpine-reach",
+      "description": "The eastern boundary of Brackenjaw territory, watched and patrolled by Boundary Wardens including Ragna Holt."
+    },
+    {
+      "id": "warning-stones",
+      "name": "Warning Stones",
+      "kind": "landmark",
+      "parentLocationId": "brackenjaw-eastern-boundary",
+      "description": "Marked boundary stones used to warn travelers before they cross deeper into Brackenjaw territory."
+    }
+  ],
+  "factions": [
+    {
+      "id": "boundary-wardens",
+      "name": "Boundary Wardens",
+      "description": "Brackenjaw rangers responsible for patrol work, boundary defense, trail security, threat assessment, and keeping Splitpine Reach defensible. Their work values preparedness, practical judgment, clear warnings, and decisive action when a credible threat appears."
+    }
+  ],
+  "societies": [
+    {
+      "id": "howling-hills-peoples",
+      "name": "Howling Hills Peoples",
+      "type": "confederacy",
+      "description": "A broad World Forge grouping for the independent peoples of the Howling Hills. It does not imply a single centralized state and can be split or renamed as individual cultures are authored.",
+      "origin": "Local families, clans, tribes, bands, households, and settlements developed across the Howling Hills over generations.",
+      "territoryLocationIds": [
+        "howling-hills",
+        "whispering-woods",
+        "bitterroot-bluffs",
+        "bitterroot-peak"
+      ],
+      "territoryNotes": "A loose regional grouping rather than exclusive ownership of every place inside the Howling Hills.",
+      "seasonalMovement": "Varies by local people and livelihood.",
+      "lifestyle": "mixed",
+      "speciesIds": [
+        "bitterroot-beastfolk"
+      ],
+      "kinshipBasis": "Family, descent, adoption, guardianship, clan ties, and local bonds vary between communities.",
+      "membershipRules": "Determined locally by the family, clan, tribe, band, household, or settlement involved.",
+      "leadershipStructure": "No single ruler is established for the whole region. Leadership is local.",
+      "decisionMaking": "Local custom, household decisions, councils, elders, leaders, or consensus depending on the community.",
+      "customs": "No single regional custom is imposed. Local customs should be authored within individual societies.",
+      "beliefs": "Varied and intentionally open until established by canon.",
+      "languageDialect": "Multiple local dialects and ways of speaking may exist.",
+      "livelihood": "Hunting, gathering, farming, fishing, craft, trade, animal keeping, and other pre-industrial work according to place.",
+      "allySocietyIds": [],
+      "rivalSocietyIds": [],
+      "familyIds": [],
+      "factionIds": [],
+      "settlementLocationIds": [],
+      "currentStatus": "Active regional population.",
+      "canonStatus": "draft"
+    },
+    {
+      "id": "whispering-woods-clans",
+      "name": "Whispering Woods Clans",
+      "type": "clan",
+      "parentSocietyId": "howling-hills-peoples",
+      "description": "A starter grouping for families and clans living in or regularly using Whispering Woods. It exists so the region has inhabitants without inventing a single finished culture for them.",
+      "origin": "Long-term settlement and seasonal use of the forest and its waterways.",
+      "territoryLocationIds": [
+        "whispering-woods",
+        "moonflower-meadow",
+        "shadow-creek",
+        "hidden-haven-cave"
+      ],
+      "territoryNotes": "Forest use and territory can overlap between families and clans and should be refined as canon is added.",
+      "seasonalMovement": "Some households may move between forest resources seasonally; this is not universal.",
+      "lifestyle": "mixed",
+      "speciesIds": [
+        "bitterroot-beastfolk"
+      ],
+      "kinshipBasis": "Family, clan, adoption, guardianship, and local bonds.",
+      "membershipRules": "Defined by each constituent family or clan.",
+      "leadershipStructure": "Local family or clan leadership rather than a single forest ruler.",
+      "decisionMaking": "Local custom and agreement between affected families or clans.",
+      "customs": "Forest-specific customs remain open for authored canon.",
+      "beliefs": "Not yet fixed as a single shared belief system.",
+      "languageDialect": "Local forest dialects may differ between groups.",
+      "livelihood": "Hunting, gathering, fishing, small farming, craft, and trade suited to the forest.",
+      "allySocietyIds": [],
+      "rivalSocietyIds": [],
+      "familyIds": [],
+      "factionIds": [],
+      "settlementLocationIds": [],
+      "currentStatus": "Active in Whispering Woods.",
+      "canonStatus": "draft"
+    },
+    {
+      "id": "bitterroot-orphanage-household",
+      "name": "Bitterroot Orphanage Household",
+      "type": "house",
+      "parentSocietyId": "howling-hills-peoples",
+      "description": "The caretakers and residents associated with Bitterroot Orphanage, represented as a household rather than a blood family.",
+      "origin": "Formed around the orphanage and the need to house and care for young residents without stable family homes.",
+      "territoryLocationIds": [
+        "bitterroot-orphanage"
+      ],
+      "territoryNotes": "Centered on the orphanage itself.",
+      "seasonalMovement": "Settled.",
+      "lifestyle": "settled",
+      "speciesIds": [
+        "bitterroot-beastfolk"
+      ],
+      "kinshipBasis": "Guardianship, foster ties, found family, friendship, and shared residence.",
+      "membershipRules": "Residents, caretakers, and others formally belonging to the orphanage household.",
+      "leadershipStructure": "Caretaking authority within the institution; exact roles and individuals remain open for canon.",
+      "decisionMaking": "Day-to-day household and caretaking decisions.",
+      "customs": "Household routines and traditions remain open for authored canon.",
+      "beliefs": "No single belief system is assumed.",
+      "languageDialect": "Reflects the varied backgrounds of residents and caretakers.",
+      "livelihood": "Maintaining the orphanage through local work, supplies, craft, food production, and community support.",
+      "allySocietyIds": [],
+      "rivalSocietyIds": [],
+      "familyIds": [],
+      "factionIds": [],
+      "settlementLocationIds": [
+        "bitterroot-orphanage"
+      ],
+      "currentStatus": "Active household.",
+      "canonStatus": "canon"
+    },
+    {
+      "id": "bitterroot-bluffs-bands",
+      "name": "Bitterroot Bluffs Bands",
+      "type": "band",
+      "parentSocietyId": "howling-hills-peoples",
+      "description": "A starter grouping for small communities and travelling bands associated with Bitterroot Bluffs.",
+      "origin": "Local habitation and travel through the bluff country.",
+      "territoryLocationIds": [
+        "bitterroot-bluffs"
+      ],
+      "territoryNotes": "Specific borders and named groups are intentionally left open.",
+      "seasonalMovement": "May vary with weather, food, and local routes.",
+      "lifestyle": "mixed",
+      "speciesIds": [
+        "bitterroot-beastfolk"
+      ],
+      "kinshipBasis": "Family, affinity, adoption, and band membership.",
+      "membershipRules": "Defined by each band.",
+      "leadershipStructure": "Small-scale local leadership.",
+      "decisionMaking": "Local custom and practical agreement.",
+      "customs": "Not yet fixed.",
+      "beliefs": "Not yet fixed.",
+      "languageDialect": "Local dialects.",
+      "livelihood": "Hunting, craft, trade, gathering, herding, and other work suited to the bluffs.",
+      "allySocietyIds": [],
+      "rivalSocietyIds": [],
+      "familyIds": [],
+      "factionIds": [],
+      "settlementLocationIds": [],
+      "currentStatus": "Active in the bluffs.",
+      "canonStatus": "draft"
+    },
+    {
+      "id": "bitterroot-peak-clans",
+      "name": "Bitterroot Peak Clans",
+      "type": "clan",
+      "parentSocietyId": "howling-hills-peoples",
+      "description": "A starter grouping for inhabitants associated with Bitterroot Peak and its high country.",
+      "origin": "Long-term adaptation to the mountain region and its routes.",
+      "territoryLocationIds": [
+        "bitterroot-peak"
+      ],
+      "territoryNotes": "Specific clan borders and settlements remain open for canon.",
+      "seasonalMovement": "Movement may follow weather and access through the high country.",
+      "lifestyle": "mixed",
+      "speciesIds": [
+        "bitterroot-beastfolk"
+      ],
+      "kinshipBasis": "Family, clan, adoption, and local bonds.",
+      "membershipRules": "Defined by individual clans.",
+      "leadershipStructure": "Local clan leadership.",
+      "decisionMaking": "Local custom and clan decisions.",
+      "customs": "Not yet fixed.",
+      "beliefs": "Not yet fixed.",
+      "languageDialect": "Local mountain dialects.",
+      "livelihood": "Hunting, gathering, craft, trade, animal keeping, and other high-country work.",
+      "allySocietyIds": [],
+      "rivalSocietyIds": [],
+      "familyIds": [],
+      "factionIds": [],
+      "settlementLocationIds": [],
+      "currentStatus": "Active around Bitterroot Peak.",
+      "canonStatus": "draft"
+    },
+    {
+      "id": "brackenjaw-enclave-society",
+      "name": "Brackenjaw Enclave",
+      "type": "village_community",
+      "parentSocietyId": "howling-hills-peoples",
+      "description": "The Brackenjaw community of Splitpine Reach. Brackenjaw is a community identity, not a species; Ragna and Pip Holt are werewolves who belong to this enclave.",
+      "origin": "An established local community in Splitpine Reach.",
+      "territoryLocationIds": [
+        "splitpine-reach",
+        "brackenjaw-eastern-boundary",
+        "warning-stones"
+      ],
+      "territoryNotes": "The enclave maintains and watches marked boundaries in Splitpine Reach.",
+      "seasonalMovement": "Settled community with patrol activity across surrounding trails and boundaries.",
+      "lifestyle": "settled",
+      "speciesIds": [
+        "werewolf-upright-feral"
+      ],
+      "kinshipBasis": "Families, households, community ties, duty, and local belonging.",
+      "membershipRules": "Membership is based on belonging to the Brackenjaw community rather than species alone.",
+      "leadershipStructure": "Local enclave authority supported by specialist roles such as Boundary Wardens.",
+      "decisionMaking": "Local community authority and practical duty structures.",
+      "customs": "Boundary markers, patrol routines, local chores, preparedness, and practical responsibility are established parts of daily life around the ranger station.",
+      "beliefs": "Not yet fixed as a single shared belief system.",
+      "languageDialect": "Local Brackenjaw speech and ranger terminology.",
+      "livelihood": "Pre-industrial settlement work, ranger duties, craft, food production, hunting, trade, and maintenance of local trails and boundaries.",
+      "allySocietyIds": [],
+      "rivalSocietyIds": [],
+      "familyIds": [
+        "holt-family"
+      ],
+      "factionIds": [
+        "boundary-wardens"
+      ],
+      "settlementLocationIds": [
+        "brackenjaw-enclave"
+      ],
+      "currentStatus": "Active settlement in Splitpine Reach.",
+      "canonStatus": "canon"
+    }
+  ],
+  "families": [
+    {
+      "id": "holt-family",
+      "name": "Holt",
+      "description": "The Holt family of Brackenjaw Enclave. Ragna Holt is Pip Holt's mother. They are their own Bitterroot family and are not Whiteclaws.",
+      "people": [
+        {
+          "id": "ragna-holt-person",
+          "name": "Ragna Holt",
+          "characterId": "ragna-holt",
+          "description": "41-year-old upright feral werewolf, veteran Boundary Warden, and mother of Pip Holt. Ragna is hard, terse, territorial, proactive, observant, highly competent, and protective through action rather than speeches. She judges outsiders by what they do after being warned, checks facts instead of dismissing credible danger, and remains the adult authority when Pip is involved."
+        },
+        {
+          "id": "pip-holt-person",
+          "name": "Pip Holt",
+          "characterId": "pip-holt",
+          "description": "12-year-old upright feral werewolf and Ragna Holt's daughter. Pip is a scrappy, brave, stubborn, observant, eager, tomboyish would-be Boundary Warden. She copies Ragna's stance and ranger phrases, knows familiar trails, markers, chores and gear surprisingly well, but remains twelve in judgment, authority, knowledge and emotional regulation. Her confidence often outruns what she can safely handle."
+        }
+      ],
+      "relationships": [
+        {
+          "id": "ragna-pip-parent",
+          "fromPersonId": "ragna-holt-person",
+          "toPersonId": "pip-holt-person",
+          "kind": "parent",
+          "notes": "Mother and daughter with very high trust and affection. Pip admires Ragna intensely and copies her ranger mannerisms while pushing against restrictions. Ragna loves Pip fiercely but shows care through rules, chores, limits, instruction, protection, and intervention rather than becoming generically soft."
+        }
+      ]
+    }
+  ],
+  "memories": [
+    {
+      "id": "howling-hills-flood",
+      "title": "When the Howling Hills Drowned",
+      "description": "A catastrophic flood changed the Howling Hills, drowning valleys, altering routes, and leaving scars that continue to shape travel, settlement, and memory.",
+      "kind": "event",
+      "occurredAt": "Before the present era",
+      "visibility": "common",
+      "locationIds": [
+        "howling-hills",
+        "whispering-woods",
+        "bitterroot-bluffs"
+      ],
+      "factionIds": [],
+      "familyIds": [],
+      "affectedCharacterIds": [],
+      "persistentEffects": [
+        "Some old routes and low ground remain drowned or difficult to cross.",
+        "Communities remember the flood as a major turning point in the region.",
+        "The landscape still carries visible flood scars and changed waterways."
+      ],
+      "createdAt": "2026-09-03T00:00:00.000Z"
+    }
+  ],
+  "createdAt": "2026-09-03T00:00:00.000Z",
+  "updatedAt": "2026-09-06T04:31:49.058Z",
+  "timeWeather": {
+    "preset": "custom",
+    "mode": "tick",
+    "minutesPerInput": 1,
+    "hoursPerDay": 24,
+    "simpleDayRealMinutes": 20,
+    "pauseWhenInactive": true,
+    "startingDay": 1,
+    "startingHour": 8,
+    "seasonsEnabled": true,
+    "seasons": [
+      {
+        "id": "spring",
+        "name": "Spring",
+        "lengthDays": 91,
+        "weatherPrompt": "Rapid thaws, heavy rain, swollen rivers, mud, sudden cold snaps, and dangerous storm fronts are common."
+      },
+      {
+        "id": "summer",
+        "name": "Summer",
+        "lengthDays": 92,
+        "weatherPrompt": "Warm periods can break violently into thunderstorms, high winds, torrential rain, flash flooding, and abrupt temperature drops."
+      },
+      {
+        "id": "autumn",
+        "name": "Autumn",
+        "lengthDays": 91,
+        "weatherPrompt": "Storm frequency rises as temperatures fall. Strong winds, prolonged rain, early snow at elevation, and difficult travel are common."
+      },
+      {
+        "id": "winter",
+        "name": "Winter",
+        "lengthDays": 91,
+        "weatherPrompt": "Severe cold, heavy snow, blizzards, ice, whiteout conditions, and dangerous wind chill are credible seasonal hazards."
+      }
+    ],
+    "weatherMode": "simulated",
+    "climate": "Temperate wilderness with violent and unstable weather, strong regional variation, and harsher conditions at elevation.",
+    "weatherPrompt": "Bitterroot weather is natural rather than magical by default, but it is notably violent, unstable, and dangerous. Storms can intensify quickly. Heavy rain, flooding, landslides, strong winds, lightning, sudden cold snaps, heavy snow, and blizzards should occur when season and region make them plausible. Weather should meaningfully affect visibility, travel, shelter, work, wildlife, and character decisions.",
+    "realWorldLocation": "",
+    "realWorldInfluence": 0
+  }
+}
