@@ -1,0 +1,58 @@
+{
+  "format": "hw-world-backup",
+  "version": 1,
+  "exportedAt": "2026-09-09T02:22:47.533Z",
+  "world": {
+    "id": "world-33b1cc85-8b9f-49f8-88b7-9847101c8520",
+    "identity": {
+      "name": "Ashes & Embers",
+      "genre": "Political War Fantasy",
+      "tone": "Morally complex and unflinching, with real tenderness surviving underneath the brutality.",
+      "description": "A world at war for a century, built on real historical grievance on every side rather than clean heroes and villains — an empire whose civilians sincerely believe extinction is the alternative to conquest, a monarchy that never finished conquering its own continent, and a magic system where power always has a cost someone else pays. Cultures are drawn from real-world ethnographic roots rather than generic fantasy default, and spirits are not window dressing: they have natures, domains, and grievances of their own, and forcing one against its nature is a violence with consequences."
+    },
+    "rules": {
+      "technology": "",
+      "magicPhysics": "",
+      "society": "",
+      "constraints": []
+    },
+    "lore": {
+      "history": "Twice now, the Avatar cycle has been the wound rather than the cure. Nearly two thousand years ago, an Avatar named Kesuk lost the one thing keeping her human and turned the full power of the Avatar State on the world itself, destroying an island nation and its people before a desperate coalition of dragons, sky-bison riders, and the newly formed White Lotus hunted her down and killed her at the foot of a volcano called Asagitatsu. It is the reason the White Lotus exists at all, and the reason the order still quietly keeps the darkest tool in its keeping: the knowledge that if an Avatar ever goes wrong badly enough, someone has to be ready to end it.\nCenturies later, the Air Nomads were not the peaceful wanderers the world now remembers them as — they were the White Wind, an airborne raiding empire that owned the sky for four generations, burning and enslaving with an arrow-storm no ground power could answer. It ended only when Avatar Yangchen, raised in captivity by the horde's own shaman, killed its leadership at the northern pole. The world built two permanent inventions out of that war — chi-blocking, and a doctrine of enforced non-attachment called Harmonious Accord — and then erased the war itself, letting one surviving faction's peace teaching pass down as if it had always been Air Nomad nature. Yangchen spent the rest of her life quietly holding the spirit world together by force of will, a debt her successor Kuruk inherited without her training and fought alone, unseen, until it killed him young. The world read his invisible war as negligence.\nThat misreading produced Avatar Kyoshi: two hundred and fourteen years of absolute, unapologetic order, in which she broke every pirate fleet and warlord Kuruk's era had let fester — and, hunting pirates in Fire Nation waters, drove a hurricane onto the Fire Islands that drowned an entire coastal people, the wave clans, without ever acknowledging what she'd done. In the same stroke she dissolved the Fire Nation's warring clans and created its monarchy by decree, handing an outside conqueror's throne to a people she'd just orphaned.\nA century of gentler, compromise-driven Avatarhood followed under Roku, but the grievance never healed. It was inherited, nursed, and finally weaponized by Fire Lord Sozin, whose own father survived Kyoshi's flood only to die afterward, worn down holding his shattered people together.\nSozin used a once-a-century comet to burn all four Air Temples to the ground in a single day, murdering an entire nation to make certain the next Avatar never grew up — and calling it, ever since, a civilizing mission. That day began the current calendar and the war that has not stopped since: three nations ground down, one erased outright, a century of occupation, conscription, and forced innovation on one side and desperate survival on the other.",
+      "cultures": "Fire Nation. An island empire under one throne, drawing older maritime peoples into a single military machine held together by hereditary fire and disciplined loyalty. Its most orthodox subjects live in the volcanic imperial core, where boiler smoke, red lacquer, and total militarization have taught four generations that winning a war is itself a moral argument; its outer islands, older and more insular, still keep the pre-unification customs and family fire the throne now depends on and privately distrusts. A century of occupation has also produced something the empire never intended — colony-born populations on annexed Earth Kingdom ground who belong cleanly to neither nation, already drifting toward a language and identity of their own.\n\nEarth Kingdom. Less a nation than a monarchy that never finished conquering its own continent, ruled from behind Ba Sing Se's concentric walls, where distance from the palace measures birth, work, and permission alike. Two places sit inside its claimed map as standing rebukes to it: Omashu, a mountain city whose king is chosen by trial of strength rather than blood, and the Si Wong desert confederacy, never conquered, governed by its own absolute law of hospitality and water-right. Beneath all of it, ordinary Earth Kingdom life runs on a practical intimacy with land and season that outlasts whichever ruler claims to be keeping it standing.\n\nNorthern Water Tribe. A single unbroken hereditary monarchy at Agna Qel'a — the one Water Tribe home the war never reached — preserving the largest surviving body of waterbending, healing, and navigation left in the world behind walls both literal and cultural. That safety has calcified into doctrine: women may heal any wound but are forbidden to learn to make one, and the tribe sent no help south while its sister people were hunted to the edge of extinction.\n\nSouthern Water Tribe. A scattered, near-destroyed polar people whose law, lineage, and private history live in woven cloth rather than writing — a society built around movement between ice and open water, sled dogs, and a communal record called the Denning that can bind an entire people without a single written mark. Its genocide came by attrition rather than a single day: the Fire Nation hunted its benders village by village for a century, and what's left is disproportionately women, elders, and children holding a way of life together with almost no men and almost no benders remaining.\n\nAir Nomads. Gone as a living people, erased in a single day a hundred years ago — but for four centuries before that, four gender-segregated mountain Temples of travelers, mediators, and ascetics who owned almost nothing and moved constantly. Their famous gentleness was real, and its coercive underside was real too: compassion itself was treated as an attachment to be pruned out of a person. Fragments of them survive without knowing what they are — an elite archer corps and a service of assassins, both serving inside the very throne that burned their temples down.",
+      "customs": "",
+      "importantFacts": []
+    },
+    "species": [
+      {
+        "id": "species-6d369bd6-c694-471a-a907-2cfcad082160",
+        "name": "Dragon",
+        "description": "Dragons are the true originators of firebending, believed extinct for generations after Fire Lord Sozin turned hunting them into the highest honor a Fire Nation warrior could earn. They aren't extinct. A hidden enclave survives in true form, and a handful of loners live entirely as humans — walking among the very people who spent three generations hunting them, indistinguishable except for unusually warm hands, golden eyes that catch firelight wrong, and decades of a convincing human life built one detail at a time. The species' entire survival rests on the world's total certainty that it's gone, which is also the story's cruelest trap: the one dragon who ever told the truth would end that protection for every dragon left.\n\nThey taught humanity fire in the first place, and they paid for it — hunted to the edge of extinction by descendants who never knew, and still don't, that the \"beasts\" their ancestors killed for sport and glory were the species that made their whole nation's bending possible."
+      },
+      {
+        "id": "species-b6360ff9-97f2-47b7-bbd7-cf739c388dc7",
+        "name": "Half-Dragon",
+        "description": "Half-dragons are the first-generation children of a shapeshifted dragon and a human parent, and almost without exception, neither parent knows what the child actually is. To every eye — including, often, their own family's — they simply read as striking: golden-eyed, faintly predatory in how they carry themselves, memorable without anyone being able to say exactly why. They carry the strongest possible expression of the bloodline the entire Fire Nation holds only in trace, including a latent shapeshifting gift that has functionally never been used by anyone who has it.\n\nThe tragedy here isn't personal, it's structural: unlocking what a half-dragon actually is requires a belief in their own nature that a human upbringing is specifically built to deny them. They grow up as exceptional-but-ordinary people, carrying a truth about themselves that nothing in their life ever gives them permission to reach for."
+      },
+      {
+        "id": "species-41c0d6c9-8381-4903-b82f-1932c68dd69a",
+        "name": "Dragon Child",
+        "description": "Dragon Children are the human descendants of dragons at two or more generations' remove — which, in practice, means the entire Fire Nation, from the Fire Lord's own household down to the poorest ash-farmer, numbering in the millions. To every outward appearance, and to their own knowledge, they are simply human: a nation of amber eyes and heat-loving constitutions that has completely forgotten what those traits are actually the residue of.\n\nThey are the population currently fighting a war against the last surviving dragons without knowing that's what they're doing — soldiers, officers, and royalty alike carrying blood they don't understand while finishing an extermination their own ancestors began. It compounds hardest at the very top: the royal bloodline runs thickest of all, and neither Ozai nor Azulon before him ever grasped what they were rewarding, disciplining, or destroying in their own children."
+      },
+      {
+        "id": "species-05238d2a-266e-44b3-9d77-ba1175d6eb14",
+        "name": "Human",
+        "description": "Humans are the one species in this world that doesn't know what it is. They arrived from somewhere that isn't this world, in an event none of them remember, and the knowledge that would explain any of it was taken from them as the literal price of surviving whatever brought them here. Nothing about an ordinary human's daily life, dress, or manner marks them as anything other than native — the amnesia is total, and it's the exact same amnesia in every human alive, which is precisely what makes it invisible.\n\nIn the absence of that lost knowledge, humanity built everything it has now to fill the gap: nations, wars, bending traditions each nation mistakes for the whole truth of its element, and a hundred creation myths that are all wrong in the same specific way. The forgetting can't be undone by anything currently known, and the handful of beings who could actually explain it to a human have every reason in the world not to."
+      }
+    ],
+    "locations": [],
+    "factions": [],
+    "families": [],
+    "memories": [],
+    "createdAt": "2026-09-03T06:02:50.000Z",
+    "updatedAt": "2026-09-09T01:47:42.080Z",
+    "societies": [],
+    "items": [],
+    "characters": [],
+    "runtimeSession": null
+  }
+}
