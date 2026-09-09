@@ -93,9 +93,11 @@ const selectAccessRows = `
   LEFT JOIN library_assets origin ON origin.id = a.origin_world_id`;
 
 function requestIdentity(request: Request) {
+  const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
   return {
     userId: request.session.userId,
-    isSuperAdmin: request.session.discordUserId === SUPER_ADMIN_DISCORD_ID,
+    isSuperAdmin,
+    canSeePrivateWorlds: isSuperAdmin || request.session.access?.canAdmin === true,
   };
 }
 
@@ -123,15 +125,15 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       ]);
       const countMap = Object.fromEntries(assetTypes.map((type) => [type, 0]));
       for (const row of countRows.rows) {
-        if (canDiscoverAssetRow(row, identity.userId, identity.isSuperAdmin)) countMap[row.type] += 1;
+        if (canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds)) countMap[row.type] += 1;
       }
       response.json({
         recent: recent.rows
-          .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.isSuperAdmin))
+          .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds))
           .slice(0, 4)
           .map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
         pinned: pinned.rows
-          .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.isSuperAdmin))
+          .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds))
           .map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
         counts: countMap,
       });
@@ -158,7 +160,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       const order = request.query.sort === 'name' ? 'a.name ASC' : 'a.updated_at DESC';
       const result = await pool.query(`${selectAssets}${clause} ORDER BY ${order} LIMIT 400`, values);
       const visibleRows = result.rows
-        .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.isSuperAdmin))
+        .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds))
         .slice(0, 200);
       response.json({
         items: visibleRows.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
@@ -175,7 +177,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       const identity = requestIdentity(request);
       const result = await pool.query(`${selectAssets} WHERE a.id = $3`, [canViewAdult(request), identity.userId ?? null, request.params.id]);
       if (!result.rowCount) return response.status(404).json({ error: 'Record not found.' });
-      if (!canDirectViewAssetRow(result.rows[0], identity.userId, identity.isSuperAdmin)) return response.status(404).json({ error: 'Record not found.' });
+      if (!canDirectViewAssetRow(result.rows[0], identity.userId, identity.canSeePrivateWorlds)) return response.status(404).json({ error: 'Record not found.' });
       if (result.rows[0].restricted) return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
       response.json(mapAsset(result.rows[0], identity.userId, identity.isSuperAdmin));
     } catch (error) {
