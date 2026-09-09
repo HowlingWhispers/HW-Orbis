@@ -44,6 +44,8 @@ export function applyBitterrootSourceExpansion(source: BitterrootSourceWorld): B
       'Whispering Woods is a living supernatural entity, not merely an ordinary haunted forest.',
       'The supernatural influence of Whispering Woods is selective; healthy and emotionally grounded travellers may pass through without encountering it.',
       'Souls taken by Whispering Woods are trapped after a peaceful physical death, and their suffering is translated into beauty and comfort for the living.',
+      'Whispering Lake is a high natural reservoir at Bitterroot Peak, fed by mountain springs and seasonal rain and linked downstream to Shadow Creek.',
+      'The Warden\'s Watchtower stands over Bitterroot Orphanage as a surviving symbol of its oppressive historical regime.',
     ]),
   };
 
@@ -62,7 +64,7 @@ export function applyBitterrootSourceExpansion(source: BitterrootSourceWorld): B
       description: 'A sunlit clearing within Whispering Woods where moonflowers and other wildflowers bloom in striking color. The meadow offers an unusual pocket of warmth, openness, and serenity amid the forest canopy, making it feel like a natural refuge from the surrounding shadows.',
     },
     'shadow-creek': {
-      description: 'A meandering creek cutting through the heart of Whispering Woods, often hidden beneath the dense canopy. Its steady water has supported generations of life and provides one of the forest\'s most reliable natural landmarks, though following water does not make the deeper woods harmless.',
+      description: 'A meandering creek cutting through the heart of Whispering Woods, often hidden beneath the dense canopy. Its steady water has supported generations of life and provides one of the forest\'s most reliable natural landmarks. It receives water from the high country around Bitterroot Peak and Whispering Lake.',
     },
     'hidden-haven-cave': {
       description: 'A secluded cave deep within Whispering Woods, its entrance concealed by vines and surrounding growth. Cool, damp, and difficult to find, it has served as a natural shelter and refuge for those seeking protection from weather or danger.',
@@ -71,10 +73,10 @@ export function applyBitterrootSourceExpansion(source: BitterrootSourceWorld): B
       description: 'Imposing, weathered cliff country rising near Whispering Woods. The bluffs are difficult to approach, exposed to the elements, and marked by the passage of generations, standing over routes and low ground like natural sentinels.',
     },
     'bitterroot-peak': {
-      description: 'A commanding summit above the surrounding Bitterroot country, with severe elevation, difficult weather, and slopes carrying scars associated with old conflict and forgotten history. From its high ground, travellers can look across vast portions of the central region.',
+      description: 'A commanding summit north of Whispering Woods, with severe elevation, difficult weather, and slopes carrying scars associated with old conflict and forgotten history. Whispering Lake lies in the high country at its summit.',
     },
     'bitterroot-orphanage': {
-      description: 'A grim, imposing orphanage established near the Bitterroot Bluffs. Its history includes high fences, guards, harsh discipline, neglect, and an oppressive regime that left deep scars on former residents. The Warden\'s Watchtower became a lasting symbol of that period of control.',
+      description: 'A grim, imposing orphanage established near the base of the Bitterroot Bluffs. Its history includes high fences, guards, harsh discipline, neglect, and an oppressive regime that left deep scars on former residents. The Warden\'s Watchtower looms over the grounds as a lasting symbol of that period of control.',
       historicalCharacter: 'The institution has a documented history of coercive authority, harsh discipline, and neglect. Present-day details should be authored separately rather than erasing that history.',
     },
   };
@@ -83,6 +85,32 @@ export function applyBitterrootSourceExpansion(source: BitterrootSourceWorld): B
     const patch = locationPatches[location.id];
     return patch ? { ...location, ...patch } : location;
   });
+
+  const existingLocationIds = new Set(world.locations.map((location) => location.id));
+  const additionalLocations = [
+    {
+      id: 'whispering-lake',
+      name: 'Whispering Lake',
+      kind: 'lake',
+      parentLocationId: 'bitterroot-peak',
+      description: 'A vast natural reservoir in the high country of Bitterroot Peak, fed by mountain springs and seasonal rains. Its waters feed streams descending toward Whispering Woods and Shadow Creek. Before the catastrophic flood, prolonged rain, rising water, tremors, and cracking rock preceded the failure of the natural walls holding the lake.',
+      geographicRelations: {
+        northOf: ['whispering-woods'],
+        feeds: ['shadow-creek'],
+      },
+      historicalRole: 'The failure of the natural walls containing Whispering Lake released the flood that devastated parts of Whispering Woods and the Howling Hills.',
+    },
+    {
+      id: 'wardens-watchtower',
+      name: "Warden's Watchtower",
+      kind: 'building',
+      parentLocationId: 'bitterroot-orphanage',
+      description: 'An imposing watchtower overlooking the grounds of Bitterroot Orphanage. During the orphanage\'s oppressive period it served as a visible reminder of surveillance, authority, and control.',
+      historicalRole: 'A symbol of the unchecked authority and oppressive regime once associated with Bitterroot Orphanage.',
+    },
+  ];
+
+  world.locations.push(...additionalLocations.filter((location) => !existingLocationIds.has(location.id)));
 
   world.updatedAt = EXPANSION_UPDATED_AT;
   return world;
