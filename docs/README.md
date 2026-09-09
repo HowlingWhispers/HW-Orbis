@@ -1,6 +1,12 @@
 # HW-Orbis Documentation
 
-The documentation is grouped by purpose so the repository stays readable as Orbis/Coda, Speculus and Fabula grow.
+Start with these files before making cross-project changes:
+
+- [Current State](./CURRENT_STATE.md)
+- [Repository Map](./REPOSITORY_MAP.md)
+- [Project Boundaries](./PROJECT_BOUNDARIES.md)
+
+These current-state documents override historical repository names, branch plans, and Rebrand/Library-era assumptions.
 
 ## Legal
 
@@ -20,14 +26,14 @@ All user-facing agreements, policies, compliance material and launch checks live
 - [Legal Notice / Impressum](./legal/LEGAL_NOTICE_IMPRINT.md)
 - [Legal Launch Checklist](./legal/LEGAL_LAUNCH_CHECKLIST.md)
 
-## Fabula
-
-Fabula design specifications are intentionally maintained outside this initial Orbis checkout. Orbis remains the authoring and control layer for the records Fabula will consume.
-
 ## Platform
 
-Orbis/Coda platform and server documentation lives in [`platform/`](./platform/).
+Orbis platform and server documentation lives in [`platform/`](./platform/).
 
-- [Administration](./platform/ADMINISTRATION.md)
-- [API Contract](./platform/API_CONTRACT.md)
-- [Authentication](./platform/AUTHENTICATION.md)
+## Fabula
+
+Fabula-specific planning belongs in `HowlingWhispers/HW-Fabula`, not in the Orbis documentation tree unless the document specifically defines an Orbis/Fabula interface.
+
+## Legacy material
+
+`HowlingWhispers/HW-Library` is historical. Rebrand material is import/reference source material, not a current Orbis development target.
