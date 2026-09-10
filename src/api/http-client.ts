@@ -1,4 +1,4 @@
-import type { LibraryApi } from './contracts';
+import type { LibraryApi, DeleteImpact } from './contracts';
 import { LibraryApiError } from './contracts';
 import type { AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
 
@@ -57,9 +57,15 @@ export class HttpLibraryApi implements LibraryApi {
     return data;
   }
 
-  async deleteAsset(id: string) {
+  getDeleteImpact(id: string) {
+    return this.request<DeleteImpact>(`/v1/library/assets/${encodeURIComponent(id)}/delete-impact`);
+  }
+
+  async deleteAsset(id: string, options: { cascade?: boolean; confirmName?: string } = {}) {
     const response = await fetch(`${this.baseUrl}/v1/library/assets/${encodeURIComponent(id)}`, {
-      method: 'DELETE', credentials: 'include', headers: { Accept: 'application/json' },
+      method: 'DELETE', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(options),
     });
     if (response.ok) return;
     const data = await response.json().catch(() => ({})) as { error?: string };
