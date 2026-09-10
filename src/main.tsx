@@ -18,6 +18,7 @@ import './styles/sidebar-scroll.css';
 import './styles/world-forge.css';
 import './styles/theme.css';
 import './styles/record-detail.css';
+import './styles/collection-actions.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
