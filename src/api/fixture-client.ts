@@ -65,6 +65,14 @@ export class FixtureLibraryApi implements LibraryApi {
     return asset;
   }
 
+  async deleteAsset(id: string) {
+    await pause();
+    const index = fixtures.findIndex((item) => item.id === id);
+    if (index < 0) throw new Error(`Asset not found: ${id}`);
+    if (fixtures.some((item) => item.originWorldId === id)) throw new Error('This world still has connected records. Move or delete them before deleting the world.');
+    fixtures.splice(index, 1);
+  }
+
   async simulateAsset(_id: string): Promise<{ launchUrl: string; expiresAt: number }> {
     throw new Error('Speculus launches require the live Orbis API.');
   }
