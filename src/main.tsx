@@ -19,6 +19,7 @@ import './styles/world-forge.css';
 import './styles/theme.css';
 import './styles/record-detail.css';
 import './styles/collection-actions.css';
+import './styles/destructive.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
