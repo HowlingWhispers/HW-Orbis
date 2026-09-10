@@ -80,10 +80,8 @@ export function CollectionView({ all = false }: { all?: boolean }) {
       <header className="collection-header">
         <div className="collection-header__icon">{Icon ? <Icon /> : <span className="all-shelves-icon">✦</span>}</div>
         <div><span className="eyebrow">{all ? (de ? 'Alle Sammlungen' : 'All collections') : (de ? 'Orbis-Sammlung' : 'Orbis collection')}</span><h1>{title}</h1><p>{description}</p></div>
-        <div className="collection-header__actions">
-          {canCreateWorld && <button className="button button--primary" type="button" onClick={() => void createWorld()} disabled={creatingWorld}><Plus size={17} /> {creatingWorld ? (de ? 'Wird erstellt...' : 'Creating...') : (de ? 'Welt erstellen' : 'Create World')}</button>}
-          <span className="collection-header__count">{data?.total ?? '...'} <small>{de ? 'Datensätze' : 'records'}</small></span>
-        </div>
+        <span className="collection-header__count">{data?.total ?? '...'} <small>{de ? 'Datensätze' : 'records'}</small></span>
+        {canCreateWorld && <button className="button button--primary" type="button" onClick={() => void createWorld()} disabled={creatingWorld}><Plus size={17} /> {creatingWorld ? (de ? 'Wird erstellt...' : 'Creating...') : (de ? 'Welt erstellen' : 'Create World')}</button>}
       </header>
 
       {createError && <div className="inline-error" role="alert">{createError}</div>}
