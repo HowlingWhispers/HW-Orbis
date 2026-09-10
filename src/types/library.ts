@@ -47,6 +47,17 @@ export interface LibraryAsset {
   canEdit?: boolean;
 }
 
+export interface LibraryAssetCreate {
+  type: AssetType;
+  name: string;
+  summary?: string;
+  originWorldId?: string | null;
+  contentRating?: ContentRating;
+  tags?: string[];
+  visualTone?: LibraryAsset['visualTone'];
+  document?: Record<string, unknown>;
+}
+
 export interface LibraryAssetUpdate {
   name: string;
   summary: string;
