@@ -1,8 +1,9 @@
-import { ChevronDown, Search, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
 import { findNavigationItem } from '../app/library-nav';
+import { useAuth } from '../auth/AuthContext';
 import { AssetCard } from '../components/AssetCard';
 import { EmptyState, ErrorState, LoadingState } from '../components/StatePanel';
 import { useLibraryData } from '../hooks/useLibraryData';
@@ -24,10 +25,14 @@ const germanCollection: Record<string, { label: string; description: string }> =
 export function CollectionView({ all = false }: { all?: boolean }) {
   const { type } = useParams();
   const navigation = findNavigationItem(type);
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [source, setSource] = useState<SourceType | ''>('');
   const [sort, setSort] = useState<'recent' | 'name'>('recent');
+  const [creatingWorld, setCreatingWorld] = useState(false);
+  const [createError, setCreateError] = useState('');
   const selectedType = all ? undefined : navigation?.type;
   const query = useMemo(() => ({ type: selectedType as AssetType | undefined, search: searchParams.get('search') ?? '', sourceType: source || undefined, sort }), [selectedType, searchParams, source, sort]);
   const loader = useCallback((signal: AbortSignal) => libraryApi.listAssets(query, signal), [query]);
@@ -43,19 +48,45 @@ export function CollectionView({ all = false }: { all?: boolean }) {
     setSearchParams(next);
   };
 
+  const createWorld = async () => {
+    setCreatingWorld(true);
+    setCreateError('');
+    try {
+      const world = await libraryApi.createAsset({
+        type: 'world',
+        name: de ? 'Unbenannte Welt' : 'Untitled World',
+        summary: '',
+        contentRating: 'sfw',
+        tags: [],
+        visualTone: 'moon',
+        document: {},
+      });
+      navigate(`/asset/${world.id}/edit`);
+    } catch (creationError) {
+      setCreateError(creationError instanceof Error ? creationError.message : (de ? 'Die Welt konnte nicht erstellt werden.' : 'The world could not be created.'));
+      setCreatingWorld(false);
+    }
+  };
+
   const localizedNavigation = navigation && de ? germanCollection[navigation.type] : undefined;
   const title = all ? (de ? 'Das vollständige Archiv' : 'The complete archive') : localizedNavigation?.label ?? navigation?.label ?? (de ? 'Unbekanntes Regal' : 'Unknown shelf');
   const description = all
     ? (de ? 'Jeder Datensatz aus jedem Regal, von einem ruhigen Ort aus durchsuchbar.' : 'Every record across every shelf, ready to search from one quiet place.')
     : localizedNavigation?.description ?? navigation?.description;
+  const canCreateWorld = selectedType === 'world' && Boolean(user?.permissions.canCreate || user?.isSuperAdmin);
 
   return (
     <div className="page collection-page">
       <header className="collection-header">
         <div className="collection-header__icon">{Icon ? <Icon /> : <span className="all-shelves-icon">✦</span>}</div>
-        <div><span className="eyebrow">{all ? (de ? 'Alle Sammlungen' : 'All collections') : (de ? 'Coda-Sammlung' : 'Coda collection')}</span><h1>{title}</h1><p>{description}</p></div>
-        <span className="collection-header__count">{data?.total ?? '...'} <small>{de ? 'Datensätze' : 'records'}</small></span>
+        <div><span className="eyebrow">{all ? (de ? 'Alle Sammlungen' : 'All collections') : (de ? 'Orbis-Sammlung' : 'Orbis collection')}</span><h1>{title}</h1><p>{description}</p></div>
+        <div className="collection-header__actions">
+          {canCreateWorld && <button className="button button--primary" type="button" onClick={() => void createWorld()} disabled={creatingWorld}><Plus size={17} /> {creatingWorld ? (de ? 'Wird erstellt...' : 'Creating...') : (de ? 'Welt erstellen' : 'Create World')}</button>}
+          <span className="collection-header__count">{data?.total ?? '...'} <small>{de ? 'Datensätze' : 'records'}</small></span>
+        </div>
       </header>
+
+      {createError && <div className="inline-error" role="alert">{createError}</div>}
 
       <div className="filter-bar">
         <form className="collection-search" onSubmit={submit}><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={de ? `${all ? 'Archiv' : title} durchsuchen...` : `Search ${all ? 'the archive' : title.toLocaleLowerCase()}...`} /></form>
