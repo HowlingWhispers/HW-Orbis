@@ -57,6 +57,15 @@ export class HttpLibraryApi implements LibraryApi {
     return data;
   }
 
+  async deleteAsset(id: string) {
+    const response = await fetch(`${this.baseUrl}/v1/library/assets/${encodeURIComponent(id)}`, {
+      method: 'DELETE', credentials: 'include', headers: { Accept: 'application/json' },
+    });
+    if (response.ok) return;
+    const data = await response.json().catch(() => ({})) as { error?: string };
+    throw new LibraryApiError(data.error ?? `Library request failed with status ${response.status}.`, response.status);
+  }
+
   async simulateAsset(id: string) {
     const response = await fetch(`${this.baseUrl}/v1/library/assets/${encodeURIComponent(id)}/simulate`, {
       method: 'POST', credentials: 'include', headers: { Accept: 'application/json' },
