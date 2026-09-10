@@ -65,12 +65,29 @@ export class FixtureLibraryApi implements LibraryApi {
     return asset;
   }
 
-  async deleteAsset(id: string) {
+  async getDeleteImpact(id: string) {
+    await pause();
+    const children = fixtures.filter((item) => item.originWorldId === id);
+    const byType: Record<string, number> = {};
+    for (const child of children) byType[child.type] = (byType[child.type] ?? 0) + 1;
+    return { totalChildren: children.length, byType };
+  }
+
+  async deleteAsset(id: string, options: { cascade?: boolean; confirmName?: string } = {}) {
     await pause();
     const index = fixtures.findIndex((item) => item.id === id);
     if (index < 0) throw new Error(`Asset not found: ${id}`);
-    if (fixtures.some((item) => item.originWorldId === id)) throw new Error('This world still has connected records. Move or delete them before deleting the world.');
-    fixtures.splice(index, 1);
+    const asset = fixtures[index];
+    const children = fixtures.filter((item) => item.originWorldId === id);
+    if (children.length && !options.cascade) throw new Error(`This world still contains ${children.length} connected records.`);
+    if (children.length && options.confirmName !== asset.name) throw new Error('World-name confirmation did not match.');
+    if (options.cascade) {
+      for (let childIndex = fixtures.length - 1; childIndex >= 0; childIndex -= 1) {
+        if (fixtures[childIndex].originWorldId === id) fixtures.splice(childIndex, 1);
+      }
+    }
+    const finalIndex = fixtures.findIndex((item) => item.id === id);
+    fixtures.splice(finalIndex, 1);
   }
 
   async simulateAsset(_id: string): Promise<{ launchUrl: string; expiresAt: number }> {
