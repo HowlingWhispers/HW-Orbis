@@ -6,6 +6,7 @@ export interface LibraryApi {
   getAsset(id: string, signal?: AbortSignal): Promise<LibraryAsset>;
   createAsset(asset: LibraryAssetCreate): Promise<LibraryAsset>;
   updateAsset(id: string, update: LibraryAssetUpdate): Promise<LibraryAsset>;
+  deleteAsset(id: string): Promise<void>;
   simulateAsset(id: string): Promise<{ launchUrl: string; expiresAt: number }>;
 }
 
