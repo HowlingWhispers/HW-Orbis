@@ -1,5 +1,5 @@
 import type { LibraryApi } from './contracts';
-import type { AssetListResponse, AssetQuery, LibraryOverview } from '../types/library';
+import type { AssetListResponse, AssetQuery, LibraryAssetCreate, LibraryOverview } from '../types/library';
 import type { LibraryAssetUpdate } from '../types/library';
 import { assetTypes } from '../types/library';
 import { fixtures } from '../features/library/fixtures';
@@ -32,6 +32,29 @@ export class FixtureLibraryApi implements LibraryApi {
     const asset = fixtures.find((item) => item.id === id);
     if (!asset) throw new Error(`Asset not found: ${id}`);
     return asset;
+  }
+
+  async createAsset(asset: LibraryAssetCreate) {
+    await pause();
+    const now = new Date().toISOString();
+    const created = {
+      id: crypto.randomUUID(),
+      type: asset.type,
+      name: asset.name,
+      summary: asset.summary ?? '',
+      originWorldId: asset.originWorldId ?? undefined,
+      createdAt: now,
+      updatedAt: now,
+      sourceType: 'user-created' as const,
+      contentRating: asset.contentRating ?? 'sfw' as const,
+      tags: asset.tags ?? [],
+      dependencyCount: 0,
+      visualTone: asset.visualTone ?? 'moon' as const,
+      document: asset.document ?? {},
+      canEdit: true,
+    };
+    fixtures.unshift(created);
+    return created;
   }
 
   async updateAsset(id: string, update: LibraryAssetUpdate) {
