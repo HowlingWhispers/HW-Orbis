@@ -78,6 +78,7 @@ body::before {
 .app-main { min-width: 0; }
 .topbar { height: 73px; position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 16px; padding: 0 34px; border-bottom: 1px solid var(--line); background: rgba(7, 15, 31, .82); backdrop-filter: blur(18px); }
 .menu-button { display: none !important; }
+.archive-transfer__input { display: none !important; }
 .icon-button { display: inline-grid; place-items: center; flex: 0 0 auto; width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .icon-button:hover { border-color: var(--line); background: rgba(255,255,255,.04); color: var(--text); }
 .global-search { width: min(540px, 55vw); height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(13, 28, 52, .65); color: var(--faint); }

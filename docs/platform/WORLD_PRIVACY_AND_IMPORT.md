@@ -70,3 +70,13 @@ The applied import is transactional. The world root is inserted first, child rec
 - The original source file remains untouched.
 - Private imports are owner-only immediately after insertion.
 - The import tool never stores the raw private backup in the public Git repository.
+
+## Browser transfer archives
+
+Orbis owners can download a versioned `.orbis.json` transfer archive from every SPC record. A world download includes the world root and every record owned by the same account inside that world. The Account page also provides **Download everything** and **Upload archive** controls.
+
+Transfer archives contain authored library records, world links, timestamps, source identities and permanent SPC registry identities. They never include Discord access tokens, provider credentials, cookies, sessions or password material. Every archive has a SHA-256 checksum for accidental corruption detection, and uploads are rejected if the package has changed or is malformed.
+
+Imports retain record UUIDs and SPC codes, assign ownership to the signed-in importing account, reject target conflicts, and run in one database transaction. A failed validation or insert rolls the entire import back. This transfer path is intended for user backups and server migration, but it does not replace a separately tested PostgreSQL backup.
+
+Transfer archives are not encrypted. Store private-world exports in protected storage or an encrypted private backup repository. Never commit an unencrypted transfer archive to public Git.

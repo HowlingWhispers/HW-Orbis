@@ -1,7 +1,8 @@
-import { ArrowLeft, Boxes, Clock3, MapPin, Pencil, Sparkles, Trash2, UserRound } from 'lucide-react';
+import { ArrowLeft, Boxes, Clock3, Download, MapPin, Pencil, Sparkles, Trash2, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
+import { downloadRecordArchive } from '../api/archive-transfer';
 import { useAuth } from '../auth/AuthContext';
 import { findNavigationItem } from '../app/library-nav';
 import { ErrorState, LoadingState } from '../components/StatePanel';
@@ -17,6 +18,8 @@ export function AssetDetailView() {
   const [launchError, setLaunchError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
   const { data: asset, error, loading, retry } = useLibraryData((signal) => libraryApi.getAsset(id, signal), [id]);
 
   useEffect(() => {
@@ -85,6 +88,14 @@ export function AssetDetailView() {
     }
   };
 
+  const download = async () => {
+    if (!canEdit || downloading) return;
+    setDownloading(true); setDownloadError('');
+    try { await downloadRecordArchive(asset.id); }
+    catch (reason) { setDownloadError(reason instanceof Error ? reason.message : 'Orbis could not download this SPC record.'); }
+    finally { setDownloading(false); }
+  };
+
   return (
     <div className="page detail-page">
       <Link className="back-link" to={`/library/${asset.type}`}><ArrowLeft size={16} /> Back to {category?.label}</Link>
@@ -100,10 +111,12 @@ export function AssetDetailView() {
               ? <Link className="button button--primary" to={`/asset/${asset.id}/edit`}><Pencil size={16} /> Edit record</Link>
               : <button className="button button--disabled" disabled title="Only the creator can edit this record"><Pencil size={16} /> Creator protected</button>}
             <button className="button button--secondary" disabled={launching} onClick={() => void simulate()}><Sparkles size={16} /> {launching ? 'Packaging...' : 'Simulate'}</button>
+            {canEdit && <button className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : asset.type === 'world' ? 'Download world' : 'Download SPC'}</button>}
             {canEdit && asset.type === 'world' && <button className="button button--danger" disabled={deleting} onClick={() => void deleteWorld()}><Trash2 size={16} /> {deleting ? 'Deleting...' : 'Delete World'}</button>}
           </div>
           {launchError && <p className="form-message" role="alert">{launchError} {launchError.includes('Account settings') && <Link to="/account">Open Account</Link>}</p>}
           {deleteError && <p className="form-message" role="alert">{deleteError}</p>}
+          {downloadError && <p className="form-message" role="alert">{downloadError}</p>}
         </div>
       </section>
       <div className="detail-layout">
