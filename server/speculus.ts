@@ -21,8 +21,16 @@ const generationSchema = z.object({
   model: z.enum(modelNames),
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().int().min(32).max(4096),
+  topK: z.number().int().min(0).max(1000).default(250),
+  topP: z.number().min(0).max(1).default(0.95),
+  presencePenalty: z.number().min(-2).max(2).default(0),
+  frequencyPenalty: z.number().min(-2).max(2).default(0),
+  stopSequences: z.array(z.string().min(1).max(200)).max(16).default([]),
+  continueToEndOfSentence: z.boolean().default(true),
   reroll: z.boolean().default(false),
 });
+
+const bridgeStopSequences = ['\n<|user|>', '\n<|assistant|>', '\nSystem:', '\nAnalysis:', '\nThinking:', '\n/nothink'];
 
 const hashGrant = (grant: string) => createHash('sha256').update(grant).digest('hex');
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -88,6 +96,13 @@ function extractNovelAiText(value: unknown) {
   if (typeof first.text === 'string') return first.text.trim();
   const message = asRecord(first.message);
   return typeof message.content === 'string' ? message.content.trim() : '';
+}
+
+function extractNovelAiFinishReason(value: unknown): string | undefined {
+  const choices = asRecord(value).choices;
+  if (!Array.isArray(choices)) return undefined;
+  const reason = asRecord(choices[0]).finish_reason;
+  return typeof reason === 'string' ? reason : undefined;
 }
 
 function providerError(status: number) {
@@ -249,14 +264,17 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: body.model,
-            prompt: body.prompt,
+            prompt: body.continueToEndOfSentence
+              ? `${body.prompt}\n<generation_control>Complete the final sentence within the output allowance. Do not begin another sentence unless it can also be completed.</generation_control>`
+              : body.prompt,
             max_tokens: body.maxTokens,
             temperature: body.temperature,
-            top_p: 1,
-            frequency_penalty: 0,
-            presence_penalty: 0,
+            top_k: body.topK,
+            top_p: body.topP,
+            frequency_penalty: body.frequencyPenalty,
+            presence_penalty: body.presencePenalty,
             stream: false,
-            stop: ['\n<|user|>', '\n<|assistant|>', '\nSystem:', '\nAnalysis:', '\nThinking:', '\n/nothink'],
+            stop: [...new Set([...bridgeStopSequences, ...body.stopSequences])],
             ...(body.reroll ? { seed: randomInt(1, 2_147_483_647) } : {}),
           }),
           signal: controller.signal,
@@ -267,7 +285,7 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
         if (!text) return response.status(502).json({ error: 'NovelAI returned an empty roleplay reply.' });
         await pool.query('UPDATE generation_grants SET use_count = use_count + 1, last_used_at = now() WHERE token_hash = $1', [hashGrant(grant)]);
         const requestId = upstream.headers.get('x-request-id') ?? randomUUID();
-        response.setHeader('x-request-id', requestId).json({ text });
+        response.setHeader('x-request-id', requestId).json({ text, finishReason: extractNovelAiFinishReason(payload) });
       } finally { clearTimeout(timeout); }
     } catch (error) { next(error); }
   });
