@@ -48,7 +48,7 @@ app.use((request, response, next) => {
 app.get('/api/health', async (_request, response, next) => {
   try {
     await pool.query('SELECT 1');
-    response.json({ ok: true, service: 'coda-api' });
+    response.json({ ok: true, service: 'orbis-api' });
   } catch (error) {
     next(error);
   }
@@ -76,10 +76,10 @@ if (config.isProduction) {
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   if (error instanceof ZodError) return response.status(400).json({ error: 'Invalid request.', details: error.issues });
   console.error(error);
-  response.status(500).json({ error: 'Coda could not complete that request.' });
+  response.status(500).json({ error: 'Orbis could not complete that request.' });
 });
 
-const server = app.listen(config.PORT, () => console.log(`Coda API listening on ${config.PORT}`));
+const server = app.listen(config.PORT, () => console.log(`Orbis API listening on ${config.PORT}`));
 
 const shutdown = () => server.close(() => pool.end().finally(() => process.exit(0)));
 process.on('SIGTERM', shutdown);

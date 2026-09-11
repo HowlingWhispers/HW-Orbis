@@ -42,7 +42,7 @@ async function insertAsset(asset: BitterrootSeedAsset, ownerUserId: string, orig
 try {
   await client.query('BEGIN');
   const owner = await client.query('SELECT id FROM users WHERE discord_id = $1', [BITTERROOT_OWNER_DISCORD_ID]);
-  if (!owner.rowCount) throw new Error('Eirvargr must sign in to Coda once before Bitterroot can be imported.');
+  if (!owner.rowCount) throw new Error('Eirvargr must sign in to Orbis once before Bitterroot can be imported.');
   const ownerUserId = String(owner.rows[0].id);
   const world = assets.find((asset) => asset.type === 'world');
   if (!world) throw new Error('The Bitterroot source does not contain its world record.');

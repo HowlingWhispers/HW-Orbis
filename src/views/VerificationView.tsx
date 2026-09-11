@@ -22,7 +22,7 @@ export function VerificationView() {
           <div><UserRoundCheck /><span><strong>1. Join the Discord</strong><small>Become a member of The Howling Whispers community.</small></span></div>
           <div><ShieldCheck /><span><strong>2. Complete age verification</strong><small>Follow the verification instructions provided by the server team.</small></span></div>
           <div><BadgeCheck /><span><strong>3. Receive an accepted role</strong><small>The 18+ Access role, or an approved adult staff role, unlocks these shelves.</small></span></div>
-          <div><LogIn /><span><strong>4. Sign in again</strong><small>Coda checks your current membership and roles through Discord.</small></span></div>
+          <div><LogIn /><span><strong>4. Sign in again</strong><small>Orbis checks your current membership and roles through Discord.</small></span></div>
         </div>
         <div className="verification-actions">
           {discordInviteUrl && <a className="button button--primary" href={discordInviteUrl} target="_blank" rel="noreferrer">Open the Discord</a>}

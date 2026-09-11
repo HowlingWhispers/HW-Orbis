@@ -14,7 +14,7 @@ export function AssetEditorView() {
 
   if (loading || authLoading) return <div className="page"><LoadingState label="Preparing the editor..." /></div>;
   if (error || !asset) return <div className="page"><ErrorState retry={retry} /></div>;
-  if (!user) return <div className="page editor-denied"><CircleAlert /><h1>Sign in to edit</h1><p>Discord ownership protects every Coda record.</p></div>;
+  if (!user) return <div className="page editor-denied"><CircleAlert /><h1>Sign in to edit</h1><p>Discord ownership protects every Orbis record.</p></div>;
   if (!asset.canEdit) return <div className="page editor-denied"><CircleAlert /><h1>Record protected</h1><p>Only {asset.author?.displayName ?? 'the original creator'} can change this record.</p><Link className="button button--secondary" to={`/asset/${asset.id}`}>Return to record</Link></div>;
 
   return <div className="page editor-page">

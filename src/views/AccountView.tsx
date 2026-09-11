@@ -26,7 +26,7 @@ export function AccountView() {
 
   if (loading) return <div className="page"><div className="account-panel">{t('Opening your profile...')}</div></div>;
   if (!user) return (
-    <div className="page account-page"><section className="account-panel account-panel--signed-out"><span className="eyebrow">{t('Your Coda identity')}</span><h1>{t('Sign in with Discord')}</h1><p>{t('Your Discord account establishes permanent ownership of everything you create.')}</p><a className="button button--discord" href={discordLoginPath('/account')}>{t('Continue with Discord')}</a></section></div>
+    <div className="page account-page"><section className="account-panel account-panel--signed-out"><span className="eyebrow">{t('Your Orbis identity')}</span><h1>{t('Sign in with Discord')}</h1><p>{t('Your Discord account establishes permanent ownership of everything you create.')}</p><a className="button button--discord" href={discordLoginPath('/account')}>{t('Continue with Discord')}</a></section></div>
   );
 
   const save = async (event: React.FormEvent) => {
@@ -38,8 +38,8 @@ export function AccountView() {
 
   const themeOptions: Array<{ value: ThemePreference; label: string; description: string }> = [
     { value: 'auto', label: t('Auto'), description: t('Follow your device light or dark setting.') },
-    { value: 'dark', label: t('Dark'), description: t('Use Coda’s warm dark library theme.') },
-    { value: 'light', label: t('Light'), description: t('Use Coda’s warm ivory library theme.') },
+    { value: 'dark', label: t('Dark'), description: t('Use Orbis’s warm dark library theme.') },
+    { value: 'light', label: t('Light'), description: t('Use Orbis’s warm ivory library theme.') },
   ];
 
   const saveProvider = async (event: React.FormEvent) => {
@@ -62,7 +62,7 @@ export function AccountView() {
     <div className="page account-page">
       <section className="account-panel">
         <div className="account-identity"><UserAvatar user={user} size={72} /><div><span className="eyebrow">{t('Signed in through Discord')}</span><h1>{user.displayName}</h1><p>@{user.discordUsername}</p></div></div>
-        <form className="profile-form" onSubmit={save}><label htmlFor="display-name">{t('Coda display name')}</label><div><input id="display-name" value={displayName} minLength={2} maxLength={40} onChange={(event) => setDisplayName(event.target.value)} /><button className="button button--primary" disabled={saving || displayName.trim() === user.displayName}>{saving ? t('Saving...') : t('Save name')}</button></div><small>{t('This changes the author name shown on all your creations. Ownership stays tied to your Discord ID.')}</small>{message && <p className="form-message" role="status">{message}</p>}</form>
+        <form className="profile-form" onSubmit={save}><label htmlFor="display-name">{t('Orbis display name')}</label><div><input id="display-name" value={displayName} minLength={2} maxLength={40} onChange={(event) => setDisplayName(event.target.value)} /><button className="button button--primary" disabled={saving || displayName.trim() === user.displayName}>{saving ? t('Saving...') : t('Save name')}</button></div><small>{t('This changes the author name shown on all your creations. Ownership stays tied to your Discord ID.')}</small>{message && <p className="form-message" role="status">{message}</p>}</form>
 
         <form className="profile-form" onSubmit={saveProvider}>
           <label htmlFor="novelai-token">NovelAI for Speculus</label>

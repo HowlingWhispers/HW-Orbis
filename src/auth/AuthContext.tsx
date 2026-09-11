@@ -29,7 +29,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function readJson<T>(response: Response): Promise<T> {
   const data = await response.json() as T & { error?: string };
-  if (!response.ok) throw new Error(data.error ?? 'Coda could not complete that request.');
+  if (!response.ok) throw new Error(data.error ?? 'Orbis could not complete that request.');
   return data;
 }
 

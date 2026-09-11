@@ -1,7 +1,7 @@
 # Terms of Service
 
 Status: service terms draft
-Applies to: The Howling Whispers services, including Orbis/Coda, Speculus and Fabula
+Applies to: The Howling Whispers services, including Orbis, Speculus and Fabula
 Last updated: 6 September 2026
 
 ## 1. Service access

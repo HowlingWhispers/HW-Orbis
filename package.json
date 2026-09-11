@@ -9,6 +9,7 @@
     "build": "npm run build:web && npm run build:api",
     "build:web": "tsc -b && vite build",
     "build:api": "tsc -p server/tsconfig.json",
+    "lint": "tsc -b --pretty false && tsc -p server/tsconfig.json --pretty false",
     "import:bitterroot": "node dist-server/import-bitterroot.js",
     "import:world-backup": "node dist-server/import-world-backup.js",
     "start:api": "node dist-server/index.js",
