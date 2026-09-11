@@ -110,6 +110,24 @@ export function ProjectView() {
         </div>
       </section>
 
+      {project.developmentUpdate && <section className="project-panel project-development-update">
+        <div className="project-panel__heading">
+          <div><span className="eyebrow">{t('LATEST DEVELOPMENT UPDATE')}</span><h2>{t(project.developmentUpdate.title)}</h2></div>
+          <CheckCircle2 size={21} />
+        </div>
+        <p>{t(project.developmentUpdate.summary)}</p>
+        <div className="project-update-columns">
+          <div>
+            <h3>{t('Changed and added')}</h3>
+            <ul>{project.developmentUpdate.added.map((item) => <li key={item}>{t(item)}</li>)}</ul>
+          </div>
+          <div>
+            <h3>{t('Planned next')}</h3>
+            <ul>{project.developmentUpdate.planned.map((item) => <li key={item}>{t(item)}</li>)}</ul>
+          </div>
+        </div>
+      </section>}
+
       <div className="project-grid">
         <section className="project-panel">
           <div className="project-panel__icon"><Compass size={18} /></div>
