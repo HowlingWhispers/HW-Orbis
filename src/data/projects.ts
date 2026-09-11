@@ -20,6 +20,12 @@ export interface ProjectDefinition {
   purpose: string;
   expectedFeatures: string[];
   laterFeatures: string[];
+  developmentUpdate?: {
+    title: string;
+    summary: string;
+    added: string[];
+    planned: string[];
+  };
   qa: ProjectQuestion[];
 }
 
@@ -30,34 +36,51 @@ export const projects: Record<ProjectDefinition['slug'], ProjectDefinition> = {
     releaseLabel: 'Working Concept',
     targetIso: '2026-10-04T12:00:00+02:00',
     targetLabel: '4 October 2026',
-    status: 'Concept and architecture defined. Build starts after the current weekly quota reset.',
-    progress: 5,
-    phase: 'PLANNING',
-    nextMilestone: 'Build the fresh retro terminal shell and connect the first one-on-one character session.',
-    lastUpdated: '6 September 2026',
-    summary: 'A private one-on-one character simulation and testing environment with a retro pre-DOS field-terminal identity.',
-    purpose: 'Speculus exists to test a character in isolation before placing that character into a larger living world. It should make character voice, memory, canon, world context and prompt behavior easier to inspect than a normal roleplay chat.',
+    status: 'The working simulator is live in active testing. The current focus is reliable world continuity, physical presence, canon provenance and concise generation control.',
+    progress: 72,
+    phase: 'TESTING',
+    nextMilestone: 'Bind physical entities to persistent place and time state, then verify the upgraded Brain against real Bitterroot sessions.',
+    lastUpdated: '11 September 2026',
+    summary: 'A private prose simulation instrument that renders Orbis characters, places and worlds through a retro pre-DOS field terminal.',
+    purpose: 'Speculus turns Orbis records into controlled prose simulations. It is being built to keep characters, objects, places, physical state and time coherent while exposing the context, rules and provider behavior behind every generated turn.',
     expectedFeatures: [
-      'One active AI character per session',
-      'Character Card V2 loading from Orbis',
-      'Persona loading',
-      'Optional world context from Orbis',
-      'Private one-on-one roleplay',
-      'Memory and context inspection',
-      'Prompt and character diagnostics',
-      'Provider and model selection',
-      'Reroll, reset and session save/resume',
+      'One-time private launches from Orbis records',
+      'Character, world, place, item and faction simulation targets',
+      'Character Card V2, persona and related world context loading',
+      'Brain V2 player-authority and canon restraint rules',
+      'Compiled prompt, perception, cast, relationship and provider diagnostics',
+      'NovelAI response length and sampling controls',
+      'AI influence tags and freeform direction',
+      'Reroll, delete, raw export and session resume',
       'Retro 1982 laboratory / rugged field-terminal interface',
     ],
     laterFeatures: [
-      'Deeper automated character-consistency checks',
+      'Persistent physical world state bound to place and time',
+      'Dedicated protocols for every Orbis record type',
+      'Stronger named-character, inventory and place provenance enforcement',
+      'Improved active-cast and name detection',
       'Branch and comparison tools for alternative replies',
-      'Expanded testing reports and exports',
-      'More advanced simulation controls once the core RP loop is stable',
+      'Sanitized research bundles for future Mouseion analysis',
     ],
+    developmentUpdate: {
+      title: 'Brain V2 restraint and NovelAI controls are now implemented',
+      summary: 'Speculus is no longer only a planned terminal shell. The complete Orbis launch bridge and the first Brain V2 runtime are working, but continuity and structured world-state work are still in progress.',
+      added: [
+        'Response calibration now limits generation before the model call instead of rejecting a reply for being too long.',
+        'The left Control Deck now exposes NovelAI randomness, output length, Top-K, nucleus, presence penalty, frequency penalty, sentence completion and stop sequences.',
+        'Raw session exports preserve the transcript, diagnostics, settings, relationships, AI influence and any unsent composer draft.',
+        'Character and non-character targets use different runtime instructions, and the Brain protects player dialogue, actions and private state.',
+      ],
+      planned: [
+        'Replace prompt-only continuity with structured entities, locations, inventory and physical state.',
+        'Bind every physical figure and object to a place and advancing simulation time.',
+        'Require canonical Orbis provenance before new formal places, named characters or item types enter persistent state.',
+        'Test the complete flow against longer Bitterroot sessions before declaring the working concept stable.',
+      ],
+    },
     qa: [
       { question: 'Is Speculus replacing Orbis?', answer: 'No. Orbis is the library and creation layer. Speculus is the private simulation and testing layer.' },
-      { question: 'Can Speculus use a world?', answer: 'Yes. A character can inherit relevant world context, but the session still focuses on one active character.' },
+      { question: 'Can Speculus use a world?', answer: 'Yes. Speculus can launch characters, worlds, places, items and factions from Orbis. The remaining work is making their physical state and continuity fully structured instead of relying mainly on prompt context.' },
       { question: 'Is it multiplayer?', answer: 'No. Shared-world presence belongs to Fabula.' },
       { question: 'Why the retro terminal design?', answer: 'Speculus is meant to feel like a personality simulation instrument rather than another modern chat dashboard.' },
       { question: 'What does Working Concept mean?', answer: 'A usable first version that proves the one-on-one RP, character loading, context and diagnostic workflow. It is not the final polished release.' },
