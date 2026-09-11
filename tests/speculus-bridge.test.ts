@@ -41,7 +41,7 @@ describe('Speculus security bridge', () => {
     expect(() => openCredential(sealed, Buffer.alloc(32, 8))).toThrow();
   });
 
-  it('boxes an Orbis record and deposits only an opaque grant in Speculus', async () => {
+  it('boxes Orbis runtime preferences and deposits only an opaque grant in Speculus', async () => {
     const captured: { body?: Record<string, unknown>; authorization?: string } = {};
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       captured.body = JSON.parse(String(init?.body));
@@ -55,7 +55,9 @@ describe('Speculus security bridge', () => {
         tags: ['Werewolf'], document: { description: 'Terse and observant.', personality: 'Protective' },
       }] };
       if (sql.includes('SELECT model FROM user_provider_settings')) return { rowCount: 1, rows: [{ model: 'xialong-v1' }] };
-      if (sql.includes('SELECT id, display_name FROM users')) return { rowCount: 1, rows: [{ id: userId, display_name: 'Eirvargr' }] };
+      if (sql.includes('SELECT id, display_name, player_pronouns, response_length_mode FROM users')) {
+        return { rowCount: 1, rows: [{ id: userId, display_name: 'Eirvargr', player_pronouns: 'he/him', response_length_mode: 'concise' }] };
+      }
       if (sql.includes('id <> $1')) return { rowCount: 0, rows: [] };
       if (sql.includes('FROM ensure_speculus_catalog_entry_v2')) return { rowCount: 1, rows: [{
         code: 'SPC-C-KD41827', prefix: 'C', plate: 'KD41827', generation: 1,
@@ -72,14 +74,44 @@ describe('Speculus security bridge', () => {
     expect(response.body.launchUrl).toContain('spec.thehowlingwhispers.com');
     expect(captured.authorization).toBe('Bearer shared-test-bridge-secret');
     expect(captured.body).toMatchObject({
-      version: 1, model: 'xialong-v1',
+      version: 1, model: 'xialong-v1', responseLength: 'concise',
       primaryAsset: { id: assetId, type: 'character', revision: updatedAt },
       catalog: { code: 'SPC-C-KD41827', classification: 'character' },
-      persona: { name: 'Eirvargr' },
+      persona: { name: 'Eirvargr', pronouns: 'he/him' },
       character: { name: 'Ragna Holt', description: 'Terse and observant.' },
     });
     expect(String(captured.body?.generationGrant)).toHaveLength(43);
     expect(JSON.stringify(captured.body)).not.toContain('novelai-secret-token');
+  });
+
+  it('passes null pronouns rather than inventing a default when none are selected', async () => {
+    const captured: { body?: Record<string, unknown> } = {};
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ launchUrl: 'https://spec.thehowlingwhispers.com/?launch=once' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+    }));
+    const pool = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [{
+        id: assetId, type: 'character', name: 'Ragna Holt', summary: '', creator_user_id: userId,
+        content_rating: 'sfw', origin_world_id: null, updated_at: updatedAt, tags: [], document: {},
+      }] };
+      if (sql.includes('SELECT model FROM user_provider_settings')) return { rowCount: 1, rows: [{ model: 'xialong-v1' }] };
+      if (sql.includes('SELECT id, display_name, player_pronouns, response_length_mode FROM users')) {
+        return { rowCount: 1, rows: [{ id: userId, display_name: 'Eirvargr', player_pronouns: null, response_length_mode: 'adaptive' }] };
+      }
+      if (sql.includes('id <> $1')) return { rowCount: 0, rows: [] };
+      if (sql.includes('FROM ensure_speculus_catalog_entry_v2')) return { rowCount: 1, rows: [{
+        code: 'SPC-C-KD41827', prefix: 'C', plate: 'KD41827', generation: 1,
+        registry_number: 1, class_registry_number: 1, classification: 'character', asset_created_at: updatedAt, status: 'active',
+      }] };
+      if (sql.includes('INSERT INTO generation_grants')) return { rowCount: 1, rows: [] };
+      throw new Error(`Unexpected query: ${sql}`);
+    }) } as unknown as DatabasePool;
+    const app = express(); app.use(express.json()); withSession(app);
+    app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
+    await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).expect(201);
+    expect((captured.body?.persona as Record<string, unknown>).pronouns).toBeNull();
+    expect(captured.body?.responseLength).toBe('adaptive');
   });
 
   it('uses the saved token only inside Orbis when redeeming a scoped grant', async () => {

@@ -2,6 +2,7 @@ import { CheckCircle2, LogOut, ShieldAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
 import { deleteNovelAiSettings, getNovelAiSettings, saveNovelAiSettings, type NovelAiSettings } from '../api/provider-settings';
+import { getRuntimePreferences, saveRuntimePreferences, type PlayerPronouns, type ResponseLengthMode, type RuntimePreferences } from '../api/runtime-preferences';
 import { UserAvatar } from '../components/UserAvatar';
 import { useI18n } from '../i18n/I18nContext';
 import type { Locale } from '../i18n/translations';
@@ -18,10 +19,14 @@ export function AccountView() {
   const [novelAiToken, setNovelAiToken] = useState('');
   const [providerMessage, setProviderMessage] = useState('');
   const [providerSaving, setProviderSaving] = useState(false);
+  const [runtime, setRuntime] = useState<RuntimePreferences>({ pronouns: null, responseLength: 'adaptive' });
+  const [runtimeMessage, setRuntimeMessage] = useState('');
+  const [runtimeSaving, setRuntimeSaving] = useState(false);
   useEffect(() => setDisplayName(user?.displayName ?? ''), [user]);
   useEffect(() => {
     if (!user) return;
     void getNovelAiSettings().then(setProvider).catch((error) => setProviderMessage(error instanceof Error ? error.message : 'Provider settings unavailable.'));
+    void getRuntimePreferences().then(setRuntime).catch((error) => setRuntimeMessage(error instanceof Error ? error.message : 'Runtime preferences unavailable.'));
   }, [user]);
 
   if (loading) return <div className="page"><div className="account-panel">{t('Opening your profile...')}</div></div>;
@@ -58,6 +63,13 @@ export function AccountView() {
     finally { setProviderSaving(false); }
   };
 
+  const saveRuntime = async (event: React.FormEvent) => {
+    event.preventDefault(); setRuntimeSaving(true); setRuntimeMessage('');
+    try { setRuntime(await saveRuntimePreferences(runtime)); setRuntimeMessage('Speculus roleplay preferences saved.'); }
+    catch (error) { setRuntimeMessage(error instanceof Error ? error.message : 'Could not save Speculus preferences.'); }
+    finally { setRuntimeSaving(false); }
+  };
+
   return (
     <div className="page account-page">
       <section className="account-panel">
@@ -77,6 +89,28 @@ export function AccountView() {
           </div>
           <small>The token is encrypted in Orbis and never sent to the Speculus browser or service. Speculus receives only a temporary generation grant.</small>
           {providerMessage && <p className="form-message" role="status">{providerMessage}</p>}
+        </form>
+
+        <form className="profile-form" onSubmit={saveRuntime}>
+          <label htmlFor="player-pronouns">Speculus roleplay identity</label>
+          <div>
+            <select id="player-pronouns" value={runtime.pronouns ?? ''} onChange={(event) => setRuntime({ ...runtime, pronouns: (event.target.value || null) as PlayerPronouns | null })}>
+              <option value="">Pronouns unset</option>
+              <option value="he/him">he / him</option>
+              <option value="she/her">she / her</option>
+              <option value="they/them">they / them</option>
+              <option value="it/its">it / its</option>
+            </select>
+            <select aria-label="Speculus response length" value={runtime.responseLength} onChange={(event) => setRuntime({ ...runtime, responseLength: event.target.value as ResponseLengthMode })}>
+              <option value="concise">Concise</option>
+              <option value="normal">Normal</option>
+              <option value="long">Long</option>
+              <option value="adaptive">Adaptive</option>
+            </select>
+            <button className="button button--primary" disabled={runtimeSaving}>{runtimeSaving ? 'Saving...' : 'Save roleplay settings'}</button>
+          </div>
+          <small>Pronouns are passed to Speculus as part of your persona identity. If left unset, Speculus uses your name or “you” instead of guessing or defaulting to they/them. Response length controls both pacing instructions and generation budget; Adaptive scales to the size and importance of your turn.</small>
+          {runtimeMessage && <p className="form-message" role="status">{runtimeMessage}</p>}
         </form>
 
         <div className="profile-form language-setting">
