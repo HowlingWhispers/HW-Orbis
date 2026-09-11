@@ -60,7 +60,7 @@ export function ProjectView() {
   if (!project) {
     return (
       <section className="page project-page">
-        <Link className="back-link" to="/"><ArrowLeft size={15} /> {t('Back to Coda')}</Link>
+        <Link className="back-link" to="/"><ArrowLeft size={15} /> {t('Back to Orbis')}</Link>
         <div className="state-panel"><strong>{t('Project not found')}</strong><span>{t('This roadmap entry does not exist.')}</span></div>
       </section>
     );
@@ -70,7 +70,7 @@ export function ProjectView() {
 
   return (
     <section className={`page project-page project-page--${project.slug}`}>
-      <Link className="back-link" to="/"><ArrowLeft size={15} /> {t('Back to Coda')}</Link>
+      <Link className="back-link" to="/"><ArrowLeft size={15} /> {t('Back to Orbis')}</Link>
 
       <header className="project-hero">
         <div className="project-hero__copy">

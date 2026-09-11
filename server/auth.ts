@@ -136,7 +136,7 @@ export async function refreshSessionAccess(request: Request, config: AppConfig, 
 export function requireCreator(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
   return async (request: Request, response: Response, next: NextFunction) => {
     try {
-      if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to create in Coda.' });
+      if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to create in Orbis.' });
       const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
       if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore);
       if (!request.session.access?.canCreate) return response.status(403).json({ error: 'The verified 18+ Discord role is required to create or edit.', verificationPath: '/verification' });

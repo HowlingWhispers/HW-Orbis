@@ -11,10 +11,10 @@ export function requireAdmin(config: AppConfig, poolOrSettingsStore: DatabasePoo
 
   return async (request: Request, response: Response, next: NextFunction) => {
     try {
-      if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to administer Coda.' });
+      if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to administer Orbis.' });
       const isSuperAdmin = pool ? await ensureSuperAdminAccess(request, pool) : false;
       if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, true);
-      if (!request.session.access?.canAdmin) return response.status(403).json({ error: 'Coda administrator access is required.' });
+      if (!request.session.access?.canAdmin) return response.status(403).json({ error: 'Orbis administrator access is required.' });
       next();
     } catch (error) {
       next(error);

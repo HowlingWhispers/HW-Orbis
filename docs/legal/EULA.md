@@ -1,7 +1,7 @@
 # End User License Agreement
 
 Status: end user agreement draft
-Applies to: The Howling Whispers software and services, including Orbis/Coda, Speculus and Fabula
+Applies to: The Howling Whispers software and services, including Orbis, Speculus and Fabula
 Last updated: 6 September 2026
 
 ## 1. License to use the service

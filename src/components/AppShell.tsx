@@ -70,7 +70,7 @@ export function AppShell() {
         </div>
         <nav className="library-nav" aria-label={t('Collections')}>
           <NavLink className={({ isActive }) => `library-nav__item ${isActive ? 'is-active' : ''}`} to="/" end>
-            <BookGlyph /><span><strong>{t('Coda home')}</strong><small>{t('Your archive at a glance')}</small></span>
+            <BookGlyph /><span><strong>{t('Orbis home')}</strong><small>{t('Your archive at a glance')}</small></span>
           </NavLink>
           <div className="library-nav__label">{t('Collections')}</div>
           {libraryNavigation.map(({ type, label, icon: Icon }) => (
@@ -93,7 +93,7 @@ export function AppShell() {
           <button className="icon-button menu-button" onClick={() => setMenuOpen(true)} aria-label={t('Open navigation')}><Menu size={22} /></button>
           <form className="global-search" onSubmit={submitSearch}>
             <Search size={18} aria-hidden="true" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('Search every shelf...')} aria-label={t('Search all of Coda')} />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('Search every shelf...')} aria-label={t('Search all of Orbis')} />
             <kbd>Enter</kbd>
           </form>
           <ProjectEtas />

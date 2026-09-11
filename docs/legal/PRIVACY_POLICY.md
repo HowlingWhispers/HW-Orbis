@@ -1,7 +1,7 @@
 # Privacy Policy
 
 Status: legal draft for review
-Applies to: The Howling Whispers services, including Orbis/Coda, Speculus and Fabula
+Applies to: The Howling Whispers services, including Orbis, Speculus and Fabula
 Last updated: 6 September 2026
 
 ## Plain-language summary

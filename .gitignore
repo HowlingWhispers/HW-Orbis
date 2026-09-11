@@ -142,3 +142,6 @@ dist-server
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Private one-off import payloads must never enter the public repository.
+server/imports/pending/

@@ -1,6 +1,6 @@
 # Orbis Discord authentication and permissions
 
-Orbis uses Coda's Discord OAuth application to identify users. The bot token is not used for website login and must never be added to the browser build.
+Orbis uses its Discord OAuth application to identify users. The bot token is not used for website login and must never be added to the browser build.
 
 ## Access policy
 
@@ -43,7 +43,7 @@ Registered redirect URIs:
 3. Copy `.env.example` to a protected production environment file outside the repository.
 4. Set `APP_ORIGIN=https://lib.thehowlingwhispers.com`.
 5. Set `DISCORD_REDIRECT_URI=https://lib.thehowlingwhispers.com/api/auth/discord/callback`.
-6. Set Coda's client ID and client secret directly on the server. Do not post the secret in chat or commit it.
+6. Set Orbis's client ID and client secret directly on the server. Do not post the secret in chat or commit it.
 7. Set `DISCORD_GUILD_ID` to The Howling Whispers server ID.
 8. Set `DISCORD_ADULT_ROLE_IDS` to the accepted 18+ role IDs.
 9. Set `DISCORD_CREATOR_ROLE_IDS` to the roles allowed to create. Leave it blank to use the adult role list.

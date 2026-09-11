@@ -12,7 +12,7 @@ This is the practical checklist for turning the legal drafts into a real product
 - Add VAT, register and supervisory-authority details if applicable.
 - Add the real privacy, legal, billing, moderation and security contact addresses.
 - Confirm whether a data-protection officer is legally required.
-- Inventory all personal data processed by Orbis/Coda, Speculus and Fabula.
+- Inventory all personal data processed by Orbis, Speculus and Fabula.
 - Record the legal basis and exact retention period for each data category.
 - Inventory every cookie, localStorage key and third-party browser technology.
 - Confirm which browser storage is strictly necessary and which requires consent.
