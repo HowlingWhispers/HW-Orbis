@@ -6,6 +6,7 @@ import session from 'express-session';
 import helmet from 'helmet';
 import { ZodError } from 'zod';
 import { createAuthRouter } from './auth.js';
+import { createArchiveTransferRouter } from './archive-transfer.js';
 import { createAdminRouter, requireAdmin } from './admin.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
@@ -64,6 +65,7 @@ app.use('/api/provider-settings', createProviderSettingsRouter(config, pool));
 app.use('/api/admin', requireAdmin(config, pool, settingsStore), createAdminRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createWorldDeleteRouter(pool));
+app.use('/api/v1/library', createArchiveTransferRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createLibraryRouter(config, pool, settingsStore));
 
 if (config.isProduction) {

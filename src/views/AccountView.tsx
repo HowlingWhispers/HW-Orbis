@@ -1,7 +1,8 @@
-import { CheckCircle2, LogOut, ShieldAlert } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { CheckCircle2, Download, LogOut, ShieldAlert, Upload } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
 import { deleteNovelAiSettings, getNovelAiSettings, saveNovelAiSettings, type NovelAiSettings } from '../api/provider-settings';
+import { downloadAccountArchive, uploadArchive } from '../api/archive-transfer';
 import { UserAvatar } from '../components/UserAvatar';
 import { useI18n } from '../i18n/I18nContext';
 import type { Locale } from '../i18n/translations';
@@ -18,6 +19,9 @@ export function AccountView() {
   const [novelAiToken, setNovelAiToken] = useState('');
   const [providerMessage, setProviderMessage] = useState('');
   const [providerSaving, setProviderSaving] = useState(false);
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [transferMessage, setTransferMessage] = useState('');
+  const archiveInput = useRef<HTMLInputElement>(null);
   useEffect(() => setDisplayName(user?.displayName ?? ''), [user]);
   useEffect(() => {
     if (!user) return;
@@ -56,6 +60,23 @@ export function AccountView() {
     try { setProvider(await deleteNovelAiSettings()); setNovelAiToken(''); setProviderMessage('NovelAI connection removed.'); }
     catch (error) { setProviderMessage(error instanceof Error ? error.message : 'Could not remove NovelAI settings.'); }
     finally { setProviderSaving(false); }
+  };
+
+  const downloadEverything = async () => {
+    setTransferBusy(true); setTransferMessage('');
+    try { await downloadAccountArchive(); setTransferMessage('Your complete Orbis archive was downloaded. Keep it somewhere private.'); }
+    catch (error) { setTransferMessage(error instanceof Error ? error.message : 'Could not download your Orbis archive.'); }
+    finally { setTransferBusy(false); }
+  };
+
+  const importEverything = async (file: File) => {
+    if (!window.confirm(`Upload “${file.name}” to Orbis? The archive will be checked before anything is imported.`)) return;
+    setTransferBusy(true); setTransferMessage('Checking archive...');
+    try {
+      const result = await uploadArchive(file);
+      setTransferMessage(`${result.imported} SPC record${result.imported === 1 ? '' : 's'} imported successfully.`);
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : 'Could not upload this Orbis archive.'); }
+    finally { setTransferBusy(false); if (archiveInput.current) archiveInput.current.value = ''; }
   };
 
   return (
@@ -108,6 +129,24 @@ export function AccountView() {
             ))}
           </div>
           <small>{t('The choice is saved on this device. Auto follows your operating system setting.')}</small>
+        </div>
+
+        <div className="profile-form archive-transfer">
+          <label>World and SPC transfers</label>
+          <div>
+            <button className="button button--primary" type="button" disabled={transferBusy} onClick={() => void downloadEverything()}><Download size={16} /> Download everything</button>
+            <button className="button button--secondary" type="button" disabled={transferBusy || !user.permissions.canCreate} onClick={() => archiveInput.current?.click()}><Upload size={16} /> Upload archive</button>
+            <input
+              ref={archiveInput}
+              className="archive-transfer__input"
+              type="file"
+              accept=".json,.orbis.json,application/octet-stream"
+              disabled={transferBusy || !user.permissions.canCreate}
+              onChange={(event) => { const file = event.target.files?.[0]; if (file) void importEverything(file); }}
+            />
+          </div>
+          <small>Downloads include your authored records, world links and permanent SPC identities. Passwords, provider tokens and Discord sessions are never included. Uploads are checksum-verified and all-or-nothing. Keep archives private and never commit an unencrypted archive to a public Git repository.</small>
+          {transferMessage && <p className="form-message" role="status">{transferMessage}</p>}
         </div>
 
         <div className="permission-card">
