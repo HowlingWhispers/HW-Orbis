@@ -85,9 +85,11 @@ describe('Speculus security bridge', () => {
   it('uses the saved token only inside Orbis when redeeming a scoped grant', async () => {
     const sealed = sealCredential('novelai-secret-token', credentialKey(encryptionKey));
     let upstreamAuthorization = '';
+    let upstreamBody: Record<string, unknown> = {};
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       upstreamAuthorization = new Headers(init?.headers).get('authorization') ?? '';
-      return new Response(JSON.stringify({ choices: [{ text: 'The warden answers.' }] }), { status: 200, headers: { 'Content-Type': 'application/json', 'x-request-id': 'nai-1' } });
+      upstreamBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ choices: [{ text: 'The warden answers.', finish_reason: 'stop' }] }), { status: 200, headers: { 'Content-Type': 'application/json', 'x-request-id': 'nai-1' } });
     }));
     const launchId = '33333333-3333-4333-8333-333333333333';
     const pool = { query: vi.fn(async (sql: string) => {
@@ -101,10 +103,21 @@ describe('Speculus security bridge', () => {
     const app = express(); app.use(express.json()); app.use('/api/v1/generation', createSpeculusGenerationRouter(config, pool));
     const response = await request(app).post('/api/v1/generation/speculus')
       .set('Authorization', 'Bearer opaque-speculus-generation-grant')
-      .send({ launchId, source: { id: assetId, revision: updatedAt, type: 'character' }, prompt: 'Continue.', model: 'xialong-v1', temperature: 0.8, maxTokens: 850, reroll: false })
+      .send({
+        launchId, source: { id: assetId, revision: updatedAt, type: 'character' }, prompt: 'Continue.',
+        model: 'xialong-v1', temperature: 0.85, maxTokens: 256, topK: 250, topP: 0.95,
+        presencePenalty: 0.2, frequencyPenalty: 0.3, stopSequences: ['PLAYER:'],
+        continueToEndOfSentence: true, reroll: false,
+      })
       .expect(200);
     expect(upstreamAuthorization).toBe('Bearer novelai-secret-token');
-    expect(response.body).toEqual({ text: 'The warden answers.' });
+    expect(upstreamBody).toMatchObject({
+      max_tokens: 256, temperature: 0.85, top_k: 250, top_p: 0.95,
+      presence_penalty: 0.2, frequency_penalty: 0.3, stream: false,
+    });
+    expect(upstreamBody.prompt).toContain('Complete the final sentence within the output allowance.');
+    expect(upstreamBody.stop).toContain('PLAYER:');
+    expect(response.body).toEqual({ text: 'The warden answers.', finishReason: 'stop' });
     expect(JSON.stringify(response.body)).not.toContain('novelai-secret-token');
     expect(response.headers['x-request-id']).toBe('nai-1');
   });
