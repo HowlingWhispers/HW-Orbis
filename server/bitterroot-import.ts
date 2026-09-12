@@ -1,9 +1,10 @@
 export type ImportedAssetType = 'world' | 'character' | 'place' | 'faction' | 'species' | 'society' | 'family' | 'memory';
 export type ImportedVisualTone = 'moon' | 'forest' | 'ember' | 'mist' | 'violet' | 'river';
+export type ImportedContentRating = 'sfw' | 'adult';
 export const BITTERROOT_OWNER_DISCORD_ID = '1544473372073791602';
 
-type SourceEntity = { id: string; name: string; description?: string; [key: string]: unknown };
-type SourceMemory = { id: string; title?: string; name?: string; description?: string; [key: string]: unknown };
+type SourceEntity = { id: string; name: string; description?: string; contentRating?: ImportedContentRating; [key: string]: unknown };
+type SourceMemory = { id: string; title?: string; name?: string; description?: string; contentRating?: ImportedContentRating; [key: string]: unknown };
 type SourcePerson = SourceEntity & {
   characterId?: string;
   speciesSourceId?: string;
@@ -41,6 +42,7 @@ export interface BitterrootSeedAsset {
   tags: string[];
   dependencyCount: number;
   visualTone: ImportedVisualTone;
+  contentRating: ImportedContentRating;
   createdAt: string;
   updatedAt: string;
 }
@@ -56,6 +58,7 @@ const sourceIdentity = (type: ImportedAssetType, id: string) => `${type}:${id}`;
 const documentOf = (entity: SourceEntity) => structuredClone(entity) as Record<string, unknown>;
 const stringArray = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 const referenceKey = (key: string) => key !== 'id' && key !== 'sourceId' && /(Id|Ids|SourceId|SourceIds)$/.test(key);
+const contentRatingOf = (entity: { contentRating?: unknown }): ImportedContentRating => entity.contentRating === 'adult' ? 'adult' : 'sfw';
 
 export function countBitterrootReferences(value: unknown): number {
   const found = new Set<string>();
@@ -103,6 +106,7 @@ export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): Bitterr
     tags: [world.identity.genre, 'Pre-industrial', 'Public canon'].filter(Boolean),
     dependencyCount: world.species.length + world.locations.length + world.factions.length + world.societies.length + world.families.length + world.memories.length + world.families.flatMap((family) => family.people ?? []).length,
     visualTone: 'forest',
+    contentRating: 'sfw',
     ...common,
   }];
 
@@ -119,7 +123,9 @@ export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): Bitterr
         summary: compactSummary(entity.description), document,
         tags: [...new Set(tags.filter(Boolean))],
         dependencyCount: countBitterrootReferences(document),
-        visualTone: tone, ...common,
+        visualTone: tone,
+        contentRating: contentRatingOf(entity),
+        ...common,
       });
     }
   };
@@ -172,7 +178,9 @@ export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): Bitterr
         document,
         tags: [...new Set(['Werewolf', familyTag, ...explicitTags, ...factionTags].filter(Boolean))],
         dependencyCount: countBitterrootReferences(document),
-        visualTone: 'moon', ...common,
+        visualTone: 'moon',
+        contentRating: contentRatingOf(person),
+        ...common,
       });
     }
   }
