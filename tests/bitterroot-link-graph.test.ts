@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { applyBrackenjawCanon } from '../server/bitterroot-brackenjaw-canon';
+import { applyBitterrootCoreLinks } from '../server/bitterroot-core-links';
 import { buildBitterrootSeedAssets, type BitterrootSourceWorld } from '../server/bitterroot-import';
 import { applyBitterrootLinkGraph, auditBitterrootLinks } from '../server/bitterroot-link-graph';
 import { applyWhisperingWoodsCanon } from '../server/bitterroot-whispering-canon';
 import source from '../server/data/bitterroot.json';
 
 const world = applyBitterrootLinkGraph(
-  applyBrackenjawCanon(
-    applyWhisperingWoodsCanon(source as unknown as BitterrootSourceWorld),
+  applyBitterrootCoreLinks(
+    applyBrackenjawCanon(
+      applyWhisperingWoodsCanon(source as unknown as BitterrootSourceWorld),
+    ),
   ),
 );
 const assets = buildBitterrootSeedAssets(world);
@@ -46,13 +49,35 @@ describe('Bitterroot relationship graph', () => {
     const smithy = world.locations.find((location) => location.id === 'ashforge-smithy');
     const house = world.locations.find((location) => location.id === 'ashforge-house');
     const militia = world.factions.find((faction) => faction.id === 'brackenjaw-militia');
+    const wardens = world.factions.find((faction) => faction.id === 'boundary-wardens');
     const ashforge = world.families.find((family) => family.id === 'ashforge-family');
+    const holt = world.families.find((family) => family.id === 'holt-family');
 
     expect(smithy?.workerCharacterIds).toContain('torren-ashforge');
     expect(smithy?.familyIds).toContain('ashforge-family');
     expect(house?.residentCharacterIds).toEqual(expect.arrayContaining(['torren-ashforge', 'jori-ashforge']));
     expect(militia?.characterIds).toContain('torren-ashforge');
+    expect(militia?.locationIds).toContain('brackenjaw-enclave');
+    expect(wardens?.characterIds).toContain('ragna-holt');
+    expect(wardens?.locationIds).toEqual(expect.arrayContaining(['brackenjaw-ranger-station', 'brackenjaw-eastern-boundary', 'warning-stones']));
     expect(ashforge?.characterIds).toEqual(expect.arrayContaining(['torren-ashforge', 'jori-ashforge']));
+    expect(holt?.homeLocationId).toBe('brackenjaw-enclave');
+  });
+
+  it('mirrors society and memory relationships back to referenced records', () => {
+    const orphanage = world.locations.find((location) => location.id === 'bitterroot-orphanage');
+    const howlingHills = world.locations.find((location) => location.id === 'howling-hills');
+    const regionalSociety = world.societies.find((society) => society.id === 'howling-hills-peoples');
+
+    expect(orphanage?.societyIds).toContain('bitterroot-orphanage-household');
+    expect(howlingHills?.memoryIds).toContain('howling-hills-flood');
+    expect(regionalSociety?.childSocietyIds).toEqual(expect.arrayContaining([
+      'whispering-woods-clans',
+      'bitterroot-orphanage-household',
+      'bitterroot-bluffs-bands',
+      'bitterroot-peak-clans',
+      'brackenjaw-enclave-society',
+    ]));
   });
 
   it('reports actual reference counts on place cards', () => {
