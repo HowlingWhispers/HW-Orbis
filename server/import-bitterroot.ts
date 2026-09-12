@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { BITTERROOT_OWNER_DISCORD_ID, buildBitterrootSeedAssets, type BitterrootSourceWorld, type BitterrootSeedAsset } from './bitterroot-import.js';
 import { applyBrackenjawCanon } from './bitterroot-brackenjaw-canon.js';
+import { applyBitterrootCoreLinks } from './bitterroot-core-links.js';
 import { applyBitterrootLinkGraph, auditBitterrootLinks } from './bitterroot-link-graph.js';
 import { applyWhisperingWoodsCanon } from './bitterroot-whispering-canon.js';
 import { createPool } from './db.js';
@@ -10,9 +11,11 @@ import { createPool } from './db.js';
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required.');
 
 const source = applyBitterrootLinkGraph(
-  applyBrackenjawCanon(
-    applyWhisperingWoodsCanon(
-      JSON.parse(await readFile(resolve(process.cwd(), 'server/data/bitterroot.json'), 'utf8')) as BitterrootSourceWorld,
+  applyBitterrootCoreLinks(
+    applyBrackenjawCanon(
+      applyWhisperingWoodsCanon(
+        JSON.parse(await readFile(resolve(process.cwd(), 'server/data/bitterroot.json'), 'utf8')) as BitterrootSourceWorld,
+      ),
     ),
   ),
 );
