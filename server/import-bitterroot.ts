@@ -5,6 +5,7 @@ import { BITTERROOT_OWNER_DISCORD_ID, buildBitterrootSeedAssets, type Bitterroot
 import { applyBrackenjawCanon } from './bitterroot-brackenjaw-canon.js';
 import { applyBitterrootCoreLinks } from './bitterroot-core-links.js';
 import { applyBitterrootLinkGraph, auditBitterrootLinks } from './bitterroot-link-graph.js';
+import { applyRedLightDistrictCanon } from './bitterroot-red-light-district-canon.js';
 import { applySlaveMarketCanon } from './bitterroot-slave-market-canon.js';
 import { applyWhisperingWoodsCanon } from './bitterroot-whispering-canon.js';
 import { createPool } from './db.js';
@@ -14,9 +15,11 @@ if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required.');
 const source = applyBitterrootLinkGraph(
   applyBitterrootCoreLinks(
     applyBrackenjawCanon(
-      applySlaveMarketCanon(
-        applyWhisperingWoodsCanon(
-          JSON.parse(await readFile(resolve(process.cwd(), 'server/data/bitterroot.json'), 'utf8')) as BitterrootSourceWorld,
+      applyRedLightDistrictCanon(
+        applySlaveMarketCanon(
+          applyWhisperingWoodsCanon(
+            JSON.parse(await readFile(resolve(process.cwd(), 'server/data/bitterroot.json'), 'utf8')) as BitterrootSourceWorld,
+          ),
         ),
       ),
     ),
@@ -35,7 +38,7 @@ async function insertAsset(asset: BitterrootSeedAsset, ownerUserId: string, orig
     `INSERT INTO library_assets (
        id, type, name, summary, origin_world_id, creator_user_id, source_type, source_asset_id,
        content_rating, tags, dependency_count, pinned, visual_tone, document, created_at, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,'public-curated',$7,'sfw',$8,$9,$10,$11,$12::jsonb,$13,$14)
+     ) VALUES ($1,$2,$3,$4,$5,$6,'public-curated',$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15)
      ON CONFLICT (source_type, source_asset_id) WHERE source_asset_id IS NOT NULL
      DO UPDATE SET
        origin_world_id = EXCLUDED.origin_world_id,
@@ -51,7 +54,7 @@ async function insertAsset(asset: BitterrootSeedAsset, ownerUserId: string, orig
        updated_at = EXCLUDED.updated_at
      RETURNING id, (xmax = 0) AS inserted`,
     [randomUUID(), asset.type, asset.name, asset.summary, originWorldId, ownerUserId, asset.sourceAssetId,
-      asset.tags, asset.dependencyCount, asset.type === 'world', asset.visualTone, JSON.stringify(asset.document), asset.createdAt, asset.updatedAt],
+      asset.contentRating, asset.tags, asset.dependencyCount, asset.type === 'world', asset.visualTone, JSON.stringify(asset.document), asset.createdAt, asset.updatedAt],
   );
   if (!result.rowCount) throw new Error(`Could not resolve asset ${asset.sourceAssetId}.`);
   return { id: String(result.rows[0].id), inserted: Boolean(result.rows[0].inserted) };
