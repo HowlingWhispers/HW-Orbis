@@ -3,6 +3,7 @@ export type ImportedVisualTone = 'moon' | 'forest' | 'ember' | 'mist' | 'violet'
 export const BITTERROOT_OWNER_DISCORD_ID = '1544473372073791602';
 
 type SourceEntity = { id: string; name: string; description?: string; [key: string]: unknown };
+type SourceMemory = { id: string; title?: string; name?: string; description?: string; [key: string]: unknown };
 type SourcePerson = SourceEntity & {
   characterId?: string;
   speciesSourceId?: string;
@@ -26,7 +27,7 @@ export interface BitterrootSourceWorld {
   factions: SourceEntity[];
   societies: SourceEntity[];
   families: SourceFamily[];
-  memories: Array<SourceEntity & { title?: string }>;
+  memories: SourceMemory[];
   createdAt: string;
   updatedAt: string;
 }
@@ -104,7 +105,7 @@ export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): Bitterr
   addEntities('faction', world.factions, 'ember', 'Faction');
   addEntities('society', world.societies, 'forest', 'Society');
   addEntities('family', world.families, 'ember', 'Family');
-  addEntities('memory', world.memories.map((memory) => ({ ...memory, name: memory.title ?? memory.name })), 'river', 'World memory');
+  addEntities('memory', world.memories.map((memory) => ({ ...memory, name: memory.title ?? memory.name ?? memory.id })), 'river', 'World memory');
 
   for (const family of world.families) {
     for (const person of family.people ?? []) {
