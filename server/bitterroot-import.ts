@@ -14,7 +14,7 @@ type SourcePerson = SourceEntity & {
   tags?: string[];
   role?: string;
 };
-type SourceFamily = SourceEntity & { people?: SourcePerson[]; relationships?: unknown[] };
+type SourceFamily = SourceEntity & { people?: SourcePerson[]; relationships?: unknown[]; [key: string]: unknown };
 
 export interface BitterrootSourceWorld {
   id: string;
@@ -55,6 +55,29 @@ const compactSummary = (value: unknown) => {
 const sourceIdentity = (type: ImportedAssetType, id: string) => `${type}:${id}`;
 const documentOf = (entity: SourceEntity) => structuredClone(entity) as Record<string, unknown>;
 const stringArray = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+const referenceKey = (key: string) => key !== 'id' && key !== 'sourceId' && /(Id|Ids|SourceId|SourceIds)$/.test(key);
+
+export function countBitterrootReferences(value: unknown): number {
+  const found = new Set<string>();
+  const visit = (current: unknown) => {
+    if (Array.isArray(current)) {
+      for (const item of current) visit(item);
+      return;
+    }
+    if (!current || typeof current !== 'object') return;
+    for (const [key, nested] of Object.entries(current as Record<string, unknown>)) {
+      if (referenceKey(key)) {
+        if (typeof nested === 'string' && nested) found.add(`${key}:${nested}`);
+        else if (Array.isArray(nested)) {
+          for (const item of nested) if (typeof item === 'string' && item) found.add(`${key}:${item}`);
+        }
+      }
+      if (nested && typeof nested === 'object') visit(nested);
+    }
+  };
+  visit(value);
+  return found.size;
+}
 
 export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): BitterrootSeedAsset[] {
   const common = { createdAt: world.createdAt, updatedAt: world.updatedAt };
@@ -89,12 +112,13 @@ export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): Bitterr
       if (type === 'place') tags.push(title(entity.kind));
       if (type === 'society') tags.push(title(entity.type), title(entity.canonStatus));
       if (type === 'memory') tags.push(title(entity.kind), title(entity.visibility));
+      const document = documentOf(entity);
       assets.push({
         sourceAssetId: sourceIdentity(type, entity.id), type,
         name: type === 'memory' && typeof entity.title === 'string' ? entity.title : entity.name,
-        summary: compactSummary(entity.description), document: documentOf(entity),
+        summary: compactSummary(entity.description), document,
         tags: [...new Set(tags.filter(Boolean))],
-        dependencyCount: Object.values(entity).filter((value) => Array.isArray(value)).reduce((total, value) => total + value.length, 0),
+        dependencyCount: countBitterrootReferences(document),
         visualTone: tone, ...common,
       });
     }
@@ -127,26 +151,27 @@ export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): Bitterr
       const explicitTags = stringArray(person.tags);
       const factionTags = factionSourceIds.map(title);
       const familyTag = family.name.toLowerCase().includes('family') ? family.name : `${family.name} family`;
+      const document = {
+        sourceId: person.characterId,
+        name: person.name,
+        description: person.description ?? '',
+        familySourceId: family.id,
+        familyPersonSourceId: person.id,
+        speciesSourceId,
+        factionSourceIds,
+        homeLocationSourceId,
+        workplaceLocationSourceIds,
+        canonNote,
+        role: typeof person.role === 'string' ? person.role : null,
+        profile: documentOf(person),
+      };
 
       assets.push({
         sourceAssetId: sourceIdentity('character', person.characterId),
         type: 'character', name: person.name, summary: compactSummary(person.description),
-        document: {
-          sourceId: person.characterId,
-          name: person.name,
-          description: person.description ?? '',
-          familySourceId: family.id,
-          familyPersonSourceId: person.id,
-          speciesSourceId,
-          factionSourceIds,
-          homeLocationSourceId,
-          workplaceLocationSourceIds,
-          canonNote,
-          role: typeof person.role === 'string' ? person.role : null,
-          profile: documentOf(person),
-        },
+        document,
         tags: [...new Set(['Werewolf', familyTag, ...explicitTags, ...factionTags].filter(Boolean))],
-        dependencyCount: 3 + factionSourceIds.length + workplaceLocationSourceIds.length,
+        dependencyCount: countBitterrootReferences(document),
         visualTone: 'moon', ...common,
       });
     }
