@@ -94,7 +94,7 @@ export function applyRedLightDistrictCanon(source: BitterrootSourceWorld): Bitte
     kind: 'district',
     parentLocationId: 'hollowmere',
     description: 'Hollowmere\'s entertainment district, serving travelers and locals through taverns, bathhouses, music and dance halls, gambling rooms, inns, private houses, food stalls, and other late-night businesses. Its population is procedural rather than a fixed roster.',
-    contentRating: 'adult',
+    contentRating: 'adult' as const,
     canonStatus: 'canon',
     fixedCharacters: false,
     populationModel: 'procedural',
