@@ -3,7 +3,17 @@ export type ImportedVisualTone = 'moon' | 'forest' | 'ember' | 'mist' | 'violet'
 export const BITTERROOT_OWNER_DISCORD_ID = '1544473372073791602';
 
 type SourceEntity = { id: string; name: string; description?: string; [key: string]: unknown };
-type SourceFamily = SourceEntity & { people?: Array<SourceEntity & { characterId?: string }>; relationships?: unknown[] };
+type SourcePerson = SourceEntity & {
+  characterId?: string;
+  speciesSourceId?: string;
+  factionSourceIds?: string[];
+  homeLocationSourceId?: string;
+  workplaceLocationSourceIds?: string[];
+  canonNote?: string;
+  tags?: string[];
+  role?: string;
+};
+type SourceFamily = SourceEntity & { people?: SourcePerson[]; relationships?: unknown[] };
 
 export interface BitterrootSourceWorld {
   id: string;
@@ -43,6 +53,7 @@ const compactSummary = (value: unknown) => {
 };
 const sourceIdentity = (type: ImportedAssetType, id: string) => `${type}:${id}`;
 const documentOf = (entity: SourceEntity) => structuredClone(entity) as Record<string, unknown>;
+const stringArray = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
 export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): BitterrootSeedAsset[] {
   const common = { createdAt: world.createdAt, updatedAt: world.updatedAt };
@@ -99,21 +110,43 @@ export function buildBitterrootSeedAssets(world: BitterrootSourceWorld): Bitterr
     for (const person of family.people ?? []) {
       if (!person.characterId) continue;
       const isRagna = person.characterId === 'ragna-holt';
+      const isPip = person.characterId === 'pip-holt';
+      const speciesSourceId = typeof person.speciesSourceId === 'string' ? person.speciesSourceId : 'werewolf-upright-feral';
+      const factionSourceIds = stringArray(person.factionSourceIds);
+      if (isRagna && !factionSourceIds.includes('boundary-wardens')) factionSourceIds.push('boundary-wardens');
+      const homeLocationSourceId = typeof person.homeLocationSourceId === 'string' ? person.homeLocationSourceId : 'brackenjaw-enclave';
+      const workplaceLocationSourceIds = stringArray(person.workplaceLocationSourceIds);
+      const canonNote = typeof person.canonNote === 'string'
+        ? person.canonNote
+        : isRagna
+          ? 'Veteran Boundary Warden and Pip Holt’s mother.'
+          : isPip
+            ? 'Ragna Holt’s daughter and a would-be Boundary Warden.'
+            : `${person.name} belongs to the ${family.name} household in Bitterroot.`;
+      const explicitTags = stringArray(person.tags);
+      const factionTags = factionSourceIds.map(title);
+      const familyTag = family.name.toLowerCase().includes('family') ? family.name : `${family.name} family`;
+
       assets.push({
         sourceAssetId: sourceIdentity('character', person.characterId),
         type: 'character', name: person.name, summary: compactSummary(person.description),
         document: {
           sourceId: person.characterId,
+          name: person.name,
           description: person.description ?? '',
           familySourceId: family.id,
           familyPersonSourceId: person.id,
-          speciesSourceId: 'werewolf-upright-feral',
-          factionSourceIds: isRagna ? ['boundary-wardens'] : [],
-          homeLocationSourceId: 'brackenjaw-enclave',
-          canonNote: isRagna ? 'Veteran Boundary Warden and Pip Holt’s mother.' : 'Ragna Holt’s daughter and a would-be Boundary Warden.',
+          speciesSourceId,
+          factionSourceIds,
+          homeLocationSourceId,
+          workplaceLocationSourceIds,
+          canonNote,
+          role: typeof person.role === 'string' ? person.role : null,
+          profile: documentOf(person),
         },
-        tags: ['Werewolf', 'Holt family', isRagna ? 'Boundary Warden' : 'Brackenjaw'],
-        dependencyCount: isRagna ? 4 : 3, visualTone: 'moon', ...common,
+        tags: [...new Set(['Werewolf', familyTag, ...explicitTags, ...factionTags].filter(Boolean))],
+        dependencyCount: 3 + factionSourceIds.length + workplaceLocationSourceIds.length,
+        visualTone: 'moon', ...common,
       });
     }
   }
