@@ -95,7 +95,10 @@ function extractNovelAiText(value: unknown) {
   const choices = asRecord(value).choices;
   if (!Array.isArray(choices)) return '';
   const first = asRecord(choices[0]);
-  if (typeof first.text === 'string') return first.text.trim();
+  const text = typeof first.text === 'string' ? first.text.trim() : '';
+  if (text) return text;
+  const parsedContent = first.parsedContent ?? first.parsed_content;
+  if (typeof parsedContent === 'string' && parsedContent.trim()) return parsedContent.trim();
   const message = asRecord(first.message);
   return typeof message.content === 'string' ? message.content.trim() : '';
 }
