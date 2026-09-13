@@ -29,7 +29,8 @@ function fixture() {
       asset_revision: body.source.revision, model: body.model,
       token_ciphertext: sealed.ciphertext, token_iv: sealed.iv, token_tag: sealed.tag,
     }] };
-    throw new Error('Failed generations must not increment successful usage.');
+    if (sql.includes('UPDATE generation_grants SET use_count')) return { rowCount: 1, rows: [] };
+    throw new Error('Unexpected database query.');
   });
   const app = express(); app.use(express.json());
   app.use('/api/v1/generation', createSpeculusGenerationRouter(config, { query } as unknown as DatabasePool));
@@ -63,6 +64,14 @@ describe('actionable, private Speculus generation errors', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ choices: [{ text: ' ', finish_reason: finishReason }] }))));
     const response = await fixture().send().expect(502);
     expect(response.body).toMatchObject({ code: 'NOVELAI_EMPTY_REPLY', upstreamStatus: 200, finishReason, requestedMaxTokens: 512 });
+  });
+
+  it('uses parsedContent when NovelAI returns a blank raw text field', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ choices: [{ text: ' ', parsedContent: '*A usable short reply.*', finish_reason: 'stop' }] }))));
+    const response = await fixture().send().expect(200);
+    expect(response.body).toMatchObject({ text: '*A usable short reply.*', finishReason: 'stop' });
+    expect(response.body.text).not.toContain(token);
+    expect(response.body.text).not.toContain(prompt);
   });
 
   it.each([[502, 'NOVELAI_UNAVAILABLE'], [200, 'NOVELAI_INVALID_RESPONSE']])('handles non-JSON provider HTTP %s', async (status, code) => {
