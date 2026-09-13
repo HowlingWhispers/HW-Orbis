@@ -33,11 +33,20 @@ const generationSchema = z.object({
 });
 
 const bridgeStopSequences = ['\n<|user|>', '\n<|assistant|>', '\nSystem:', '\nAnalysis:', '\nThinking:', '\n/nothink'];
+const sentenceControl = '<generation_control>Complete the final sentence within the output allowance. Do not begin another sentence unless it can also be completed.</generation_control>';
 
 const hashGrant = (grant: string) => createHash('sha256').update(grant).digest('hex');
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const stringValue = (value: unknown) => typeof value === 'string' ? value : '';
 const simulationType = (type: string) => type === 'species' || type === 'society' || type === 'family' || type === 'memory' ? 'other' : type;
+
+function withSentenceControl(prompt: string) {
+  const v2ResponseMarker = '\n[IN-WORLD RESPONSE]\n';
+  if (prompt.endsWith(v2ResponseMarker)) {
+    return `${prompt.slice(0, -v2ResponseMarker.length)}\n${sentenceControl}${v2ResponseMarker}`;
+  }
+  return `${prompt}\n${sentenceControl}`;
+}
 
 async function catalogueIdentity(pool: DatabasePool, row: Record<string, unknown>) {
   const result = await pool.query(
@@ -273,9 +282,7 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               model: body.model,
-              prompt: body.continueToEndOfSentence
-                ? `${body.prompt}\n<generation_control>Complete the final sentence within the output allowance. Do not begin another sentence unless it can also be completed.</generation_control>`
-                : body.prompt,
+              prompt: body.continueToEndOfSentence ? withSentenceControl(body.prompt) : body.prompt,
               max_tokens: body.maxTokens,
               temperature: body.temperature,
               top_k: body.topK,
