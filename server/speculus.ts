@@ -8,6 +8,7 @@ import { credentialKey, openCredential } from './provider-settings.js';
 import type { SettingsStore } from './settings.js';
 import { canDirectViewAssetRow } from './world-access.js';
 import { readSimulationSettings } from './simulation-settings.js';
+import { generationErrors, providerErrorCode, rejectedParameter, safeFinishReason, type GenerationErrorCode } from './generation-errors.js';
 
 const launchableTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const modelNames = ['xialong-v1', 'glm-4-6'] as const;
@@ -104,15 +105,6 @@ function extractNovelAiFinishReason(value: unknown): string | undefined {
   if (!Array.isArray(choices)) return undefined;
   const reason = asRecord(choices[0]).finish_reason;
   return typeof reason === 'string' ? reason : undefined;
-}
-
-function providerError(status: number) {
-  if (status === 401) return 'NovelAI rejected the saved access token. Update it in Orbis settings.';
-  if (status === 402 || status === 403) return 'NovelAI did not authorize this generation.';
-  if (status === 404) return 'The selected NovelAI model is unavailable.';
-  if (status === 429) return 'NovelAI is receiving too many requests. Wait and try again.';
-  if (status >= 500) return 'NovelAI is temporarily unavailable.';
-  return 'NovelAI could not generate this reply.';
 }
 
 async function requireLaunchUser(request: Request, config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
@@ -232,6 +224,9 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
   const router = Router();
 
   router.post('/speculus', async (request, response, next) => {
+    const requestId = randomUUID();
+    response.setHeader('x-request-id', requestId);
+    response.setHeader('Cache-Control', 'no-store');
     try {
       const authorization = request.get('authorization') ?? '';
       const grant = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
@@ -262,31 +257,47 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
       }, credentialKey(config.ORBIS_CREDENTIAL_ENCRYPTION_KEY));
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 180_000);
+      const fail = (code: GenerationErrorCode, details: { upstreamStatus?: number; parameter?: string; finishReason?: string } = {}) => {
+        const diagnostic = { code, requestId, ...details, requestedMaxTokens: body.maxTokens };
+        console.warn('Speculus generation failed', diagnostic);
+        return response.status(code === 'NOVELAI_TIMEOUT' ? 504 : 502).json({ error: generationErrors[code], ...diagnostic });
+      };
       try {
-        const upstream = await fetch('https://text.novelai.net/oa/v1/completions', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: body.model,
-            prompt: body.continueToEndOfSentence
-              ? `${body.prompt}\n<generation_control>Complete the final sentence within the output allowance. Do not begin another sentence unless it can also be completed.</generation_control>`
-              : body.prompt,
-            max_tokens: body.maxTokens,
-            temperature: body.temperature,
-            top_k: body.topK,
-            top_p: body.topP,
-            frequency_penalty: body.frequencyPenalty,
-            presence_penalty: body.presencePenalty,
-            stream: false,
-            stop: [...new Set([...bridgeStopSequences, ...body.stopSequences])],
-            ...(body.reroll ? { seed: randomInt(1, 2_147_483_647) } : {}),
-          }),
-          signal: controller.signal,
-        });
-        if (!upstream.ok) return response.status(502).json({ error: providerError(upstream.status) });
-        const payload: unknown = await upstream.json();
+        let upstream: globalThis.Response;
+        try {
+          upstream = await fetch('https://text.novelai.net/oa/v1/completions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: body.model,
+              prompt: body.continueToEndOfSentence
+                ? `${body.prompt}\n<generation_control>Complete the final sentence within the output allowance. Do not begin another sentence unless it can also be completed.</generation_control>`
+                : body.prompt,
+              max_tokens: body.maxTokens,
+              temperature: body.temperature,
+              top_k: body.topK,
+              top_p: body.topP,
+              frequency_penalty: body.frequencyPenalty,
+              presence_penalty: body.presencePenalty,
+              stream: false,
+              stop: [...new Set([...bridgeStopSequences, ...body.stopSequences])],
+              ...(body.reroll ? { seed: randomInt(1, 2_147_483_647) } : {}),
+            }),
+            signal: controller.signal,
+          });
+        } catch {
+          return fail(controller.signal.aborted ? 'NOVELAI_TIMEOUT' : 'NOVELAI_NETWORK_FAILURE');
+        }
+        let payload: unknown;
+        try { payload = await upstream.json(); }
+        catch {
+          if (controller.signal.aborted) return fail('NOVELAI_TIMEOUT');
+          if (upstream.ok) return fail('NOVELAI_INVALID_RESPONSE', { upstreamStatus: upstream.status });
+          // An HTML gateway error still has a useful HTTP status.
+        }
+        if (!upstream.ok) return fail(providerErrorCode(upstream.status), { upstreamStatus: upstream.status, parameter: rejectedParameter(payload) });
         const text = extractNovelAiText(payload);
-        if (!text) return response.status(502).json({ error: 'NovelAI returned an empty roleplay reply.' });
+        if (!text) return fail('NOVELAI_EMPTY_REPLY', { upstreamStatus: upstream.status, finishReason: safeFinishReason(extractNovelAiFinishReason(payload)) });
         await pool.query('UPDATE generation_grants SET use_count = use_count + 1, last_used_at = now() WHERE token_hash = $1', [hashGrant(grant)]);
         const requestId = upstream.headers.get('x-request-id') ?? randomUUID();
         response.setHeader('x-request-id', requestId).json({ text, finishReason: extractNovelAiFinishReason(payload) });
