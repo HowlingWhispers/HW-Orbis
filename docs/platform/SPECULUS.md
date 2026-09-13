@@ -102,3 +102,31 @@ The public domain remains intentionally non-navigable without a one-time launch 
 The primary record is immutable for the lifetime of the launch and carries its `updated_at` value as the source revision. Its canonical SPC registry identity is packaged separately from its editable display fields. A world launch includes its children. A child-record launch includes its origin world and accessible sibling records. Related adult records remain excluded unless the launching user has adult access or owns the related record.
 
 Character records are adapted to Character Card V2 fields when matching structured fields exist. Other record types run through Speculus's narrator subject. Until Orbis has a dedicated persona model, the signed-in user's display name is sent as a minimal anti-impersonation persona.
+# V1 / V2 engine preference
+
+Orbis Account settings now persist `engine = v1 | v2` per user through
+`GET/PUT /api/simulation-settings`. An account with no preference defaults to V1.
+Simulate reads that saved account preference server-side; the caller cannot supply
+an arbitrary simulator URL or another user's setting.
+
+| Saved engine | Deposit endpoint on Speculus | Package | Browser path |
+| --- | --- | --- | --- |
+| V1 (default) | `/api/launch` | `version: 1` (unchanged) | `/` |
+| V2 (experimental) | `/api/v2/launch` | `version: 2, engine: "v2"` | `/v2` |
+
+Apply `server/migrations/007_simulation_engine_settings.sql` before enabling the
+selector. It adds one account-preference table only. Before that migration, reads
+fall back to V1 and the selector reports unavailable; writes do not falsely report
+success. Other database failures are surfaced, not disguised as a preference.
+
+Deploy the matching HW-Speculus V2 API before enabling V2 users. If the requested
+engine is unavailable, the launch fails and the unused grant is revoked. Orbis
+does not silently switch a requested V2 launch into V1.
+
+Existing sessions are unaffected by preference changes. V1/V2 raw sessions are
+not interchangeable. The provider model continues to come from the existing
+Orbis NovelAI settings; raw credentials never leave Orbis. V2 output settings live
+in its isolated session and use the existing generation gateway contract.
+
+The initial `/v2` is a foundation, not the completed world engine. See the
+HW-Speculus `docs/v2-foundation.md` for exact limitations and rollout checks.

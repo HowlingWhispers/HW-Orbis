@@ -7,6 +7,7 @@ import type { DatabasePool } from './db.js';
 import { credentialKey, openCredential } from './provider-settings.js';
 import type { SettingsStore } from './settings.js';
 import { canDirectViewAssetRow } from './world-access.js';
+import { readSimulationSettings } from './simulation-settings.js';
 
 const launchableTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const modelNames = ['xialong-v1', 'glm-4-6'] as const;
@@ -146,7 +147,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
       }
 
-      const [providerResult, userResult, relatedResult] = await Promise.all([
+      const [providerResult, userResult, relatedResult, simulationSettings] = await Promise.all([
         pool.query(`SELECT model FROM user_provider_settings WHERE user_id = $1 AND provider = 'novelai'`, [request.session.userId]),
         pool.query('SELECT id, display_name FROM users WHERE id = $1', [request.session.userId]),
         pool.query(
@@ -158,6 +159,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
            LIMIT 20`,
           [asset.id, asset.origin_world_id ?? null, asset.type === 'world', request.session.access?.canViewAdult === true, request.session.userId],
         ),
+        readSimulationSettings(pool, request.session.userId!),
       ]);
       if (!providerResult.rowCount) return response.status(409).json({ error: 'Add your NovelAI token in Orbis Account settings before starting Speculus.', settingsPath: '/account' });
       if (!userResult.rowCount) return response.status(401).json({ error: 'Your Orbis account could not be loaded.' });
@@ -171,7 +173,8 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const card = characterCard(asset);
       const catalog = await catalogueIdentity(pool, asset);
       const packageBody = {
-        version: 1,
+        version: simulationSettings.engine === 'v2' ? 2 : 1,
+        ...(simulationSettings.engine === 'v2' ? { engine: 'v2' } : {}),
         launchId,
         issuedAt: now,
         expiresAt,
@@ -205,7 +208,8 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
-        const bridgeResponse = await fetch(`${config.SPECULUS_BRIDGE_URL.replace(/\/$/, '')}/api/launch`, {
+        const launchPath = simulationSettings.engine === 'v2' ? '/api/v2/launch' : '/api/launch';
+        const bridgeResponse = await fetch(`${config.SPECULUS_BRIDGE_URL.replace(/\/$/, '')}${launchPath}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${config.SPECULUS_BRIDGE_SECRET}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(packageBody),

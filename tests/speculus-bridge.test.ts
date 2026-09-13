@@ -41,12 +41,13 @@ describe('Speculus security bridge', () => {
     expect(() => openCredential(sealed, Buffer.alloc(32, 8))).toThrow();
   });
 
-  it('boxes an Orbis record and deposits only an opaque grant in Speculus', async () => {
-    const captured: { body?: Record<string, unknown>; authorization?: string } = {};
-    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+  it.each(['v1', 'v2'] as const)('boxes a record for saved engine %s and deposits only an opaque grant', async (engine) => {
+    const captured: { body?: Record<string, unknown>; authorization?: string; url?: string } = {};
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      captured.url = String(url);
       captured.body = JSON.parse(String(init?.body));
       captured.authorization = new Headers(init?.headers).get('authorization') ?? undefined;
-      return new Response(JSON.stringify({ launchUrl: 'https://spec.thehowlingwhispers.com/?launch=once' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ launchUrl: `https://spec.thehowlingwhispers.com/${engine === 'v2' ? 'v2' : ''}?launch=once` }), { status: 201, headers: { 'Content-Type': 'application/json' } });
     }));
     const pool = { query: vi.fn(async (sql: string) => {
       if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [{
@@ -55,6 +56,7 @@ describe('Speculus security bridge', () => {
         tags: ['Werewolf'], document: { description: 'Terse and observant.', personality: 'Protective' },
       }] };
       if (sql.includes('SELECT model FROM user_provider_settings')) return { rowCount: 1, rows: [{ model: 'xialong-v1' }] };
+      if (sql.includes('FROM user_simulation_settings')) return { rowCount: 1, rows: [{ engine }] };
       if (sql.includes('SELECT id, display_name FROM users')) return { rowCount: 1, rows: [{ id: userId, display_name: 'Eirvargr' }] };
       if (sql.includes('id <> $1')) return { rowCount: 0, rows: [] };
       if (sql.includes('FROM ensure_speculus_catalog_entry_v2')) return { rowCount: 1, rows: [{
@@ -72,13 +74,16 @@ describe('Speculus security bridge', () => {
     expect(response.body.launchUrl).toContain('spec.thehowlingwhispers.com');
     expect(captured.authorization).toBe('Bearer shared-test-bridge-secret');
     expect(captured.body).toMatchObject({
-      version: 1, model: 'xialong-v1',
+      version: engine === 'v2' ? 2 : 1, model: 'xialong-v1',
       primaryAsset: { id: assetId, type: 'character', revision: updatedAt },
       catalog: { code: 'SPC-C-KD41827', classification: 'character' },
       persona: { name: 'Eirvargr' },
       character: { name: 'Ragna Holt', description: 'Terse and observant.' },
     });
     expect(String(captured.body?.generationGrant)).toHaveLength(43);
+    expect(captured.url).toBe(`http://127.0.0.1:8790${engine === 'v2' ? '/api/v2/launch' : '/api/launch'}`);
+    if (engine === 'v2') expect(captured.body?.engine).toBe('v2');
+    else expect(captured.body).not.toHaveProperty('engine');
     expect(JSON.stringify(captured.body)).not.toContain('novelai-secret-token');
   });
 
