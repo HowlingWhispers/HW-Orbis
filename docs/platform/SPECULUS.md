@@ -130,3 +130,27 @@ in its isolated session and use the existing generation gateway contract.
 
 The initial `/v2` is a foundation, not the completed world engine. See the
 HW-Speculus `docs/v2-foundation.md` for exact limitations and rollout checks.
+
+## Generation failures
+
+The generation bridge returns a static, safe error message plus a `NOVELAI_*`
+code and an Orbis-generated UUID `requestId` (also in `x-request-id`). When
+available it includes `upstreamStatus`, a known rejected `parameter`, the
+`requestedMaxTokens`, and a known `finishReason` for an empty reply. A matching
+`Speculus generation failed` warning in Orbis logs contains only these fields.
+Provider response bodies, tokens, prompts and scene records are never included.
+
+The categories distinguish authentication/access, invalid settings or context,
+model availability, rate limits, service/network failure, timeout, unreadable
+responses, and empty completions. HTTP 200 with empty text is distinct from a
+provider HTTP rejection. Failures are not automatically retried and do not
+increment the successful grant-use count. The NovelAI request format and saved
+generation settings are unchanged by this error-handling patch.
+
+Deploy/restart both matching APIs to expose these diagnostics in Speculus. No
+database migration or session reset is needed. Speculus also recognizes the
+previous Orbis version's static errors, so it can be deployed first. This patch
+fixes the loss of error details; it does not establish which upstream failure
+caused the originally reported generic 502. After deployment, record the displayed
+error/request ID from one failed attempt and match it to Orbis logs before
+changing credentials, output limits, stop sequences or provider configuration.
