@@ -1,4 +1,4 @@
-import { ArrowLeft, Boxes, Clock3, Download, MapPin, Pencil, Sparkles, Trash2, UserRound } from 'lucide-react';
+import { Archive, ArrowLeft, Boxes, Clock3, Download, MapPin, Pencil, Sparkles, Trash2, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
@@ -111,6 +111,7 @@ export function AssetDetailView() {
               ? <Link className="button button--primary" to={`/asset/${asset.id}/edit`}><Pencil size={16} /> Edit record</Link>
               : <button className="button button--disabled" disabled title="Only the creator can edit this record"><Pencil size={16} /> Creator protected</button>}
             <button className="button button--secondary" disabled={launching} onClick={() => void simulate()}><Sparkles size={16} /> {launching ? 'Packaging...' : 'Simulate'}</button>
+            {asset.type === 'world' && <Link className="button button--secondary" to={`/asset/${asset.id}/saves`}><Archive size={16} /> Save Archive</Link>}
             {canEdit && <button className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : asset.type === 'world' ? 'Download world' : 'Download SPC'}</button>}
             {canEdit && asset.type === 'world' && <button className="button button--danger" disabled={deleting} onClick={() => void deleteWorld()}><Trash2 size={16} /> {deleting ? 'Deleting...' : 'Delete World'}</button>}
           </div>
