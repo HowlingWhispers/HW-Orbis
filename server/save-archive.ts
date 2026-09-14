@@ -20,6 +20,7 @@ const saveSchema = z.object({
     persona: z.object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200) }).optional(),
     character: z.object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200) }).nullable().optional(),
     elapsedSeconds: z.number().int().nonnegative().safe().optional(),
+    simulationDay: z.number().int().positive().safe().optional(),
   }).passthrough(),
   turns: z.array(z.unknown()).max(20000),
 }).passthrough();
@@ -49,6 +50,7 @@ function publicSave(row: SaveRow) {
     locationId: row.location_id ? String(row.location_id) : null,
     locationName: row.location_name ? String(row.location_name) : null,
     elapsedSeconds: Number(row.elapsed_seconds),
+    simulationDay: Number(row.simulation_day ?? 1),
     turnCount: Number(row.turn_count),
     format: String(row.save_format),
     compatibility: compatibility(row),
@@ -104,14 +106,14 @@ export function createSaveArchiveRouter(pool: DatabasePool) {
       await pool.query(
         `INSERT INTO speculus_saves (
           id, user_id, world_id, world_name, source_asset_id, source_type, source_revision, source_name, title,
-          character_id, character_name, location_id, location_name, elapsed_seconds, turn_count, save_format, payload
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb)`,
+          character_id, character_name, location_id, location_name, elapsed_seconds, simulation_day, turn_count, save_format, payload
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::jsonb)`,
         [
           id, request.session.userId, world.id, world.name, source.id, source.type, save.source.revision,
           save.source.name ?? source.name, input.title ?? defaultTitle,
           save.source.character?.id ?? null, save.source.character?.name ?? null,
           save.source.location?.id ?? null, save.source.location?.name ?? null,
-          save.source.elapsedSeconds ?? 0, save.turns.length, save.format, JSON.stringify(save),
+          save.source.elapsedSeconds ?? 0, save.source.simulationDay ?? 1, save.turns.length, save.format, JSON.stringify(save),
         ],
       );
       const result = await pool.query(`SELECT ${selectColumns} ${selectJoin} WHERE s.id = $1 AND s.user_id = $2`, [id, request.session.userId]);
@@ -160,9 +162,9 @@ export function createSaveArchiveRouter(pool: DatabasePool) {
       const copied = await pool.query(
         `INSERT INTO speculus_saves (
           id,user_id,world_id,world_name,source_asset_id,source_type,source_revision,source_name,title,
-          character_id,character_name,location_id,location_name,elapsed_seconds,turn_count,save_format,payload
+          character_id,character_name,location_id,location_name,elapsed_seconds,simulation_day,turn_count,save_format,payload
         ) SELECT $1,user_id,world_id,world_name,source_asset_id,source_type,source_revision,source_name,title || ' copy',
-          character_id,character_name,location_id,location_name,elapsed_seconds,turn_count,save_format,payload
+          character_id,character_name,location_id,location_name,elapsed_seconds,simulation_day,turn_count,save_format,payload
           FROM speculus_saves WHERE id = $2 AND user_id = $3 RETURNING id`,
         [id, request.params.id, request.session.userId],
       );
