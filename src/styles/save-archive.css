@@ -42,6 +42,52 @@
   color: var(--text-muted);
 }
 
+.save-archive__shelves {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.save-archive__shelves button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: .85rem;
+  padding: 1rem 1.1rem;
+  text-align: left;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+
+.save-archive__shelves button:hover,
+.save-archive__shelves button.is-active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.save-archive__shelves button:hover { transform: translateY(-1px); }
+
+.save-archive__shelves button span {
+  display: grid;
+  gap: .18rem;
+}
+
+.save-archive__shelves button strong { font-size: .95rem; }
+.save-archive__shelves button small { color: var(--text-muted); font-size: .76rem; }
+.save-archive__shelves button b {
+  padding: .28rem .5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: .68rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
 .save-archive__empty {
   display: grid;
   justify-items: center;
@@ -56,7 +102,26 @@
 .save-archive__empty h1,
 .save-archive__empty h2,
 .save-archive__empty p { margin: 0; }
-.save-archive__empty p { color: var(--text-muted); max-width: 600px; }
+.save-archive__empty p { color: var(--text-muted); max-width: 680px; }
+
+.save-archive__future {
+  min-height: 290px;
+  align-content: center;
+  background:
+    radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 36%),
+    color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.save-archive__future-badge {
+  margin-top: .5rem;
+  padding: .42rem .72rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
 
 .save-shelf {
   display: grid;
@@ -159,6 +224,7 @@
 
 @media (max-width: 760px) {
   .save-archive__hero { align-items: start; flex-direction: column; min-height: 0; }
+  .save-archive__shelves { grid-template-columns: 1fr; }
   .save-card { grid-template-columns: 38px 1fr; }
   .save-card__body > header { flex-direction: column; }
   .save-card__delete { margin-left: 0; }
