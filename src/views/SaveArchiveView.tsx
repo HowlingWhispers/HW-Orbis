@@ -1,4 +1,4 @@
-import { Archive, ArrowLeft, Copy, Download, FileUp, Pencil, Play, Trash2 } from 'lucide-react';
+import { Archive, ArrowLeft, Copy, Download, FileUp, Gamepad2, Pencil, Play, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import '../styles/save-archive.css';
 
 const MAX_SAVE_BYTES = 16 * 1024 * 1024;
+type SaveShelf = 'speculus' | 'fabula';
 
 function duration(seconds: number) {
   const hours = Math.floor(seconds / 3600);
@@ -25,6 +26,7 @@ export function SaveArchiveView() {
   const { id = '' } = useParams();
   const { user } = useAuth();
   const [archive, setArchive] = useState<SaveArchiveResponse | null>(null);
+  const [activeShelf, setActiveShelf] = useState<SaveShelf>('speculus');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -98,44 +100,66 @@ export function SaveArchiveView() {
     }
   };
 
-  if (!user) return <div className="page save-archive"><Link className="back-link" to={`/asset/${id}`}><ArrowLeft size={16} /> Back to world</Link><section className="save-archive__empty"><Archive size={36} /><h1>Save Archive</h1><p>Sign in with Discord to keep private Speculus saves in Orbis.</p><Link className="button button--primary" to="/account">Open Account</Link></section></div>;
+  if (!user) return <div className="page save-archive"><Link className="back-link" to={`/asset/${id}`}><ArrowLeft size={16} /> Back to world</Link><section className="save-archive__empty"><Archive size={36} /><h1>Save Archive</h1><p>Sign in with Discord to keep private saves in Orbis.</p><Link className="button button--primary" to="/account">Open Account</Link></section></div>;
 
   return <div className="page save-archive">
     <Link className="back-link" to={`/asset/${id}`}><ArrowLeft size={16} /> Back to world</Link>
     <header className="save-archive__hero">
-      <div><span className="eyebrow">Private simulation shelf</span><h1>{archive?.world.name ?? 'Save Archive'}</h1><p>Every save remembers its source revision, character, location, simulation day and elapsed time.</p></div>
-      <div>
-        <button className="button button--primary" disabled={Boolean(busy)} onClick={() => fileInput.current?.click()}><FileUp size={16} /> {busy === 'import' ? 'Importing...' : 'Import save'}</button>
+      <div><span className="eyebrow">Private world save archive</span><h1>{archive?.world.name ?? 'Save Archive'}</h1><p>Speculus simulation saves and future Fabula RPG saves live in separate shelves so their state formats never get mixed.</p></div>
+      {activeShelf === 'speculus' && <div>
+        <button className="button button--primary" disabled={Boolean(busy)} onClick={() => fileInput.current?.click()}><FileUp size={16} /> {busy === 'import' ? 'Importing...' : 'Import Speculus save'}</button>
         <input ref={fileInput} hidden type="file" accept="application/json,.json" onChange={(event) => void importSave(event.target.files?.[0])} />
-      </div>
+      </div>}
     </header>
 
-    {error && <p className="form-message" role="alert">{error}</p>}
-    {loading && !archive && <section className="save-archive__empty"><Archive size={32} /><p>Opening your save shelf...</p></section>}
-    {!loading && archive && archive.saves.length === 0 && <section className="save-archive__empty"><Archive size={38} /><h2>No saves archived yet</h2><p>Import a Speculus V2 raw save and Orbis will identify its source and revision for you.</p></section>}
+    <nav className="save-archive__shelves" aria-label="Save archive type">
+      <button type="button" className={activeShelf === 'speculus' ? 'is-active' : ''} aria-pressed={activeShelf === 'speculus'} onClick={() => setActiveShelf('speculus')}>
+        <Sparkles size={20} />
+        <span><strong>Speculus Saves</strong><small>Simulation sessions</small></span>
+        {archive && <b>{archive.saves.length}</b>}
+      </button>
+      <button type="button" className={activeShelf === 'fabula' ? 'is-active' : ''} aria-pressed={activeShelf === 'fabula'} onClick={() => setActiveShelf('fabula')}>
+        <Gamepad2 size={20} />
+        <span><strong>Fabula Saves</strong><small>Persistent RPG campaigns</small></span>
+        <b>Future</b>
+      </button>
+    </nav>
 
-    {archive && archive.saves.length > 0 && <section className="save-shelf" aria-label="Archived saves">
-      {archive.saves.map((save, index) => <article className={`save-card save-card--${save.compatibility}`} key={save.id}>
-        <div className="save-card__spine"><span>{String(index + 1).padStart(2, '0')}</span></div>
-        <div className="save-card__body">
-          <header><div><span className="eyebrow">{save.locationName ?? save.sourceName}</span><h2>{save.title}</h2></div><span className={`save-status save-status--${save.compatibility}`}>{compatibilityLabel(save.compatibility)}</span></header>
-          <div className="save-card__identity">
-            <strong>{save.characterName ?? 'Simulation narrator'}</strong>
-            <span>Day {save.simulationDay}</span>
-            <span>{duration(save.elapsedSeconds)}</span>
-            <span>{save.turnCount} {save.turnCount === 1 ? 'turn' : 'turns'}</span>
-            <span>Saved {new Date(save.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
+    {error && <p className="form-message" role="alert">{error}</p>}
+
+    {activeShelf === 'fabula' ? <section className="save-archive__empty save-archive__future">
+      <Gamepad2 size={42} />
+      <span className="eyebrow">Reserved for Fabula</span>
+      <h2>Fabula Save Library</h2>
+      <p>This shelf is intentionally separate from Speculus. When Fabula is built, persistent campaigns, inventory, economy, travel, encounters and other RPG state will save here without changing the Speculus save format.</p>
+      <span className="save-archive__future-badge">Placeholder · No Fabula saves yet</span>
+    </section> : <>
+      {loading && !archive && <section className="save-archive__empty"><Archive size={32} /><p>Opening your Speculus save shelf...</p></section>}
+      {!loading && archive && archive.saves.length === 0 && <section className="save-archive__empty"><Archive size={38} /><h2>No Speculus saves archived yet</h2><p>Speculus autosaves and imported V2 raw saves will appear on this shelf.</p></section>}
+
+      {archive && archive.saves.length > 0 && <section className="save-shelf" aria-label="Speculus saves">
+        {archive.saves.map((save, index) => <article className={`save-card save-card--${save.compatibility}`} key={save.id}>
+          <div className="save-card__spine"><span>{String(index + 1).padStart(2, '0')}</span></div>
+          <div className="save-card__body">
+            <header><div><span className="eyebrow">Speculus · {save.locationName ?? save.sourceName}</span><h2>{save.title}</h2></div><span className={`save-status save-status--${save.compatibility}`}>{compatibilityLabel(save.compatibility)}</span></header>
+            <div className="save-card__identity">
+              <strong>{save.characterName ?? 'Simulation narrator'}</strong>
+              <span>Day {save.simulationDay}</span>
+              <span>{duration(save.elapsedSeconds)}</span>
+              <span>{save.turnCount} {save.turnCount === 1 ? 'turn' : 'turns'}</span>
+              <span>Saved {new Date(save.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
+            </div>
+            <p className="save-card__revision" title={save.sourceRevision}>Source: {save.sourceName} · revision {save.sourceRevision}</p>
+            <footer>
+              <button className="button button--secondary" disabled={save.compatibility !== 'ready' || Boolean(busy)} onClick={() => void openSource(save)} title="Launch the matching source in Speculus. Automatic archive-state handoff is the next bridge step."><Play size={15} /> Open in Speculus</button>
+              <a className="button button--secondary" href={saveArchiveApi.downloadUrl(save.id)}><Download size={15} /> Download</a>
+              <button className="icon-button" disabled={Boolean(busy)} onClick={() => void rename(save)} aria-label={`Rename ${save.title}`}><Pencil size={16} /></button>
+              <button className="icon-button" disabled={Boolean(busy)} onClick={() => void duplicate(save)} aria-label={`Duplicate ${save.title}`}><Copy size={16} /></button>
+              <button className="icon-button save-card__delete" disabled={Boolean(busy)} onClick={() => void remove(save)} aria-label={`Delete ${save.title}`}><Trash2 size={16} /></button>
+            </footer>
           </div>
-          <p className="save-card__revision" title={save.sourceRevision}>Source: {save.sourceName} · revision {save.sourceRevision}</p>
-          <footer>
-            <button className="button button--secondary" disabled={save.compatibility !== 'ready' || Boolean(busy)} onClick={() => void openSource(save)} title="Launch the matching source in Speculus. Automatic archive-state handoff is the next bridge step."><Play size={15} /> Open in Speculus</button>
-            <a className="button button--secondary" href={saveArchiveApi.downloadUrl(save.id)}><Download size={15} /> Download</a>
-            <button className="icon-button" disabled={Boolean(busy)} onClick={() => void rename(save)} aria-label={`Rename ${save.title}`}><Pencil size={16} /></button>
-            <button className="icon-button" disabled={Boolean(busy)} onClick={() => void duplicate(save)} aria-label={`Duplicate ${save.title}`}><Copy size={16} /></button>
-            <button className="icon-button save-card__delete" disabled={Boolean(busy)} onClick={() => void remove(save)} aria-label={`Delete ${save.title}`}><Trash2 size={16} /></button>
-          </footer>
-        </div>
-      </article>)}
-    </section>}
+        </article>)}
+      </section>}
+    </>}
   </div>;
 }
