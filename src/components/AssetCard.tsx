@@ -1,4 +1,4 @@
-import { ArrowUpRight, Boxes, MapPin, MoreHorizontal, Pin, UserRound } from 'lucide-react';
+import { Archive, ArrowUpRight, Boxes, MapPin, MoreHorizontal, Pin, UserRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { LibraryAsset } from '../types/library';
 import { findNavigationItem } from '../app/library-nav';
@@ -38,6 +38,7 @@ export function AssetCard({ asset, featured = false }: { asset: LibraryAsset; fe
         </div>
         <div className="asset-card__footer">
           <div className="tag-row">{asset.tags.slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}</div>
+          {!asset.restricted && asset.type === 'world' && <Link className="world-save-archive-link" to={`/asset/${asset.id}/saves`} aria-label={`Open ${asset.name} save archive`}><Archive size={15} /> Save Archive</Link>}
           <Link className="card-open" to={target} aria-label={asset.restricted ? 'Open verification guide' : `View ${asset.name}`}><ArrowUpRight size={18} /></Link>
         </div>
       </div>
