@@ -15,6 +15,7 @@ export interface ArchivedSave {
   locationId: string | null;
   locationName: string | null;
   elapsedSeconds: number;
+  simulationDay: number;
   turnCount: number;
   format: string;
   compatibility: SaveCompatibility;
