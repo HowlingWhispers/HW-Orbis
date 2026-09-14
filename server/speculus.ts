@@ -39,6 +39,7 @@ const hashGrant = (grant: string) => createHash('sha256').update(grant).digest('
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const stringValue = (value: unknown) => typeof value === 'string' ? value : '';
 const simulationType = (type: string) => type === 'species' || type === 'society' || type === 'family' || type === 'memory' ? 'other' : type;
+const isV2Prompt = (prompt: string) => prompt.startsWith('SPECULUS V2 /');
 
 function withSentenceControl(prompt: string) {
   const v2ResponseMarker = '\n[IN-WORLD RESPONSE]\n';
@@ -244,6 +245,7 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
       const grant = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
       if (grant.length < 16) return response.status(401).json({ error: 'A valid Speculus generation grant is required.' });
       const body = generationSchema.parse(request.body);
+      const v2 = isV2Prompt(body.prompt);
       const result = await pool.query(
         `SELECT g.launch_id, g.asset_id, g.asset_type, g.asset_revision, g.expires_at,
                 p.model, p.token_ciphertext, p.token_iv, p.token_tag
@@ -290,7 +292,7 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
               frequency_penalty: body.frequencyPenalty,
               presence_penalty: body.presencePenalty,
               stream: false,
-              stop: [...new Set([...bridgeStopSequences, ...body.stopSequences])],
+              stop: [...new Set([...(v2 ? [] : bridgeStopSequences), ...body.stopSequences])],
               ...(body.reroll ? { seed: randomInt(1, 2_147_483_647) } : {}),
             }),
             signal: controller.signal,
