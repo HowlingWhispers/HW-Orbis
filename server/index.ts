@@ -12,6 +12,7 @@ import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { createLibraryRouter } from './library.js';
 import { createProviderSettingsRouter } from './provider-settings.js';
+import { createSaveArchiveRouter } from './save-archive.js';
 import { createSimulationSettingsRouter } from './simulation-settings.js';
 import { PostgresSettingsStore } from './settings.js';
 import { createSpeculusGenerationRouter, createSpeculusLaunchRouter } from './speculus.js';
@@ -27,6 +28,9 @@ const app = express();
 if (config.trustProxy) app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false }));
+// Savegame payloads can contain long transcripts. Keep the larger parser scoped to
+// Library routes instead of raising the body limit for the whole Orbis API.
+app.use('/api/v1/library', express.json({ limit: '16mb' }));
 app.use(express.json({ limit: '256kb' }));
 app.use(session({
   name: config.SESSION_COOKIE_NAME,
@@ -66,6 +70,7 @@ app.use('/api/provider-settings', createProviderSettingsRouter(config, pool));
 app.use('/api/simulation-settings', createSimulationSettingsRouter(pool));
 app.use('/api/admin', requireAdmin(config, pool, settingsStore), createAdminRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
+app.use('/api/v1/library', createSaveArchiveRouter(pool));
 app.use('/api/v1/library', createWorldDeleteRouter(pool));
 app.use('/api/v1/library', createArchiveTransferRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createLibraryRouter(config, pool, settingsStore));
