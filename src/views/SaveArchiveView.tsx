@@ -9,10 +9,8 @@ import '../styles/save-archive.css';
 const MAX_SAVE_BYTES = 16 * 1024 * 1024;
 
 function duration(seconds: number) {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
+  const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  if (days) return `Day ${days + 1} · ${hours}h ${minutes}m elapsed`;
   if (hours) return `${hours}h ${minutes}m elapsed`;
   return `${Math.max(0, minutes)}m elapsed`;
 }
@@ -105,7 +103,7 @@ export function SaveArchiveView() {
   return <div className="page save-archive">
     <Link className="back-link" to={`/asset/${id}`}><ArrowLeft size={16} /> Back to world</Link>
     <header className="save-archive__hero">
-      <div><span className="eyebrow">Private simulation shelf</span><h1>{archive?.world.name ?? 'Save Archive'}</h1><p>Every save remembers its source revision, character, location and elapsed simulation time.</p></div>
+      <div><span className="eyebrow">Private simulation shelf</span><h1>{archive?.world.name ?? 'Save Archive'}</h1><p>Every save remembers its source revision, character, location, simulation day and elapsed time.</p></div>
       <div>
         <button className="button button--primary" disabled={Boolean(busy)} onClick={() => fileInput.current?.click()}><FileUp size={16} /> {busy === 'import' ? 'Importing...' : 'Import save'}</button>
         <input ref={fileInput} hidden type="file" accept="application/json,.json" onChange={(event) => void importSave(event.target.files?.[0])} />
@@ -123,6 +121,7 @@ export function SaveArchiveView() {
           <header><div><span className="eyebrow">{save.locationName ?? save.sourceName}</span><h2>{save.title}</h2></div><span className={`save-status save-status--${save.compatibility}`}>{compatibilityLabel(save.compatibility)}</span></header>
           <div className="save-card__identity">
             <strong>{save.characterName ?? 'Simulation narrator'}</strong>
+            <span>Day {save.simulationDay}</span>
             <span>{duration(save.elapsedSeconds)}</span>
             <span>{save.turnCount} {save.turnCount === 1 ? 'turn' : 'turns'}</span>
             <span>Saved {new Date(save.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
