@@ -97,6 +97,15 @@ function simulationNavigationData(row: Record<string, unknown>) {
   };
 }
 
+export function resolveInitialLocationId(primary: Record<string, unknown>, related: Record<string, unknown>[]) {
+  if (primary.type === 'place') return String(primary.id);
+  const records = [primary, ...related];
+  const isBitterroot = records.some((row) => row.type === 'world' && String(row.name).trim().toLowerCase() === 'bitterroot');
+  if (!isBitterroot) return undefined;
+  const hollowmere = records.find((row) => row.type === 'place' && stringValue(asRecord(row.document).sourceId) === 'hollowmere');
+  return hollowmere ? String(hollowmere.id) : undefined;
+}
+
 function characterCard(row: Record<string, unknown>) {
   if (row.type !== 'character') return null;
   const document = asRecord(row.document);
@@ -193,6 +202,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         const packaged = simulationAsset(row, false);
         return row.type === 'place' ? { ...packaged, data: simulationNavigationData(row) } : packaged;
       });
+      const initialLocationId = resolveInitialLocationId(asset, relatedResult.rows);
       const card = characterCard(asset);
       const catalog = await catalogueIdentity(pool, asset);
       const packageBody = {
@@ -201,6 +211,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         launchId,
         issuedAt: now,
         expiresAt,
+        ...(initialLocationId ? { initialLocationId } : {}),
         catalog,
         primaryAsset,
         relatedAssets,
