@@ -10,6 +10,7 @@ import { createSpeculusGenerationRouter, createSpeculusLaunchRouter } from '../s
 const encryptionKey = Buffer.alloc(32, 7).toString('base64');
 const userId = '11111111-1111-4111-8111-111111111111';
 const assetId = '22222222-2222-4222-8222-222222222222';
+const relatedPlaceId = '44444444-4444-4444-8444-444444444444';
 const updatedAt = '2026-09-07T20:00:00.000Z';
 const config = loadConfig({
   NODE_ENV: 'test', APP_ORIGIN: 'http://localhost:5174', DATABASE_URL: 'postgres://test',
@@ -58,7 +59,15 @@ describe('Speculus security bridge', () => {
       if (sql.includes('SELECT model FROM user_provider_settings')) return { rowCount: 1, rows: [{ model: 'xialong-v1' }] };
       if (sql.includes('FROM user_simulation_settings')) return { rowCount: 1, rows: [{ engine }] };
       if (sql.includes('SELECT id, display_name FROM users')) return { rowCount: 1, rows: [{ id: userId, display_name: 'Eirvargr' }] };
-      if (sql.includes('id <> $1')) return { rowCount: 0, rows: [] };
+      if (sql.includes('id <> $1')) return { rowCount: 1, rows: [{
+        id: relatedPlaceId, type: 'place', name: 'Brackenjaw Enclave', summary: 'An upland settlement.',
+        content_rating: 'sfw', creator_user_id: userId, origin_world_id: null, updated_at: updatedAt,
+        document: {
+          sourceId: 'brackenjaw-enclave', kind: 'settlement', parentLocationId: 'splitpine-reach',
+          travelFromHollowmere: { referenceLocationId: 'hollowmere', distanceFromHollowmereKm: 82, estimateConfidence: 'approximate' },
+          privateNarrativeField: 'should stay out of compact related asset data',
+        },
+      }] };
       if (sql.includes('FROM ensure_speculus_catalog_entry_v2')) return { rowCount: 1, rows: [{
         code: 'SPC-C-KD41827', prefix: 'C', plate: 'KD41827', generation: 1,
         registry_number: 1, class_registry_number: 1, classification: 'character',
@@ -80,6 +89,18 @@ describe('Speculus security bridge', () => {
       persona: { name: 'Eirvargr' },
       character: { name: 'Ragna Holt', description: 'Terse and observant.' },
     });
+    const relatedAssets = captured.body?.relatedAssets as Array<Record<string, unknown>>;
+    expect(relatedAssets[0]).toMatchObject({
+      id: relatedPlaceId,
+      type: 'place',
+      name: 'Brackenjaw Enclave',
+      data: {
+        sourceId: 'brackenjaw-enclave',
+        parentLocationId: 'splitpine-reach',
+        travelFromHollowmere: { distanceFromHollowmereKm: 82, estimateConfidence: 'approximate' },
+      },
+    });
+    expect(JSON.stringify(relatedAssets[0])).not.toContain('privateNarrativeField');
     expect(String(captured.body?.generationGrant)).toHaveLength(43);
     expect(captured.url).toBe(`http://127.0.0.1:8790${engine === 'v2' ? '/api/v2/launch' : '/api/launch'}`);
     if (engine === 'v2') expect(captured.body?.engine).toBe('v2');
