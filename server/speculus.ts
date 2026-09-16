@@ -82,6 +82,21 @@ function simulationAsset(row: Record<string, unknown>, includeData = true) {
   };
 }
 
+function simulationNavigationData(row: Record<string, unknown>) {
+  if (row.type !== 'place') return {};
+  const document = asRecord(row.document);
+  const sourceId = stringValue(document.sourceId);
+  const kind = stringValue(document.kind);
+  const parentLocationId = stringValue(document.parentLocationId);
+  const travelFromHollowmere = asRecord(document.travelFromHollowmere);
+  return {
+    ...(sourceId ? { sourceId } : {}),
+    ...(kind ? { kind } : {}),
+    ...(parentLocationId ? { parentLocationId } : {}),
+    ...(Object.keys(travelFromHollowmere).length ? { travelFromHollowmere } : {}),
+  };
+}
+
 function characterCard(row: Record<string, unknown>) {
   if (row.type !== 'character') return null;
   const document = asRecord(row.document);
@@ -161,7 +176,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
              AND ($2::uuid IS NOT NULL AND (id = $2 OR origin_world_id = $2) OR $3::boolean AND origin_world_id = $1)
              AND (content_rating = 'sfw' OR $4::boolean OR creator_user_id = $5)
            ORDER BY CASE WHEN id = $2 THEN 0 ELSE 1 END, updated_at DESC
-           LIMIT 20`,
+           LIMIT 200`,
           [asset.id, asset.origin_world_id ?? null, asset.type === 'world', request.session.access?.canViewAdult === true, request.session.userId],
         ),
         readSimulationSettings(pool, request.session.userId!),
@@ -174,7 +189,10 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const launchId = randomUUID();
       const grant = randomBytes(32).toString('base64url');
       const primaryAsset = simulationAsset(asset);
-      const relatedAssets = relatedResult.rows.map((row) => simulationAsset(row, false));
+      const relatedAssets = relatedResult.rows.map((row) => {
+        const packaged = simulationAsset(row, false);
+        return row.type === 'place' ? { ...packaged, data: simulationNavigationData(row) } : packaged;
+      });
       const card = characterCard(asset);
       const catalog = await catalogueIdentity(pool, asset);
       const packageBody = {
@@ -194,7 +212,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
           description: 'The active Orbis user. The simulator must not invent this person\'s actions, thoughts, or dialogue.',
         },
         scene: card?.scenario || String(asset.summary ?? ''),
-        contextBlocks: relatedResult.rows.map((row) => ({
+        contextBlocks: relatedResult.rows.slice(0, 20).map((row) => ({
           id: String(row.id),
           title: String(row.name),
           content: JSON.stringify(row.document ?? {}).slice(0, 60_000),
