@@ -88,7 +88,7 @@ app.use((error: unknown, _request: Request, response: Response, _next: NextFunct
   response.status(500).json({ error: 'Orbis could not complete that request.' });
 });
 
-const server = app.listen(config.PORT, () => console.log(`Orbis API listening on ${config.PORT}`));
+const server = app.listen(config.PORT, config.isProduction ? '127.0.0.1' : '0.0.0.0', () => console.log(`Orbis API listening on ${config.PORT}`));
 
 const shutdown = () => server.close(() => pool.end().finally(() => process.exit(0)));
 process.on('SIGTERM', shutdown);

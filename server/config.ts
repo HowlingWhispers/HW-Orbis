@@ -8,7 +8,7 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32),
   SESSION_COOKIE_NAME: z.string().min(1).default('orbis.sid'),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
-  DISCORD_CLIENT_ID: z.string().min(1),
+  DISCORD_CLIENT_ID: z.string(),
   DISCORD_CLIENT_SECRET: z.string().min(1),
   DISCORD_REDIRECT_URI: z.string().url(),
   DISCORD_GUILD_ID: z.string().regex(/^$|^\d{17,20}$/).default(''),
@@ -30,6 +30,14 @@ export const parseRoleIds = (value: string) => [...new Set(value.split(',').map(
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
   const env = envSchema.parse(environment);
+  if (env.NODE_ENV === 'production') {
+    if (!/^\d{17,20}$/.test(env.DISCORD_CLIENT_ID)) {
+      throw new Error('Production requires a numeric Discord application client ID in DISCORD_CLIENT_ID.');
+    }
+    if (env.DISCORD_CLIENT_SECRET.length < 1) {
+      throw new Error('Production requires a non-empty DISCORD_CLIENT_SECRET.');
+    }
+  }
   return {
     ...env,
     envAdultRoleIds: parseRoleIds(env.DISCORD_ADULT_ROLE_IDS),

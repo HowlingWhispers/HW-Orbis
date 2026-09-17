@@ -10,6 +10,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    define: {
+      'import.meta.env.VITE_ORBIS_API_URL': JSON.stringify(apiBaseUrl || ''),
+      'import.meta.env.VITE_HW_LIBRARY_API_URL': JSON.stringify(env.VITE_HW_LIBRARY_API_URL ?? ''),
+    },
     server: {
       port: 5174,
       proxy: { '/api': 'http://127.0.0.1:8789' },
