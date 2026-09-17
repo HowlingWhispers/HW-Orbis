@@ -7,6 +7,12 @@ export default defineConfig(({ mode }) => {
   if (mode === 'production' && !apiBaseUrl) {
     throw new Error('Production frontend builds require VITE_ORBIS_API_URL or VITE_HW_LIBRARY_API_URL.');
   }
+  // In production the browser must reach the same origin's /api gateway. A bare
+  // absolute origin would double the path (e.g. .../v1/library/assets instead of
+  // /api/v1/library/assets), so the value is validated as a relative /api prefix.
+  if (mode === 'production' && !apiBaseUrl.startsWith('/')) {
+    throw new Error('Production VITE_ORBIS_API_URL must be a relative /api prefix, not an absolute origin.');
+  }
 
   return {
     plugins: [react()],
