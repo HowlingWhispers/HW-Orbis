@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveInitialLocationId } from '../server/speculus';
+import { resolveInitialLocationId, simulationNavigationData } from '../server/speculus';
 
 const row = (value: Record<string, unknown>) => value;
 
@@ -8,9 +8,23 @@ describe('Speculus initial location packaging', () => {
     const primary = row({ id: 'character-1', type: 'character', name: 'Ragna Holt', document: {} });
     const related = [
       row({ id: 'world-1', type: 'world', name: 'Bitterroot', document: {} }),
-      row({ id: 'place-hollowmere', type: 'place', name: 'Hollowmere', document: { sourceId: 'hollowmere' } }),
+      row({ id: 'place-hollowmere', type: 'place', name: 'Hollowmere', source_asset_id: 'place:hollowmere', document: { id: 'hollowmere' } }),
     ];
     expect(resolveInitialLocationId(primary, related)).toBe('place-hollowmere');
+  });
+
+  it('restores canonical Bitterroot navigation for rows imported before travel metadata existed', () => {
+    const navigation = simulationNavigationData(row({
+      type: 'place',
+      source_asset_id: 'place:brackenjaw-ranger-station',
+      document: { id: 'brackenjaw-ranger-station', kind: 'building', parentLocationId: 'brackenjaw-enclave' },
+    }), true);
+
+    expect(navigation).toMatchObject({
+      sourceId: 'brackenjaw-ranger-station',
+      parentLocationId: 'brackenjaw-enclave',
+      travelFromHollowmere: { distanceFromHollowmereKm: 83, routeClass: 'upland-road' },
+    });
   });
 
   it('starts a directly launched place at itself', () => {
