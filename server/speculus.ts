@@ -9,6 +9,7 @@ import type { SettingsStore } from './settings.js';
 import { canDirectViewAssetRow } from './world-access.js';
 import { readSimulationSettings } from './simulation-settings.js';
 import { generationErrors, providerErrorCode, rejectedParameter, safeFinishReason, type GenerationErrorCode } from './generation-errors.js';
+import { bitterrootDirectTravelFromHollowmere } from './bitterroot-travel-canon.js';
 
 const launchableTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const modelNames = ['xialong-v1', 'glm-4-6'] as const;
@@ -82,18 +83,30 @@ function simulationAsset(row: Record<string, unknown>, includeData = true) {
   };
 }
 
-function simulationNavigationData(row: Record<string, unknown>) {
+function sourceIdentityForRow(row: Record<string, unknown>) {
+  const document = asRecord(row.document);
+  const explicit = stringValue(document.sourceId);
+  if (explicit) return explicit;
+  const sourceAssetId = stringValue(row.source_asset_id);
+  const prefix = `${stringValue(row.type)}:`;
+  if (sourceAssetId.startsWith(prefix) && sourceAssetId.length > prefix.length) return sourceAssetId.slice(prefix.length);
+  return stringValue(document.id);
+}
+
+export function simulationNavigationData(row: Record<string, unknown>, bitterroot = false) {
   if (row.type !== 'place') return {};
   const document = asRecord(row.document);
-  const sourceId = stringValue(document.sourceId);
+  const sourceId = sourceIdentityForRow(row);
   const kind = stringValue(document.kind);
   const parentLocationId = stringValue(document.parentLocationId);
-  const travelFromHollowmere = asRecord(document.travelFromHollowmere);
+  const storedTravel = asRecord(document.travelFromHollowmere);
+  const fallbackTravel = bitterroot && sourceId ? bitterrootDirectTravelFromHollowmere(sourceId) : null;
+  const travelFromHollowmere = Object.keys(storedTravel).length ? storedTravel : fallbackTravel;
   return {
     ...(sourceId ? { sourceId } : {}),
     ...(kind ? { kind } : {}),
     ...(parentLocationId ? { parentLocationId } : {}),
-    ...(Object.keys(travelFromHollowmere).length ? { travelFromHollowmere } : {}),
+    ...(travelFromHollowmere ? { travelFromHollowmere } : {}),
   };
 }
 
@@ -102,7 +115,7 @@ export function resolveInitialLocationId(primary: Record<string, unknown>, relat
   const records = [primary, ...related];
   const isBitterroot = records.some((row) => row.type === 'world' && String(row.name).trim().toLowerCase() === 'bitterroot');
   if (!isBitterroot) return undefined;
-  const hollowmere = records.find((row) => row.type === 'place' && stringValue(asRecord(row.document).sourceId) === 'hollowmere');
+  const hollowmere = records.find((row) => row.type === 'place' && sourceIdentityForRow(row) === 'hollowmere');
   return hollowmere ? String(hollowmere.id) : undefined;
 }
 
@@ -197,10 +210,13 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const expiresAt = now + config.SPECULUS_LAUNCH_TTL_SECONDS * 1000;
       const launchId = randomUUID();
       const grant = randomBytes(32).toString('base64url');
-      const primaryAsset = simulationAsset(asset);
+      const isBitterroot = [asset, ...relatedResult.rows].some((row) => row.type === 'world' && String(row.name).trim().toLowerCase() === 'bitterroot');
+      const primaryAsset = asset.type === 'place'
+        ? { ...simulationAsset(asset), data: { ...asRecord(asset.document), ...simulationNavigationData(asset, isBitterroot) } }
+        : simulationAsset(asset);
       const relatedAssets = relatedResult.rows.map((row) => {
         const packaged = simulationAsset(row, false);
-        return row.type === 'place' ? { ...packaged, data: simulationNavigationData(row) } : packaged;
+        return row.type === 'place' ? { ...packaged, data: simulationNavigationData(row, isBitterroot) } : packaged;
       });
       const initialLocationId = resolveInitialLocationId(asset, relatedResult.rows);
       const card = characterCard(asset);
