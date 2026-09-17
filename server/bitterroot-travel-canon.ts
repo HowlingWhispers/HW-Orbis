@@ -54,6 +54,11 @@ function travelRecord(profile: RouteProfile, inheritedFromId: string | null = nu
   };
 }
 
+export function bitterrootDirectTravelFromHollowmere(sourceId: string) {
+  const profile = ROUTES_FROM_HOLLOWMERE[sourceId];
+  return profile ? travelRecord(profile) : null;
+}
+
 export function applyBitterrootTravelCanon(source: BitterrootSourceWorld): BitterrootSourceWorld {
   const world = structuredClone(source);
 
