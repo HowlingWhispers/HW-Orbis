@@ -2,13 +2,14 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { DatabasePool } from './db.js';
 
-export const simulationSettingsSchema = z.object({ engine: z.enum(['v1', 'v2']) }).strict();
+export const simulationSettingsSchema = z.object({ engine: z.enum(['v1', 'v2', 'v3']) }).strict();
 const migrationMissing = (error: unknown) => typeof error === 'object' && error !== null && 'code' in error && error.code === '42P01';
 
 export async function readSimulationSettings(pool: DatabasePool, userId: string) {
   try {
     const result = await pool.query('SELECT engine FROM user_simulation_settings WHERE user_id = $1', [userId]);
-    return { engine: result.rows[0]?.engine === 'v2' ? 'v2' as const : 'v1' as const, available: true };
+    const engine = result.rows[0]?.engine;
+    return { engine: engine === 'v3' ? 'v3' as const : engine === 'v2' ? 'v2' as const : 'v1' as const, available: true };
   } catch (error) {
     // Rolling deployments must not break V1 before the additive migration runs.
     if (migrationMissing(error)) return { engine: 'v1' as const, available: false };

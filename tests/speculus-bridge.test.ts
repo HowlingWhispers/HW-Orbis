@@ -42,13 +42,14 @@ describe('Speculus security bridge', () => {
     expect(() => openCredential(sealed, Buffer.alloc(32, 8))).toThrow();
   });
 
-  it.each(['v1', 'v2'] as const)('boxes a record for saved engine %s and deposits only an opaque grant', async (engine) => {
+  it.each(['v1', 'v2', 'v3'] as const)('boxes a record for saved engine %s and deposits only an opaque grant', async (engine) => {
     const captured: { body?: Record<string, unknown>; authorization?: string; url?: string } = {};
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       captured.url = String(url);
       captured.body = JSON.parse(String(init?.body));
       captured.authorization = new Headers(init?.headers).get('authorization') ?? undefined;
-      return new Response(JSON.stringify({ launchUrl: `https://spec.thehowlingwhispers.com/${engine === 'v2' ? 'v2' : ''}?launch=once` }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      const bridgeEngine = engine === 'v1' ? '' : 'v2';
+      return new Response(JSON.stringify({ launchUrl: `https://spec.thehowlingwhispers.com/${bridgeEngine}?launch=once` }), { status: 201, headers: { 'Content-Type': 'application/json' } });
     }));
     const pool = { query: vi.fn(async (sql: string) => {
       if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [{
@@ -83,7 +84,7 @@ describe('Speculus security bridge', () => {
     expect(response.body.launchUrl).toContain('spec.thehowlingwhispers.com');
     expect(captured.authorization).toBe('Bearer shared-test-bridge-secret');
     expect(captured.body).toMatchObject({
-      version: engine === 'v2' ? 2 : 1, model: 'xialong-v1',
+      version: engine === 'v1' ? 1 : 2, model: 'xialong-v1',
       primaryAsset: { id: assetId, type: 'character', revision: updatedAt },
       catalog: { code: 'SPC-C-KD41827', classification: 'character' },
       persona: { name: 'Eirvargr' },
@@ -102,9 +103,10 @@ describe('Speculus security bridge', () => {
     });
     expect(JSON.stringify(relatedAssets[0])).not.toContain('privateNarrativeField');
     expect(String(captured.body?.generationGrant)).toHaveLength(43);
-    expect(captured.url).toBe(`http://127.0.0.1:8790${engine === 'v2' ? '/api/v2/launch' : '/api/launch'}`);
-    if (engine === 'v2') expect(captured.body?.engine).toBe('v2');
-    else expect(captured.body).not.toHaveProperty('engine');
+    expect(captured.url).toBe(`http://127.0.0.1:8790${engine === 'v1' ? '/api/launch' : '/api/v2/launch'}`);
+    if (engine === 'v1') expect(captured.body).not.toHaveProperty('engine');
+    else expect(captured.body?.engine).toBe('v2');
+    expect(response.body.launchUrl).toContain(engine === 'v3' ? '/v3?launch=once' : engine === 'v2' ? '/v2?launch=once' : '/?launch=once');
     expect(JSON.stringify(captured.body)).not.toContain('novelai-secret-token');
   });
 

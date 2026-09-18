@@ -40,7 +40,7 @@ const hashGrant = (grant: string) => createHash('sha256').update(grant).digest('
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const stringValue = (value: unknown) => typeof value === 'string' ? value : '';
 const simulationType = (type: string) => type === 'species' || type === 'society' || type === 'family' || type === 'memory' ? 'other' : type;
-const isV2Prompt = (prompt: string) => prompt.startsWith('SPECULUS V2 /');
+const isStructuredSpeculusPrompt = (prompt: string) => prompt.startsWith('SPECULUS V2 /') || prompt.startsWith('SPECULUS V3 EXPERIMENTAL /');
 
 function withSentenceControl(prompt: string) {
   const v2ResponseMarker = '\n[IN-WORLD RESPONSE]\n';
@@ -222,8 +222,8 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const card = characterCard(asset);
       const catalog = await catalogueIdentity(pool, asset);
       const packageBody = {
-        version: simulationSettings.engine === 'v2' ? 2 : 1,
-        ...(simulationSettings.engine === 'v2' ? { engine: 'v2' } : {}),
+        version: simulationSettings.engine === 'v1' ? 1 : 2,
+        ...(simulationSettings.engine === 'v1' ? {} : { engine: 'v2' }),
         launchId,
         issuedAt: now,
         expiresAt,
@@ -258,7 +258,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
-        const launchPath = simulationSettings.engine === 'v2' ? '/api/v2/launch' : '/api/launch';
+        const launchPath = simulationSettings.engine === 'v1' ? '/api/launch' : '/api/v2/launch';
         const bridgeResponse = await fetch(`${config.SPECULUS_BRIDGE_URL.replace(/\/$/, '')}${launchPath}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${config.SPECULUS_BRIDGE_SECRET}`, 'Content-Type': 'application/json' },
@@ -267,7 +267,14 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         });
         const bridgeBody = await bridgeResponse.json().catch(() => ({})) as { launchUrl?: string; error?: string };
         if (!bridgeResponse.ok || !bridgeBody.launchUrl) throw new Error(bridgeBody.error || `Speculus returned HTTP ${bridgeResponse.status}.`);
-        response.status(201).json({ launchUrl: bridgeBody.launchUrl, expiresAt });
+        let launchUrl = bridgeBody.launchUrl;
+        if (simulationSettings.engine === 'v3') {
+          const url = new URL(launchUrl);
+          if (url.pathname === '/v2') url.pathname = '/v3';
+          else if (url.pathname.startsWith('/v2/')) url.pathname = `/v3/${url.pathname.slice(4)}`;
+          launchUrl = url.toString();
+        }
+        response.status(201).json({ launchUrl, expiresAt });
       } catch (error) {
         await pool.query('UPDATE generation_grants SET revoked_at = now() WHERE launch_id = $1', [launchId]);
         throw error;
@@ -290,7 +297,7 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
       const grant = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
       if (grant.length < 16) return response.status(401).json({ error: 'A valid Speculus generation grant is required.' });
       const body = generationSchema.parse(request.body);
-      const v2 = isV2Prompt(body.prompt);
+      const structured = isStructuredSpeculusPrompt(body.prompt);
       const result = await pool.query(
         `SELECT g.launch_id, g.asset_id, g.asset_type, g.asset_revision, g.expires_at,
                 p.model, p.token_ciphertext, p.token_iv, p.token_tag
@@ -337,7 +344,7 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
               frequency_penalty: body.frequencyPenalty,
               presence_penalty: body.presencePenalty,
               stream: false,
-              stop: [...new Set([...(v2 ? [] : bridgeStopSequences), ...body.stopSequences])],
+              stop: [...new Set([...(structured ? [] : bridgeStopSequences), ...body.stopSequences])],
               ...(body.reroll ? { seed: randomInt(1, 2_147_483_647) } : {}),
             }),
             signal: controller.signal,

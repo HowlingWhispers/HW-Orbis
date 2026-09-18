@@ -1,9 +1,9 @@
-export type SimulationSettings = { engine: 'v1' | 'v2'; available: boolean };
+export type SimulationSettings = { engine: 'v1' | 'v2' | 'v3'; available: boolean };
 
 async function readResponse(response: Response): Promise<SimulationSettings> {
   const body = await response.json() as SimulationSettings & { error?: string };
   if (!response.ok) throw new Error(body.error || 'Could not load simulation preferences.');
-  if (body.engine !== 'v1' && body.engine !== 'v2') throw new Error('Invalid simulation preference response.');
+  if (body.engine !== 'v1' && body.engine !== 'v2' && body.engine !== 'v3') throw new Error('Invalid simulation preference response.');
   return body;
 }
 
