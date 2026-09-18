@@ -17,6 +17,7 @@ import { createSimulationSettingsRouter } from './simulation-settings.js';
 import { PostgresSettingsStore } from './settings.js';
 import { createSpeculusGenerationRouter, createSpeculusLaunchRouter } from './speculus.js';
 import { createWorldDeleteRouter } from './world-delete.js';
+import { createWorldBrainRouter } from './world-brain.js';
 import './types.js';
 
 const config = loadConfig();
@@ -72,6 +73,7 @@ app.use('/api/admin', requireAdmin(config, pool, settingsStore), createAdminRout
 app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createSaveArchiveRouter(pool));
 app.use('/api/v1/library', createWorldDeleteRouter(pool));
+app.use('/api/v1/library', createWorldBrainRouter(pool));
 app.use('/api/v1/library', createArchiveTransferRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createLibraryRouter(config, pool, settingsStore));
 
