@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { libraryApi } from '../api/client';
 import type { ContentRating, LibraryAsset, LibraryAssetUpdate } from '../types/library';
 import { WorldSettingsPanel } from './WorldSettingsPanel';
+import { WorldBrainPanel } from './WorldBrainPanel';
 
 type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 type JsonObject = { [key: string]: JsonValue };
-type TabId = 'identity' | 'lore' | 'places' | 'people' | 'societies' | 'families' | 'memory' | 'rules' | 'time' | 'settings';
+type TabId = 'identity' | 'lore' | 'places' | 'people' | 'societies' | 'families' | 'memory' | 'rules' | 'time' | 'brain' | 'settings';
 
 type SelectOption = { value: string; label: string };
 
@@ -23,6 +24,7 @@ const tabs: Array<{ id: TabId; label: string }> = [
   { id: 'memory', label: 'Memory & Timeline' },
   { id: 'rules', label: 'Rules' },
   { id: 'time', label: 'Time & Weather' },
+  { id: 'brain', label: 'World Brain' },
   { id: 'settings', label: 'World Settings' },
 ];
 
@@ -405,6 +407,7 @@ export function WorldForgeEditor({ asset }: { asset: LibraryAsset }) {
       {activeTab === 'memory' && <section className="forge-module"><header className="forge-module__title"><div><span className="eyebrow">World Module 07</span><h2>Memory & Timeline</h2></div><small>EVENTS · CONSEQUENCES · PERSISTENT MEMORY</small></header><MemoryEditor value={document.memories} locations={locations} factions={factions} families={families} onChange={(value) => markDocument({ ...document, memories: value })} /></section>}
       {activeTab === 'rules' && <section className="forge-module"><header className="forge-module__title"><div><span className="eyebrow">World Module 08</span><h2>Rules</h2></div><small>TECHNOLOGY · SOCIETY · PHYSICS · CONSTRAINTS</small></header><TextField label="Technology" rows={6} value={asString(rules.technology)} onChange={(value) => markDocument(updateObject(document, 'rules', 'technology', value))} /><TextField label="Society" rows={6} value={asString(rules.society)} onChange={(value) => markDocument(updateObject(document, 'rules', 'society', value))} /><TextField label="Magic / physics" rows={6} value={asString(rules.magicPhysics)} onChange={(value) => markDocument(updateObject(document, 'rules', 'magicPhysics', value))} /><LinesField label="Constraints" value={asStrings(rules.constraints)} onChange={(value) => markDocument(updateObject(document, 'rules', 'constraints', value))} /></section>}
       {activeTab === 'time' && <TimeWeatherEditor document={document} onChange={markDocument} />}
+      {activeTab === 'brain' && <WorldBrainPanel worldId={asset.id} />}
       {activeTab === 'settings' && <WorldSettingsPanel document={document} onChange={markDocument} />}
     </main><ContextPreview document={document} /></div><footer className="forge-footer"><span role="status">{message}</span><small>Ctrl+S saves the world.</small></footer>
   </div>;
