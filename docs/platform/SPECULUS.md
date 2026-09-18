@@ -156,8 +156,8 @@ error/request ID from one failed attempt and match it to Orbis logs before
 changing credentials, output limits, stop sequences or provider configuration.
 
 
-## V3 to Fabula lifecycle
+## V3 contribution toward Fabula
 
-Speculus V3 is the experimental runtime that is intended to mature into Fabula. Do not build a second parallel Fabula runtime. Orbis remains the canonical authoring/control plane throughout that promotion.
+Speculus V3 is an experimental runtime used to develop and prove systems that can later contribute to Fabula. It is not the official Fabula implementation or product design, and there is no assumption that V3 will simply be renamed into Fabula. Fabula's architecture, interface and theme will be designed separately later.
 
-The planned World Brain boundary is documented in `SIMULATION_AUTHORING_ARCHITECTURE.md`: Orbis will author/version/select the effective brain, while V3/Fabula executes the pinned revision against mutable runtime state.
+The World Brain boundary is documented in `SIMULATION_AUTHORING_ARCHITECTURE.md`: Orbis authors, versions and selects the effective brain, while V3 executes the pinned revision against mutable runtime state. That contract is intentionally designed so a future Fabula implementation can reuse or adapt it.

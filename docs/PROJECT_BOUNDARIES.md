@@ -17,9 +17,9 @@ This file exists to prevent historical project names and older implementations f
 
 Orbis describes canonical reality. It does not execute the simulation.
 
-## Speculus V3 owns the future Fabula runtime
+## Speculus V3 contributes toward future Fabula
 
-Speculus V3 is the experimental incubation path for the runtime that will become Fabula when it is mature enough. Fabula is not a separate rewrite or parallel implementation unless the owner explicitly changes that direction.
+Speculus V3 is an experimental simulator/runtime where systems that may later contribute to Fabula are developed and proven. It is not the official Fabula design, implementation, interface, or theme. Fabula will receive its own design phase later.
 
 V2 remains the stable Speculus baseline while V3 replaces V2-derived systems incrementally.
 
@@ -37,15 +37,13 @@ V3 owns:
 - use of the generation package and shared Orbis generation boundary
 - save semantics, reroll/undo ownership and state ledgers
 
-Speculus/Fabula does not own the canonical asset database or raw provider credentials.
+Speculus runtime does not own the canonical asset database or raw provider credentials.
 
-## Promotion to Fabula
+## Contribution toward Fabula
 
-The intended lifecycle is:
+V3 and later Speculus versions are allowed to develop and prove systems that can later be reused, adapted, or replaced when Fabula receives its official architecture, product design, interface, and theme.
 
-`Speculus V2 stable -> Speculus V3 experimental -> V3 reaches runtime/gameplay readiness -> promote/rename V3 as Fabula`
-
-Do not build a second Fabula runtime beside V3. New gameplay/world-simulation work should be designed so it can land in the V3 runtime and survive the eventual product-name promotion.
+Do not assume that Speculus will simply be renamed to Fabula. Keep useful runtime systems modular and portable so the later Fabula design can adopt proven pieces without being constrained by the current Speculus presentation.
 
 ## Canon versus runtime state
 
@@ -53,11 +51,11 @@ A canonical Orbis definition and a mutable runtime value are different things.
 
 Examples:
 
-- Orbis item record: what a sword is. V3/Fabula inventory state: who currently carries that sword, quantity, condition and whether it is equipped.
-- Orbis place record: what Brackenjaw is and where it belongs in the authored world graph. V3/Fabula scene state: who is there now and what time they arrived.
-- Orbis relationship archetype/history seed: authored starting truth. V3/Fabula relationship state: trust, events and progression caused by play.
-- Orbis mystery: hidden truth, reveal plan and initial knowledge. V3/Fabula runtime: who has learned what and which reveal stage is active.
-- Orbis World Brain revision: authored simulation constitution. V3/Fabula: executes the pinned revision against current state.
+- Orbis item record: what a sword is. V3 and future Fabula inventory state: who currently carries that sword, quantity, condition and whether it is equipped.
+- Orbis place record: what Brackenjaw is and where it belongs in the authored world graph. V3 and future Fabula scene state: who is there now and what time they arrived.
+- Orbis relationship archetype/history seed: authored starting truth. V3 and future Fabula relationship state: trust, events and progression caused by play.
+- Orbis mystery: hidden truth, reveal plan and initial knowledge. V3 and future Fabula runtime: who has learned what and which reveal stage is active.
+- Orbis World Brain revision: authored simulation constitution. V3 and future Fabula: executes the pinned revision against current state.
 
 Generated/runtime changes do not silently rewrite Orbis canon. A later promotion workflow may intentionally turn selected runtime developments into authored canon.
 
@@ -65,7 +63,7 @@ Generated/runtime changes do not silently rewrite Orbis canon. A later promotion
 
 Orbis is the authoring and revision authority for World Brain documents. Published revisions should be immutable and worlds should resolve to exactly one effective brain: a maintained Standard World Brain or a custom world brain revision.
 
-Speculus V3/Fabula executes that effective brain. Runtime code still owns deterministic invariants such as identity, permissions, clock arithmetic, inventory arithmetic, travel costs and state commits. A World Brain can define behavior and interpretation rules but cannot bypass the runtime's safety/consistency boundary.
+Speculus V3 and future Fabula executes that effective brain. Runtime code still owns deterministic invariants such as identity, permissions, clock arithmetic, inventory arithmetic, travel costs and state commits. A World Brain can define behavior and interpretation rules but cannot bypass the runtime's safety/consistency boundary.
 
 ## Studium
 
