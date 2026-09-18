@@ -1,10 +1,10 @@
 # Simulation authoring architecture
 
-This document defines how Orbis should grow alongside Speculus V3 as V3 matures into Fabula.
+This document defines how Orbis should grow alongside Speculus V3 while V3 develops systems that may later contribute to Fabula.
 
 The main boundary is simple:
 
-> Orbis authors, validates, versions and distributes canonical definitions. Speculus V3/Fabula executes those definitions as mutable simulation state.
+> Orbis authors, validates, versions and distributes canonical definitions. Speculus V3 executes those definitions as mutable simulation state. Future Fabula may reuse or adapt these proven contracts after its separate design phase.
 
 This avoids two failure modes: putting game logic in the library server, or letting generated prose silently become canonical data.
 
@@ -44,7 +44,7 @@ A brain has:
 - world binding to a specific published revision
 - explicit reset-to-Standard behavior that does not destroy custom history
 
-The launch package should eventually identify the selected brain and immutable revision. V3/Fabula should never guess which revision was intended.
+The launch package should eventually identify the selected brain and immutable revision. V3 should never guess which revision was intended.
 
 ### World graph and spatial canon
 
@@ -58,7 +58,7 @@ Orbis owns stable definitions and links for:
 - schedules, calendars and environmental rules
 - authored encounter/faction/resource definitions
 
-Runtime position, current presence, travel progress, conquest state and current environmental state belong to V3/Fabula.
+Runtime position, current presence, travel progress, conquest state and current environmental state belong to V3.
 
 ### Character definitions
 
@@ -81,23 +81,23 @@ Orbis owns item definitions and equipment rules. Runtime inventories should refe
 
 Useful authored fields include category, tags, stackability, mass, equipment slot, durability model, consumable behavior, value/economy metadata and world-specific rules.
 
-V3/Fabula owns runtime item instances, quantities, location/owner, equipped state, current durability and transaction history.
+V3 owns runtime item instances, quantities, location/owner, equipped state, current durability and transaction history.
 
 ### Relationships
 
-Orbis owns relationship vocabulary, archetypes, starting conditions and authored history. V3/Fabula owns runtime pair-state and relationship events.
+Orbis owns relationship vocabulary, archetypes, starting conditions and authored history. V3 owns runtime pair-state and relationship events.
 
 Relationship records should support more than a single score. The research shows value in events, unresolved threads, stages and pacing controls. The final Howling Whispers design should preserve semantic factors/events and optionally derive compact numeric values for mechanics.
 
 ### Knowledge, secrets and mysteries
 
-Orbis owns objective hidden truth, reveal plans, initial knowledge and visibility constraints. V3/Fabula owns the current knowledge graph and reveal progress.
+Orbis owns objective hidden truth, reveal plans, initial knowledge and visibility constraints. V3 owns the current knowledge graph and reveal progress.
 
 Every context block derived from hidden information must declare who is allowed to receive it. Player-visible rendering must never receive an NPC-only secret merely because it is present in the launch package.
 
 ### Traits, abilities, skills and resources
 
-Orbis owns reusable definitions. V3/Fabula owns current values, temporary modifiers, checks, spend/recovery and consequences.
+Orbis owns reusable definitions. V3 owns current values, temporary modifiers, checks, spend/recovery and consequences.
 
 This covers character/world traits, spells/abilities, skill definitions, resource tracks, wounds/strain, conditions, survival needs, currencies and other world-specific mechanics.
 
@@ -105,7 +105,7 @@ This covers character/world traits, spells/abilities, skill definitions, resourc
 
 Orbis should not dump the entire library into a prompt. It should build a versioned launch package containing canonical records plus stable IDs/revisions.
 
-A future V3/Fabula launch projection should distinguish:
+A future V3 launch projection should distinguish:
 
 - source identities/revisions
 - effective World Brain revision
@@ -152,11 +152,13 @@ World backup/export remains a full-fidelity path distinct from merge-style impor
 
 ## Implementation order
 
+Fabula's official product design, interface and theme are intentionally out of scope here. These contracts should be portable enough to inform that later design without pre-deciding it.
+
 1. World Brain revision/binding model and launch contract.
 2. Shared canonical simulation schema vocabulary for items, relationships, traits, abilities, schedules, secrets and resources.
 3. V3 launch projection support for those authored definitions.
 4. Authoring/editor surfaces and validation in World Forge/record editors.
-5. Runtime-save archive versioning for the expanded V3/Fabula state.
+5. Runtime-save archive versioning for the expanded V3 state.
 6. AI-assisted staging/import tools after the canonical contracts are stable.
 
 Do not create every table and editor at once. Stabilize one contract, add validation and launch projection, then expose the editor.
