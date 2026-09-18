@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Router, type Request } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { SUPER_ADMIN_DISCORD_ID } from './auth.js';
 import type { DatabasePool } from './db.js';
@@ -26,7 +26,7 @@ function mapRevision(row: Record<string, unknown>) {
   };
 }
 
-async function requireEditableWorld(request: Request, response: Parameters<Parameters<Router['get']>[1]>[1], pool: DatabasePool) {
+async function requireEditableWorld(request: Request, response: Response, pool: DatabasePool) {
   if (!request.session.userId) {
     response.status(401).json({ error: 'Sign in to manage a World Brain.' });
     return null;

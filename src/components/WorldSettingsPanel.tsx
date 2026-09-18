@@ -18,7 +18,7 @@ export function WorldSettingsPanel({ document, onChange }: { document: JsonObjec
 
   return <section className="forge-module">
     <header className="forge-module__title">
-      <div><span className="eyebrow">World Module 10</span><h2>World Settings</h2></div>
+      <div><span className="eyebrow">World Module 11</span><h2>World Settings</h2></div>
       <small>PRIVACY · DISCOVERY · SHARING</small>
     </header>
 
