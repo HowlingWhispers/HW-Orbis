@@ -102,29 +102,29 @@ The public domain remains intentionally non-navigable without a one-time launch 
 The primary record is immutable for the lifetime of the launch and carries its `updated_at` value as the source revision. Its canonical SPC registry identity is packaged separately from its editable display fields. A world launch includes its children. A child-record launch includes its origin world and accessible sibling records. Related adult records remain excluded unless the launching user has adult access or owns the related record.
 
 Character records are adapted to Character Card V2 fields when matching structured fields exist. Other record types run through Speculus's narrator subject. Until Orbis has a dedicated persona model, the signed-in user's display name is sent as a minimal anti-impersonation persona.
-# V1 / V2 engine preference
+# V1 / V2 / V3 engine preference
 
-Orbis Account settings now persist `engine = v1 | v2` per user through
+Orbis Account settings now persist `engine = v1 | v2 | v3` per user through
 `GET/PUT /api/simulation-settings`. An account with no preference defaults to V1.
 Simulate reads that saved account preference server-side; the caller cannot supply
 an arbitrary simulator URL or another user's setting.
 
 | Saved engine | Deposit endpoint on Speculus | Package | Browser path |
 | --- | --- | --- | --- |
-| V1 (default) | `/api/launch` | `version: 1` (unchanged) | `/` |
-| V2 (experimental) | `/api/v2/launch` | `version: 2, engine: "v2"` | `/v2` |
+| V1 (legacy/default) | `/api/launch` | `version: 1` (unchanged) | `/` |
+| V2 (stable) | `/api/v2/launch` | `version: 2, engine: "v2"` | `/v2` |
+| V3 (experimental) | `/api/v2/launch` compatibility bridge | `version: 2, engine: "v2"` temporarily | `/v3` |
 
-Apply `server/migrations/007_simulation_engine_settings.sql` before enabling the
-selector. It adds one account-preference table only. Before that migration, reads
+Apply `server/migrations/007_simulation_engine_settings.sql` and then
+`server/migrations/011_simulation_engine_v3.sql` before enabling the full selector. It adds one account-preference table only. Before that migration, reads
 fall back to V1 and the selector reports unavailable; writes do not falsely report
 success. Other database failures are surfaced, not disguised as a preference.
 
-Deploy the matching HW-Speculus V2 API before enabling V2 users. If the requested
+Deploy the matching HW-Speculus runtime before enabling an engine. If the requested
 engine is unavailable, the launch fails and the unused grant is revoked. Orbis
-does not silently switch a requested V2 launch into V1.
+does not silently switch the requested engine. V3 currently reuses the V2 deposit/package authorization contract while Orbis rewrites the returned browser path to `/v3`; this is a compatibility bridge, not the final V3 launch contract.
 
-Existing sessions are unaffected by preference changes. V1/V2 raw sessions are
-not interchangeable. The provider model continues to come from the existing
+Existing sessions are unaffected by preference changes. V1, V2 and V3 browser/session stores remain isolated even while V3 is launch-contract-compatible with V2. The provider model continues to come from the existing
 Orbis NovelAI settings; raw credentials never leave Orbis. V2 output settings live
 in its isolated session and use the existing generation gateway contract.
 
@@ -154,3 +154,10 @@ fixes the loss of error details; it does not establish which upstream failure
 caused the originally reported generic 502. After deployment, record the displayed
 error/request ID from one failed attempt and match it to Orbis logs before
 changing credentials, output limits, stop sequences or provider configuration.
+
+
+## V3 to Fabula lifecycle
+
+Speculus V3 is the experimental runtime that is intended to mature into Fabula. Do not build a second parallel Fabula runtime. Orbis remains the canonical authoring/control plane throughout that promotion.
+
+The planned World Brain boundary is documented in `SIMULATION_AUTHORING_ARCHITECTURE.md`: Orbis will author/version/select the effective brain, while V3/Fabula executes the pinned revision against mutable runtime state.
