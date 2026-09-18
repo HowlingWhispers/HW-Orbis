@@ -28,12 +28,13 @@ export function SimulationEngineSetting() {
     <label htmlFor="simulation-engine">Simulation engine</label>
     <div>
       <select id="simulation-engine" value={engine} disabled={!saved?.available || busy} onChange={(event) => setEngine(event.target.value as SimulationSettings['engine'])}>
-        <option value="v1">Speculus V1 · Stable</option>
-        <option value="v2">Speculus V2 · Experimental</option>
+        <option value="v1">Speculus V1 · Legacy</option>
+        <option value="v2">Speculus V2 · Stable</option>
+        <option value="v3">Speculus V3 · Experimental</option>
       </select>
       <button className="button button--primary" disabled={!saved?.available || busy || saved.engine === engine}>{busy ? 'Saving...' : 'Save engine'}</button>
     </div>
-    <small>Saved to your Orbis account. Controls every Simulate button: V1 opens /, V2 opens /v2. Sessions and exports remain separate. NovelAI credentials stay in Orbis.</small>
+    <small>Saved to your Orbis account. Controls every Simulate button: V1 opens /, V2 opens /v2, V3 opens /v3. Sessions and exports remain separate. NovelAI credentials stay in Orbis.</small>
     {message && <p className="form-message" role="status">{message}</p>}
   </form>;
 }

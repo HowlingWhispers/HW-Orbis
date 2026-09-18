@@ -21,7 +21,7 @@ describe('account simulation preferences', () => {
   it('keeps V1 available before migration but refuses to pretend a choice was saved', async () => {
     const pool = { query: vi.fn(async () => { throw { code: '42P01' }; }) } as unknown as DatabasePool;
     expect(await readSimulationSettings(pool, userId)).toEqual({ engine: 'v1', available: false });
-    await request(appFor(pool)).put('/api/simulation-settings').send({ engine: 'v2' }).expect(503);
+    await request(appFor(pool)).put('/api/simulation-settings').send({ engine: 'v3' }).expect(503);
   });
   it('saves and reloads the preference using authenticated ownership, independent of a provider token', async () => {
     let saved = 'v1'; const query = vi.fn(async (sql: string, values: unknown[]) => {
@@ -30,15 +30,15 @@ describe('account simulation preferences', () => {
       return { rowCount: 1, rows: [{ engine: saved }] };
     });
     const app = appFor({ query } as unknown as DatabasePool);
-    await request(app).put('/api/simulation-settings').send({ engine: 'v2' }).expect(200);
+    await request(app).put('/api/simulation-settings').send({ engine: 'v3' }).expect(200);
     const response = await request(app).get('/api/simulation-settings').expect(200);
-    expect(response.body).toEqual({ engine: 'v2', available: true });
+    expect(response.body).toEqual({ engine: 'v3', available: true });
     await request(app).put('/api/simulation-settings').send({ engine: 'v1' }).expect(200);
     expect(saved).toBe('v1');
   });
   it('rejects unknown engines, URLs and caller-supplied ownership without a write', async () => {
     const query = vi.fn(); const app = appFor({ query } as unknown as DatabasePool);
-    for (const body of [{ engine: 'dev' }, { engine: 'https://example.com' }, { engine: 'v2', userId: 'someone-else' }]) {
+    for (const body of [{ engine: 'dev' }, { engine: 'https://example.com' }, { engine: 'v3', userId: 'someone-else' }]) {
       await request(app).put('/api/simulation-settings').send(body).expect(400);
     }
     expect(query).not.toHaveBeenCalled();
