@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StatePanel';
 import { useLibraryData } from '../hooks/useLibraryData';
 import { useI18n } from '../i18n/I18nContext';
 import type { AssetType, SourceType } from '../types/library';
+import { useSEO } from '../hooks/useSEO';
 
 const germanCollection: Record<string, { label: string; description: string }> = {
   world: { label: 'Welten', description: 'Vollständig erstellte Realitäten und ihr Kanon.' },
@@ -73,7 +74,30 @@ export function CollectionView({ all = false }: { all?: boolean }) {
   const description = all
     ? (de ? 'Jeder Datensatz aus jedem Regal, von einem ruhigen Ort aus durchsuchbar.' : 'Every record across every shelf, ready to search from one quiet place.')
     : localizedNavigation?.description ?? navigation?.description;
+  const canonicalPath = all ? '/all' : `/library/${type}`;
   const canCreateWorld = selectedType === 'world' && Boolean(user?.permissions.canCreate || user?.isSuperAdmin);
+
+  useSEO({
+    title: de
+      ? `${title} | Orbis — Bibliothek von Howling Whispers`
+      : `${title} | Orbis — Library of Howling Whispers`,
+    description: de
+      ? `Durchsuche ${all ? 'das gesamte Archiv' : title.toLowerCase()} in Orbis, der Bibliothek von Howling Whispers. NovelAI-Integration für KI-Rollenspiel & Weltenbau.`
+      : `Browse ${all ? 'the complete archive' : title.toLowerCase()} in Orbis, the Library of Howling Whispers. NovelAI integration for AI roleplay & worldbuilding.`,
+    canonicalPath,
+    structuredData: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: title,
+      description: description,
+      url: `https://lib.thehowlingwhispers.com${canonicalPath}`,
+      isPartOf: {
+        '@type': 'WebSite',
+        name: 'Orbis',
+        url: 'https://lib.thehowlingwhispers.com/',
+      },
+    },
+  });
 
   return (
     <div className="page collection-page">

@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { findNavigationItem } from '../app/library-nav';
 import { ErrorState, LoadingState } from '../components/StatePanel';
 import { useLibraryData } from '../hooks/useLibraryData';
+import { useSEO } from '../hooks/useSEO';
 
 type DocumentRecord = Record<string, unknown>;
 
@@ -37,6 +38,39 @@ export function AssetDetailView() {
   const category = findNavigationItem(asset.type);
   const Icon = category?.icon;
   const canEdit = user && asset.canEdit === true;
+  const canonicalPath = `/asset/${asset.id}`;
+
+  useSEO({
+    title: `${asset.name} | ${category?.label} | Orbis — Library of Howling Whispers`,
+    description: asset.summary || `View ${asset.name}, a ${category?.label.toLowerCase()} record in Orbis, the Library of Howling Whispers. NovelAI-integrated worldbuilding and character archive.`,
+    canonicalPath,
+    ogType: 'article',
+    structuredData: {
+      '@context': 'https://schema.org',
+      '@type': 'CreativeWork',
+      name: asset.name,
+      description: asset.summary || `A ${category?.label.toLowerCase()} record in Orbis.`,
+      url: `https://lib.thehowlingwhispers.com${canonicalPath}`,
+      creator: asset.author ? {
+        '@type': 'Person',
+        name: asset.author.displayName,
+      } : undefined,
+      publisher: {
+        '@type': 'Organization',
+        name: 'Howling Whispers',
+        url: 'https://thehowlingwhispers.com/',
+      },
+      datePublished: asset.createdAt,
+      dateModified: asset.updatedAt,
+      keywords: asset.tags.length > 0 ? asset.tags.join(', ') : undefined,
+      isPartOf: {
+        '@type': 'WebSite',
+        name: 'Orbis',
+        url: 'https://lib.thehowlingwhispers.com/',
+      },
+    },
+  });
+
   const simulate = async () => {
     if (!user) { navigate('/account'); return; }
     setLaunching(true); setLaunchError('');

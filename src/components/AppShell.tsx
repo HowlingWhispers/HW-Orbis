@@ -1,4 +1,4 @@
-import { LogIn, Menu, Search, Settings, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
+import { LogIn, Menu, Search, Settings, ShieldCheck, SlidersHorizontal, X, MessageSquare } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { libraryNavigation } from '../app/library-nav';
@@ -79,11 +79,14 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar__footer">
-          <div className="api-lamp"><span /> <small>{t('Development archive')}</small></div>
-          {user?.permissions.canAdmin && <NavLink className="sidebar__settings" to="/admin"><SlidersHorizontal size={17} /> {t('Administration')}</NavLink>}
-          <NavLink className="sidebar__settings" to="/account"><Settings size={17} /> {t('Account')}</NavLink>
-        </div>
+<div className="sidebar__footer">
+           <a className="sidebar__discord-join" href="https://discord.gg/K3aMbSeYw2" target="_blank" rel="noopener noreferrer" aria-label="Join the Howling Whispers Discord community">
+             <MessageSquare size={17} /><span>{t('Join Discord')}</span>
+           </a>
+           <div className="api-lamp"><span /> <small>{t('Development archive')}</small></div>
+           {user?.permissions.canAdmin && <NavLink className="sidebar__settings" to="/admin"><SlidersHorizontal size={17} /> {t('Administration')}</NavLink>}
+           <NavLink className="sidebar__settings" to="/account"><Settings size={17} /> {t('Account')}</NavLink>
+         </div>
       </aside>
 
       {menuOpen && <button className="sidebar-backdrop" aria-label={t('Close navigation')} onClick={() => setMenuOpen(false)} />}
@@ -104,7 +107,12 @@ export function AppShell() {
               {user.permissions.canCreate && <ShieldCheck className="keeper-badge__verified" size={15} />}
             </NavLink>
           ) : (
-            <a className={`discord-login ${authLoading ? 'is-loading' : ''}`} href={discordLoginPath(location.pathname)}><LogIn size={16} /><span>{t('Sign in with Discord')}</span></a>
+            <>
+              <a className="discord-join-button" href="https://discord.gg/K3aMbSeYw2" target="_blank" rel="noopener noreferrer" aria-label="Join the Howling Whispers Discord community">
+                <MessageSquare size={16} /><span>{t('Join Discord')}</span>
+              </a>
+              <a className={`discord-login ${authLoading ? 'is-loading' : ''}`} href={discordLoginPath(location.pathname)}><LogIn size={16} /><span>{t('Sign in with Discord')}</span></a>
+            </>
           )}
         </header>
         <main className="content"><Outlet /></main>

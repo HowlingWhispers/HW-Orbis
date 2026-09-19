@@ -66,6 +66,54 @@ app.get('/api/config/public', async (_request, response, next) => {
     response.json({ discordInviteUrl: settings.inviteUrl });
   } catch (error) { next(error); }
 });
+
+app.get('/sitemap.xml', async (_request, response, next) => {
+  try {
+    const baseUrl = 'https://lib.thehowlingwhispers.com';
+    const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
+
+    // Get all public assets (sfw, not restricted, discoverable)
+    const result = await pool.query(`
+      SELECT a.id, a.type, a.updated_at
+      FROM library_assets a
+      WHERE a.content_rating = 'sfw'
+      ORDER BY a.updated_at DESC
+    `);
+
+    const staticUrls = [
+      { url: '/', changefreq: 'daily', priority: '1.0', lastmod: '' },
+      { url: '/all', changefreq: 'daily', priority: '0.9', lastmod: '' },
+      ...assetTypes.map(type => ({ url: `/library/${type}`, changefreq: 'daily', priority: '0.8', lastmod: '' })),
+      { url: '/projects/speculus', changefreq: 'weekly', priority: '0.7', lastmod: '' },
+    ];
+
+    const assetUrls = result.rows.map(row => ({
+      url: `/asset/${row.id}`,
+      lastmod: new Date(row.updated_at).toISOString().split('T')[0],
+      changefreq: 'weekly',
+      priority: '0.6',
+    }));
+
+    const allUrls = [...staticUrls, ...assetUrls];
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${allUrls.map(u => `  <url>
+    <loc>${baseUrl}${u.url}</loc>
+    ${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}
+    <changefreq>${u.changefreq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`).join('\n')}
+</urlset>`;
+
+    response.set('Content-Type', 'application/xml; charset=utf-8');
+    response.set('Cache-Control', 'public, max-age=3600');
+    response.send(xml);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use('/api/auth', createAuthRouter(config, pool, settingsStore));
 app.use('/api/provider-settings', createProviderSettingsRouter(config, pool));
 app.use('/api/simulation-settings', createSimulationSettingsRouter(pool));

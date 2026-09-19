@@ -12,6 +12,15 @@ const sourceTypes = ['curated', 'user-created', 'imported-v2', 'copied', 'public
 const tones = ['moon', 'forest', 'ember', 'mist', 'violet', 'river'] as const;
 const documentSchema = z.record(z.string(), z.unknown()).refine((value) => JSON.stringify(value).length <= 128_000, 'Record content is too large.');
 
+const locationSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1).max(120),
+  kind: z.string().trim().max(60).optional(),
+  description: z.string().trim().max(5000).optional(),
+  parentLocationId: z.string().uuid().nullable().optional(),
+  libraryAssetId: z.string().uuid().nullable().optional(),
+}).passthrough();
+
 const createAssetSchema = z.object({
   type: z.enum(assetTypes),
   name: z.string().trim().min(1).max(120),
@@ -99,6 +108,100 @@ function requestIdentity(request: Request) {
     isSuperAdmin,
     canSeePrivateWorlds: isSuperAdmin || request.session.access?.canAdmin === true,
   };
+}
+
+async function syncWorldLocations(
+  pool: DatabasePool,
+  worldId: string,
+  userId: string,
+  document: Record<string, unknown>,
+) {
+  const rawLocations = document.locations;
+  if (!Array.isArray(rawLocations)) return;
+
+  const locations = rawLocations
+    .map((loc, idx) => {
+      const parsed = locationSchema.safeParse(loc);
+      if (!parsed.success) {
+        console.warn(`World ${worldId}: location at index ${idx} failed validation`, parsed.error.flatten());
+        return null;
+      }
+      return parsed.data;
+    })
+    .filter((loc): loc is z.infer<typeof locationSchema> => loc !== null);
+
+  const seenPlaceIds = new Set<string>();
+  const errors: string[] = [];
+
+  for (const loc of locations) {
+    let placeId = loc.libraryAssetId;
+    const placeDocument = {
+      kind: loc.kind ?? 'region',
+      parentLocationId: loc.parentLocationId ?? null,
+      description: loc.description ?? '',
+    };
+
+    try {
+      if (placeId) {
+        const existing = await pool.query('SELECT id FROM library_assets WHERE id = $1 AND type = $2 AND origin_world_id = $3', [placeId, 'place', worldId]);
+        if (!existing.rowCount) {
+          errors.push(`Location "${loc.name}" (${loc.id}) references missing place asset ${placeId}; creating new`);
+          placeId = null;
+        }
+      }
+
+      if (!placeId) {
+        const created = await pool.query(
+          `INSERT INTO library_assets (id, type, name, summary, origin_world_id, creator_user_id, source_type, content_rating, tags, visual_tone, document)
+           VALUES ($1, $2, $3, $4, $5, $6, 'user-created', 'sfw', '{}', 'mist', $7::jsonb)
+           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, summary = EXCLUDED.summary, document = EXCLUDED.document, updated_at = now()
+           RETURNING id`,
+          [randomUUID(), 'place', loc.name, loc.description ?? '', worldId, userId, JSON.stringify(placeDocument)],
+        );
+        placeId = created.rows[0].id;
+        if (loc.libraryAssetId !== placeId) {
+          errors.push(`Location "${loc.name}" (${loc.id}) assigned new place asset ${placeId}`);
+        }
+      } else {
+        await pool.query(
+          `UPDATE library_assets SET name = $1, summary = $2, document = $3::jsonb, updated_at = now()
+           WHERE id = $4`,
+          [loc.name, loc.description ?? '', JSON.stringify(placeDocument), placeId],
+        );
+      }
+
+      if (loc.libraryAssetId !== placeId) {
+        await pool.query(
+          `UPDATE library_assets SET document = jsonb_set(document, '{locations}', (
+            SELECT jsonb_agg(
+              CASE WHEN item->>'id' = $2 THEN jsonb_set(item, '{libraryAssetId}', to_jsonb($3::text)) ELSE item END
+            ) FROM jsonb_array_elements(document->'locations') AS item
+          ) WHERE id = $1`,
+          [worldId, loc.id, placeId],
+        );
+      }
+
+      seenPlaceIds.add(placeId!);
+    } catch (err) {
+      errors.push(`Location "${loc.name}" (${loc.id}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  const existingPlaces = await pool.query('SELECT id FROM library_assets WHERE origin_world_id = $1 AND type = $2', [worldId, 'place']);
+  for (const row of existingPlaces.rows) {
+    if (!seenPlaceIds.has(row.id)) {
+      console.warn(`World ${worldId}: place asset ${row.id} exists but no embedded location references it; retaining (not auto-deleted)`);
+    }
+  }
+
+  await pool.query(
+    `UPDATE library_assets SET dependency_count = (SELECT count(*) FROM library_assets WHERE origin_world_id = $1) WHERE id = $1`,
+    [worldId],
+  );
+
+  if (errors.length) {
+    console.warn(`World ${worldId} location sync warnings:`, errors);
+  }
 }
 
 export function createLibraryRouter(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
@@ -231,6 +334,11 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
          WHERE id=$1 RETURNING *`,
         [request.params.id, nextAsset.name, nextAsset.summary, nextAsset.origin_world_id, nextAsset.content_rating, nextAsset.tags, nextAsset.visual_tone, JSON.stringify(nextAsset.document)],
       );
+
+      if (result.rows[0].type === 'world') {
+        await syncWorldLocations(pool, request.params.id, request.session.userId!, result.rows[0].document ?? {});
+      }
+
       const [author, registry] = await Promise.all([
         pool.query('SELECT display_name, avatar_url FROM users WHERE id = $1', [current.rows[0].creator_user_id]),
         pool.query('SELECT code, classification FROM speculus_catalog_registry WHERE asset_id = $1', [request.params.id]),

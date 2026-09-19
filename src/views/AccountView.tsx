@@ -8,6 +8,7 @@ import { SimulationEngineSetting } from '../components/SimulationEngineSetting';
 import { useI18n } from '../i18n/I18nContext';
 import type { Locale } from '../i18n/translations';
 import { useTheme, type ThemePreference } from '../theme/ThemeContext';
+import { useSEO } from '../hooks/useSEO';
 
 export function AccountView() {
   const { user, loading, updateDisplayName, logout } = useAuth();
@@ -23,6 +24,15 @@ export function AccountView() {
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferMessage, setTransferMessage] = useState('');
   const archiveInput = useRef<HTMLInputElement>(null);
+
+  useSEO({
+    title: 'Your Account | Orbis — Library of Howling Whispers',
+    description: 'Manage your Orbis account, NovelAI integration for Speculus, and account settings.',
+    canonicalPath: '/account',
+    noindex: true,
+    nofollow: true,
+  });
+
   useEffect(() => setDisplayName(user?.displayName ?? ''), [user]);
   useEffect(() => {
     if (!user) return;
