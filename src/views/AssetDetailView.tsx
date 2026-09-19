@@ -32,24 +32,21 @@ export function AssetDetailView() {
     return () => window.removeEventListener('pageshow', resetSimulationLaunch);
   }, []);
 
-  if (loading) return <div className="page"><LoadingState label="Opening the record..." /></div>;
-  if (error || !asset) return <div className="page"><ErrorState retry={retry} /></div>;
-
-  const category = findNavigationItem(asset.type);
-  const Icon = category?.icon;
-  const canEdit = user && asset.canEdit === true;
-  const canonicalPath = `/asset/${asset.id}`;
+  const category = asset ? findNavigationItem(asset.type) : undefined;
+  const canonicalPath = `/asset/${id}`;
+  const recordType = category?.label.toLowerCase() ?? 'library';
 
   useSEO({
-    title: `${asset.name} | ${category?.label} | Orbis — Library of Howling Whispers`,
-    description: asset.summary || `View ${asset.name}, a ${category?.label.toLowerCase()} record in Orbis, the Library of Howling Whispers. NovelAI-integrated worldbuilding and character archive.`,
+    title: asset ? `${asset.name} | ${category?.label} | Orbis — Library of Howling Whispers` : 'Orbis — Library of Howling Whispers',
+    description: asset?.summary || (asset ? `View ${asset.name}, a ${recordType} record in Orbis, the Library of Howling Whispers. NovelAI-integrated worldbuilding and character archive.` : 'Opening an Orbis library record.'),
     canonicalPath,
     ogType: 'article',
-    structuredData: {
+    noindex: !asset,
+    structuredData: asset ? {
       '@context': 'https://schema.org',
       '@type': 'CreativeWork',
       name: asset.name,
-      description: asset.summary || `A ${category?.label.toLowerCase()} record in Orbis.`,
+      description: asset.summary || `A ${recordType} record in Orbis.`,
       url: `https://lib.thehowlingwhispers.com${canonicalPath}`,
       creator: asset.author ? {
         '@type': 'Person',
@@ -68,8 +65,14 @@ export function AssetDetailView() {
         name: 'Orbis',
         url: 'https://lib.thehowlingwhispers.com/',
       },
-    },
+    } : undefined,
   });
+
+  if (loading) return <div className="page"><LoadingState label="Opening the record..." /></div>;
+  if (error || !asset) return <div className="page"><ErrorState retry={retry} /></div>;
+
+  const Icon = category?.icon;
+  const canEdit = user && asset.canEdit === true;
 
   const simulate = async () => {
     if (!user) { navigate('/account'); return; }
