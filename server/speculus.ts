@@ -41,8 +41,10 @@ const asRecord = (value: unknown): Record<string, unknown> => value && typeof va
 const stringValue = (value: unknown) => typeof value === 'string' ? value : '';
 const simulationType = (type: string) => type === 'species' || type === 'society' || type === 'family' || type === 'memory' ? 'other' : type;
 const isStructuredSpeculusPrompt = (prompt: string) => prompt.startsWith('SPECULUS V2 /') || prompt.startsWith('SPECULUS V3 EXPERIMENTAL /');
+const isV2OrV3StructuredPrompt = (prompt: string) => prompt.startsWith('SPECULUS V2 /') || prompt.startsWith('SPECULUS V3 EXPERIMENTAL /');
 
 function withSentenceControl(prompt: string) {
+  if (!isV2OrV3StructuredPrompt(prompt)) return `${prompt}\n${sentenceControl}`;
   const v2ResponseMarker = '\n[IN-WORLD RESPONSE]\n';
   if (prompt.endsWith(v2ResponseMarker)) {
     return `${prompt.slice(0, -v2ResponseMarker.length)}\n${sentenceControl}${v2ResponseMarker}`;
@@ -292,12 +294,27 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
     const requestId = randomUUID();
     response.setHeader('x-request-id', requestId);
     response.setHeader('Cache-Control', 'no-store');
+    let debugRequestId = requestId;
     try {
       const authorization = request.get('authorization') ?? '';
       const grant = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
       if (grant.length < 16) return response.status(401).json({ error: 'A valid Speculus generation grant is required.' });
       const body = generationSchema.parse(request.body);
       const structured = isStructuredSpeculusPrompt(body.prompt);
+      if (structured && body.prompt.startsWith('SPECULUS V3 EXPERIMENTAL /')) {
+        console.warn('Speculus V3 generation request', {
+          requestId: debugRequestId,
+          model: body.model,
+          maxTokens: body.maxTokens,
+          temperature: body.temperature,
+          topK: body.topK,
+          topP: body.topP,
+          stopSequences: body.stopSequences,
+          continueToEndOfSentence: body.continueToEndOfSentence,
+          reroll: body.reroll,
+          promptLength: body.prompt.length,
+        });
+      }
       const result = await pool.query(
         `SELECT g.launch_id, g.asset_id, g.asset_type, g.asset_revision, g.expires_at,
                 p.model, p.token_ciphertext, p.token_iv, p.token_tag
@@ -331,6 +348,10 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
       try {
         let upstream: globalThis.Response;
         try {
+          const finalStop = [...new Set([...(structured ? [] : bridgeStopSequences), ...body.stopSequences])];
+          if (structured && body.prompt.startsWith('SPECULUS V3 EXPERIMENTAL /')) {
+            console.warn('Speculus V3 final stop sequences', { requestId: debugRequestId, structured, finalStop, bridgeStopSequencesAdded: !structured, bodyStopSequences: body.stopSequences });
+          }
           upstream = await fetch('https://text.novelai.net/oa/v1/completions', {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -344,7 +365,7 @@ export function createSpeculusGenerationRouter(config: AppConfig, pool: Database
               frequency_penalty: body.frequencyPenalty,
               presence_penalty: body.presencePenalty,
               stream: false,
-              stop: [...new Set([...(structured ? [] : bridgeStopSequences), ...body.stopSequences])],
+              stop: finalStop,
               ...(body.reroll ? { seed: randomInt(1, 2_147_483_647) } : {}),
             }),
             signal: controller.signal,

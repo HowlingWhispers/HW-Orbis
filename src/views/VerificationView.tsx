@@ -2,12 +2,22 @@ import { BadgeCheck, LogIn, ShieldCheck, UserRoundCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
+import { useSEO } from '../hooks/useSEO';
 
 const fallbackDiscordInviteUrl = (import.meta.env.VITE_DISCORD_INVITE_URL ?? '').trim();
 
 export function VerificationView() {
   const { user } = useAuth();
   const [discordInviteUrl, setDiscordInviteUrl] = useState(fallbackDiscordInviteUrl);
+
+  useSEO({
+    title: 'Age Verification Required | Orbis — Library of Howling Whispers',
+    description: 'Adult-rated Orbis records require age verification through The Howling Whispers Discord community.',
+    canonicalPath: '/verification',
+    noindex: true,
+    nofollow: true,
+  });
+
   useEffect(() => {
     fetch('/api/config/public', { headers: { Accept: 'application/json' } })
       .then((response) => response.ok ? response.json() : Promise.reject())

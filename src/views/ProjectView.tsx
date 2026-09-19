@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { projects, type ProjectDefinition, type ProjectPhase } from '../data/projects';
 import { useI18n } from '../i18n/I18nContext';
+import { useSEO } from '../hooks/useSEO';
 
 const phaseOrder: ProjectPhase[] = ['PLANNING', 'FOUNDATION', 'CORE', 'TESTING', 'CONCEPT LIVE'];
 
@@ -56,6 +57,32 @@ export function ProjectView() {
   const { slug } = useParams();
   const project = slug === 'speculus' || slug === 'fabula' ? projects[slug] : null;
   const { t } = useI18n();
+  const canonicalPath = `/projects/${slug}`;
+
+  useSEO({
+    title: project ? `${project.name} | Howling Whispers Development Roadmap | Orbis` : 'Project Not Found | Orbis',
+    description: project
+      ? `${project.summary} Track the development progress of ${project.name}, part of the Howling Whispers ecosystem with NovelAI integration.`
+      : 'The requested project roadmap could not be found.',
+    canonicalPath,
+    noindex: !project,
+    structuredData: project ? {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: project.name,
+      description: project.summary,
+      url: `https://lib.thehowlingwhispers.com${canonicalPath}`,
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'Web',
+      publisher: {
+        '@type': 'Organization',
+        name: 'Howling Whispers',
+        url: 'https://thehowlingwhispers.com/',
+      },
+      featureList: project.expectedFeatures,
+      datePublished: project.lastUpdated,
+    } : undefined,
+  });
 
   if (!project) {
     return (

@@ -60,6 +60,8 @@
 .forge-entity-card { padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
 .forge-entity-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
 .forge-entity-card > header strong { display: block; margin-top: 2px; font-family: var(--serif); font-size: 20px; }
+.forge-sync-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; border-radius: 999px; background: var(--moon); color: var(--bg-deep); box-shadow: 0 0 8px var(--moon); }
+.forge-sync-badge.pending { background: var(--faint); color: var(--muted); box-shadow: none; }
 .forge-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .forge-mini-action { min-height: 30px; padding: 0 8px; font-size: 10px; }
 .forge-card-copy { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }

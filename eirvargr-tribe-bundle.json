@@ -1,0 +1,550 @@
+{
+  "format": "howling_whispers_private_place_bundle",
+  "version": "1.0",
+  "import": {
+    "owner_binding": {
+      "type": "discord_user_id",
+      "discord_user_id": "1544473372073791602",
+      "require_authenticated_match": true
+    },
+    "visibility": "private",
+    "discoverable": false,
+    "publishable": false,
+    "shared": false,
+    "allow_public_clone": false,
+    "allow_public_listing": false
+  },
+  "place": {
+    "name": "Eirvargr's Tribe",
+    "type": "tribal_community_village",
+    "scope": "single_settlement",
+    "description": "A small, centralized tribal community where daily life, kinship, work, relationships, traditions, survival, conflict, and intimacy are simulated at close social range. The settlement is the primary playable space rather than part of a broad explorable world.",
+    "setting": {
+      "environment": "secluded forest valley",
+      "layout": "walkable communal village",
+      "population_target": 80,
+      "population_range": {
+        "min": 60,
+        "max": 120
+      },
+      "core_locations": [
+        "central communal fire",
+        "longhouse",
+        "communal food hall",
+        "healer's hut",
+        "workshops",
+        "bathhouse",
+        "sleeping lodges",
+        "family dwellings",
+        "storage buildings",
+        "animal pens",
+        "river access",
+        "hunting grounds",
+        "gathering grounds",
+        "ceremonial grounds"
+      ]
+    },
+    "society": {
+      "structure": "communal_tribal",
+      "economy": "shared_resources_with_personal_possessions",
+      "leadership": "local_elders_and_role_holders",
+      "social_density": "high",
+      "outsiders": "uncommon_but_possible",
+      "principles": [
+        "Residents know one another and persistent social history matters.",
+        "Households, kinship, friendship, rivalry, obligation and reputation are persistent.",
+        "Food, shelter and village maintenance depend on communal contribution.",
+        "NPCs have lives, relationships and responsibilities independent of Eirvargr.",
+        "The settlement continues to change when Eirvargr is not directly involved."
+      ]
+    },
+    "simulation": {
+      "persistent_time": true,
+      "persistent_population": true,
+      "persistent_relationships": true,
+      "persistent_households": true,
+      "persistent_kinship": true,
+      "persistent_resources": true,
+      "persistent_injuries": true,
+      "persistent_births_deaths": true,
+      "autonomous_npcs": true,
+      "offscreen_activity": true
+    },
+    "species_system": {
+      "human_age_is_not_universal": true,
+      "derive_age_from_birth_timestamp": true,
+      "development_tracks": [
+        "chronological_age",
+        "reproductive_maturity",
+        "physical_maturity",
+        "motor_development",
+        "cognitive_development",
+        "emotional_development",
+        "social_development",
+        "social_adulthood",
+        "life_experience",
+        "independent_agency"
+      ],
+      "rules": [
+        "Species may mature and age at radically different rates.",
+        "Reproductive maturity does not automatically imply cognitive, emotional, social or behavioral maturity.",
+        "Chronological age must never be converted into a fake human-equivalent age.",
+        "Individual development may vary from the species baseline."
+      ]
+    },
+    "relationship_system": {
+      "persistent_dimensions": [
+        "familiarity",
+        "trust",
+        "affection",
+        "attraction",
+        "romantic_interest",
+        "sexual_interest",
+        "loyalty",
+        "jealousy",
+        "dependency",
+        "resentment",
+        "fear"
+      ],
+      "rules": [
+        "Attraction is not consent.",
+        "Trust is not attraction.",
+        "Romantic interest and sexual interest are independent.",
+        "Relationships may change through remembered events and autonomous NPC decisions."
+      ],
+      "polyamory": {
+        "enabled": true,
+        "default": true,
+        "supports_multiple_simultaneous_partners": true,
+        "supports_household_relationship_networks": true,
+        "supports_pair_bonds_inside_networks": true,
+        "supports_custom_boundaries": true,
+        "supports_jealousy": true,
+        "supports_compersion": true
+      }
+    },
+    "adult_content": {
+      "enabled": true,
+      "world_classification": "adult",
+      "eligibility": {
+        "requires_unambiguous_adult_status": true,
+        "requires_independent_agency": true,
+        "requires_decision_capacity": true,
+        "requires_non_childlike_presentation": true,
+        "reproductive_maturity_alone_is_insufficient": true
+      },
+      "consent_model": {
+        "explicit_choice_required": true,
+        "withdrawal_respected": true,
+        "npc_autonomy_required": true
+      }
+    },
+    "player": {
+      "default_name": "Eirvargr",
+      "special_status": false,
+      "starting_role": "resident",
+      "world_revolves_around_player": false
+    },
+    "generation_rules": {
+      "do_not_expand_into_full_world_without_owner_action": true,
+      "prefer_existing_residents_over_disposable_npcs": true,
+      "preserve_named_characters": true,
+      "preserve_kinship": true,
+      "preserve_relationship_history": true,
+      "preserve_species_development_rules": true,
+      "no_publication_without_owner_action": true,
+      "preserve_adult_culture": true,
+      "keep_minor_spaces_nonsexual": true,
+      "preserve_polyamorous_culture": true,
+      "do_not_create_artificial_adult_districts": true,
+      "keep_explicit_sex_out_of_childrens_direct_view": true,
+      "preserve_universal_nudist_culture": true,
+      "do_not_generate_normal_clothing": true,
+      "do_not_treat_nudity_as_automatic_sexual_interest": true
+    },
+    "population": {
+      "target": 80,
+      "mixed_kin_village": true,
+      "dominant_group": "canine_kins",
+      "demographic_weights": {
+        "vargkin": 0.36,
+        "houndkin": 0.22,
+        "foxkin": 0.18,
+        "jackalkin": 0.1,
+        "coyotekin": 0.08,
+        "other_adult_species": 0.06
+      }
+    },
+    "species": {
+      "vargkin": {
+        "display_name": "Vargkin",
+        "inspiration": "wolf-like canine kin",
+        "sapient": true,
+        "common_forms": [
+          "anthropomorphic",
+          "feral-bodied sapient"
+        ],
+        "expected_lifespan_years": [
+          12,
+          16
+        ],
+        "development": {
+          "reproductive_maturity_months": [
+            10,
+            14
+          ],
+          "physical_maturity_months": [
+            14,
+            20
+          ],
+          "motor_maturity_months": [
+            16,
+            24
+          ],
+          "cognitive_maturity_months": [
+            24,
+            36
+          ],
+          "social_maturity_months": [
+            30,
+            42
+          ]
+        },
+        "typical_traits": [
+          "strong pack awareness",
+          "high sensitivity to social hierarchy",
+          "protective of household and kin",
+          "physically expressive body language",
+          "strong scent-based recognition"
+        ],
+        "notes": [
+          "Biological maturity, behavioral maturity, and social adulthood are tracked separately.",
+          "Individuals may develop faster or slower than the species baseline."
+        ]
+      },
+      "houndkin": {
+        "display_name": "Houndkin",
+        "inspiration": "domestic-dog-like canine kin",
+        "sapient": true,
+        "common_forms": [
+          "anthropomorphic",
+          "feral-bodied sapient"
+        ],
+        "expected_lifespan_years": [
+          11,
+          15
+        ],
+        "development": {
+          "reproductive_maturity_months": [
+            8,
+            12
+          ],
+          "physical_maturity_months": [
+            12,
+            18
+          ],
+          "motor_maturity_months": [
+            14,
+            20
+          ],
+          "cognitive_maturity_months": [
+            22,
+            34
+          ],
+          "social_maturity_months": [
+            26,
+            38
+          ]
+        },
+        "typical_traits": [
+          "highly social",
+          "strong household attachment",
+          "wide temperamental variation",
+          "quick emotional expression",
+          "strong cooperative instincts"
+        ],
+        "notes": [
+          "Breed-like body variation may exist without defining intelligence or social rank.",
+          "Shorter biological development does not erase inexperience or immature behavior."
+        ]
+      },
+      "foxkin": {
+        "display_name": "Foxkin",
+        "inspiration": "fox-like canine kin",
+        "sapient": true,
+        "common_forms": [
+          "anthropomorphic",
+          "feral-bodied sapient"
+        ],
+        "expected_lifespan_years": [
+          10,
+          14
+        ],
+        "development": {
+          "reproductive_maturity_months": [
+            9,
+            12
+          ],
+          "physical_maturity_months": [
+            12,
+            16
+          ],
+          "motor_maturity_months": [
+            12,
+            18
+          ],
+          "cognitive_maturity_months": [
+            20,
+            30
+          ],
+          "social_maturity_months": [
+            24,
+            34
+          ]
+        },
+        "typical_traits": [
+          "curious",
+          "observant",
+          "more private than most village canids",
+          "nimble",
+          "strong preference for personal sleeping spaces"
+        ],
+        "notes": [
+          "Foxkin are not automatically solitary; village culture can override species tendencies."
+        ]
+      },
+      "jackalkin": {
+        "display_name": "Jackalkin",
+        "inspiration": "jackal-like canine kin",
+        "sapient": true,
+        "common_forms": [
+          "anthropomorphic",
+          "feral-bodied sapient"
+        ],
+        "expected_lifespan_years": [
+          11,
+          15
+        ],
+        "development": {
+          "reproductive_maturity_months": [
+            9,
+            13
+          ],
+          "physical_maturity_months": [
+            13,
+            18
+          ],
+          "motor_maturity_months": [
+            14,
+            20
+          ],
+          "cognitive_maturity_months": [
+            22,
+            32
+          ],
+          "social_maturity_months": [
+            26,
+            36
+          ]
+        },
+        "typical_traits": [
+          "adaptable",
+          "socially alert",
+          "resource-conscious",
+          "strong pair and household bonds",
+          "comfortable operating at the edge of village territory"
+        ]
+      },
+      "coyotekin": {
+        "display_name": "Coyotekin",
+        "inspiration": "coyote-like canine kin",
+        "sapient": true,
+        "common_forms": [
+          "anthropomorphic",
+          "feral-bodied sapient"
+        ],
+        "expected_lifespan_years": [
+          10,
+          14
+        ],
+        "development": {
+          "reproductive_maturity_months": [
+            10,
+            14
+          ],
+          "physical_maturity_months": [
+            14,
+            19
+          ],
+          "motor_maturity_months": [
+            14,
+            20
+          ],
+          "cognitive_maturity_months": [
+            22,
+            32
+          ],
+          "social_maturity_months": [
+            26,
+            36
+          ]
+        },
+        "typical_traits": [
+          "resourceful",
+          "independent-minded",
+          "playful",
+          "territorially aware",
+          "comfortable moving between village and wilderness"
+        ]
+      }
+    },
+    "kin_rules": {
+      "all_canine_kins_are_sapient": true,
+      "forms_do_not_define_personhood": true,
+      "anthro_and_feral_bodied_members_can_belong_to_same_kin": true,
+      "species_profiles_are_defaults_not_personality_templates": true,
+      "developmental_axes_are_independent": true,
+      "chronological_age_is_not_a_human_equivalent_age": true
+    },
+    "village_roles_by_kin": {
+      "rule": "No role is species-locked.",
+      "common_tendencies": {
+        "vargkin": [
+          "hunters",
+          "guards",
+          "woodcutters",
+          "scouts"
+        ],
+        "houndkin": [
+          "builders",
+          "healers",
+          "cooks",
+          "caretakers",
+          "guards"
+        ],
+        "foxkin": [
+          "foragers",
+          "crafters",
+          "messengers",
+          "herbalists"
+        ],
+        "jackalkin": [
+          "scouts",
+          "traders",
+          "foragers",
+          "night_watch"
+        ],
+        "coyotekin": [
+          "hunters",
+          "trailfinders",
+          "salvagers",
+          "messengers"
+        ]
+      }
+    },
+    "settlement_customization": {
+      "architecture_supports_multiple_body_plans": true,
+      "communal_spaces_support_anthro_and_feral_bodied_residents": true,
+      "sleeping_spaces_vary_by_household": true,
+      "tools_and_furniture_may_have_size_and_form_variants": true,
+      "clothing_storage_not_required": true,
+      "architecture_does_not_assume_clothing_or_modesty": true
+    },
+    "adult_culture": {
+      "sexual_activity_level": "high",
+      "cultural_attitude": "sex_positive",
+      "shame_norm": "very_low",
+      "relationship_norm": "polyamorous",
+      "polyamory_is_default": true,
+      "monogamy_is_possible_but_uncommon": true,
+      "adult_intimacy_is_socially_normal": true,
+      "nudity_is_normalized": true,
+      "public_affection_is_common": true,
+      "flirtation_is_common": true,
+      "description": "The tribe is a close-knit, highly sex-positive and predominantly polyamorous community. Adult nudity, affection, flirtation, courtship, cuddling, kissing, shared sleeping arrangements, and openly acknowledged multi-partner relationships are ordinary parts of village life and carry little shame.",
+      "mixed_age_communal_norms": {
+        "village_is_not_zoned_by_age": true,
+        "children_and_adults_share_communal_spaces": true,
+        "nonsexual_nudity_is_normal_in_mixed_age_spaces": true,
+        "affection_is_normal_in_mixed_age_spaces": true,
+        "children_are_not_treated_as_participants_in_adult_sexuality": true,
+        "explicit_sexual_activity_in_direct_view_of_children": false,
+        "social_privacy_model": "Because the village is small and communal, privacy is informal rather than architectural. Adults do not need separate districts, but when intimacy becomes explicitly sexual they naturally move to a hut, sleeping space, screened area, secluded edge of camp, or another place out of children's direct view."
+      },
+      "polyamory": {
+        "default_social_model": true,
+        "exclusive_pair_bonds_allowed": true,
+        "relationship_networks": true,
+        "multiple_partners_common": true,
+        "jealousy_can_exist": true,
+        "agreements_are_individual": true,
+        "consent_and_boundaries_are_required": true,
+        "relationship_forms": [
+          "multi-partner households",
+          "bonded pairs within larger networks",
+          "casual partners",
+          "romantic partners",
+          "sexual partners",
+          "nonsexual life partners",
+          "co-parenting groups"
+        ]
+      },
+      "social_rules": [
+        "Polyamory is culturally normal and carries no stigma.",
+        "A person may have multiple romantic and sexual partners at the same time.",
+        "Relationships can overlap without automatically creating betrayal or scandal.",
+        "Jealousy and conflict may still occur as personal emotions.",
+        "Nudity is not automatically sexual.",
+        "Affection and flirtation are not treated as inappropriate simply because other villagers are nearby.",
+        "Explicit sexual activity remains between consenting adult participants and is moved out of children's direct view.",
+        "Children are part of ordinary village life but are never participants in adult sexual activity."
+      ],
+      "nudity_is_separate_from_sexual_intent": true
+    },
+    "clothing_and_nudity": {
+      "nudity_is_universal": true,
+      "nudity_is_default": true,
+      "nudity_is_nonsexual_by_default": true,
+      "clothing_exists_as_normal_culture": false,
+      "clothing_is_known_to_tribe": false,
+      "modesty_clothing_norms": false,
+      "body_concealment_is_socially_required": false,
+      "description": "The tribe is entirely nudist. Clothing is not part of normal life, tradition, status, modesty, or daily culture, and most members have no practical concept of clothing as something people are expected to wear. Fur-bearing kins remain naturally furred, while less-furred species are equally unclothed. Nudity has no automatic sexual meaning.",
+      "exceptions": {
+        "protective_gear": true,
+        "medical_wraps": true,
+        "tool_harnesses": true,
+        "carrying_straps": true,
+        "ceremonial_body_adornment": true,
+        "weather_protection_when_required": true,
+        "note": "Functional equipment may cover parts of the body when necessary, but it is not treated as clothing and is removed when its practical purpose ends."
+      },
+      "adornment": {
+        "allowed": true,
+        "examples": [
+          "beads",
+          "necklaces",
+          "bracelets",
+          "ear ornaments",
+          "feathers",
+          "paint",
+          "braided fur",
+          "tattoos",
+          "scarification",
+          "flowers",
+          "cords",
+          "tokens of kinship or relationship"
+        ],
+        "used_for_modesty": false
+      },
+      "social_rules": [
+        "No resident is expected to cover their body for modesty.",
+        "Nudity is ordinary in homes, communal spaces, work areas, bathing areas, ceremonies, and travel within the tribe.",
+        "Seeing another person's body is not interpreted as sexual invitation.",
+        "Body adornment can communicate identity, kinship, achievements, relationships, mourning, celebration, or personal taste.",
+        "Functional protection is worn only when an activity or environment requires it.",
+        "Visitors who wear clothing may be treated as culturally unusual rather than more modest."
+      ]
+    }
+  }
+}

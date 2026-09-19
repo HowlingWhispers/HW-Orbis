@@ -114,10 +114,10 @@ function LocationEditor({ value, memories, societies, onChange }: { value: JsonV
   const locations = asObjects(value);
   const [mode, setMode] = useState<EntityMode>('new');
   const [editingId, setEditingId] = useState('');
-  const [form, setForm] = useState({ name: '', kind: 'region', parentLocationId: '', description: '' });
+  const [form, setForm] = useState({ name: '', kind: 'region', parentLocationId: '', description: '', libraryAssetId: '' });
   const names = new Map(locations.map((item) => [idOf(item), nameOf(item)]));
 
-  const reset = () => { setMode('new'); setEditingId(''); setForm({ name: '', kind: 'region', parentLocationId: '', description: '' }); };
+  const reset = () => { setMode('new'); setEditingId(''); setForm({ name: '', kind: 'region', parentLocationId: '', description: '', libraryAssetId: '' }); };
   const start = (item: JsonObject, nextMode: EntityMode) => {
     setMode(nextMode);
     setEditingId(nextMode === 'edit' ? idOf(item) : '');
@@ -126,6 +126,7 @@ function LocationEditor({ value, memories, societies, onChange }: { value: JsonV
       kind: nextMode === 'child' ? 'building' : asString(item.kind) || 'region',
       parentLocationId: nextMode === 'child' ? idOf(item) : asString(item.parentLocationId),
       description: nextMode === 'child' ? '' : asString(item.description),
+      libraryAssetId: nextMode === 'duplicate' ? '' : asString(item.libraryAssetId),
     });
   };
   const save = () => {
@@ -136,6 +137,7 @@ function LocationEditor({ value, memories, societies, onChange }: { value: JsonV
     const existing = locations.find((item) => idOf(item) === id);
     const next: JsonObject = { ...(existing ?? {}), id, name: form.name.trim(), kind: form.kind, description: form.description };
     if (parentId) next.parentLocationId = parentId; else delete next.parentLocationId;
+    if (form.libraryAssetId) next.libraryAssetId = form.libraryAssetId; else delete next.libraryAssetId;
     onChange(existing ? locations.map((item) => idOf(item) === id ? next : item) : [...locations, next]);
     reset();
   };
@@ -163,7 +165,7 @@ function LocationEditor({ value, memories, societies, onChange }: { value: JsonV
       <TextField label="Description" rows={3} value={form.description} onChange={(description) => setForm({ ...form, description })} />
       <button type="button" className="button button--primary" onClick={save}><Plus size={15} /> {mode === 'edit' ? 'Save location' : 'Add location'}</button>
     </div>
-    <div className="forge-entity-stack">{locations.length === 0 ? <p className="forge-empty">No locations yet.</p> : locations.map((item) => <article className="forge-entity-card" key={idOf(item)}><header><div><span className="eyebrow">{nice(asString(item.kind) || 'place')}{asString(item.parentLocationId) ? ` · inside ${names.get(asString(item.parentLocationId)) ?? 'Unknown'}` : ''}</span><strong>{nameOf(item)}</strong></div><EntityActions onEdit={() => start(item, 'edit')} onDuplicate={() => start(item, 'duplicate')} onDelete={() => remove(item)} extra={[{ label: 'Add child', action: () => start(item, 'child') }, { label: 'Move', action: () => move(item) }]} /></header><p className="forge-card-copy">{asString(item.description) || 'No description.'}</p></article>)}</div>
+    <div className="forge-entity-stack">{locations.length === 0 ? <p className="forge-empty">No locations yet.</p> : locations.map((item) => <article className="forge-entity-card" key={idOf(item)}><header><div><span className="eyebrow">{nice(asString(item.kind) || 'place')}{asString(item.parentLocationId) ? ` · inside ${names.get(asString(item.parentLocationId)) ?? 'Unknown'}` : ''}</span><strong>{nameOf(item)}</strong>{asString(item.libraryAssetId) ? <span className="forge-sync-badge" title="Linked to library place asset">✓ linked</span> : <span className="forge-sync-badge pending" title="Will be linked on next world save">pending</span>}</div><EntityActions onEdit={() => start(item, 'edit')} onDuplicate={() => start(item, 'duplicate')} onDelete={() => remove(item)} extra={[{ label: 'Add child', action: () => start(item, 'child') }, { label: 'Move', action: () => move(item) }]} /></header><p className="forge-card-copy">{asString(item.description) || 'No description.'}</p></article>)}</div>
   </>;
 }
 

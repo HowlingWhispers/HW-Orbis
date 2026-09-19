@@ -6,6 +6,7 @@ import { AssetCard } from '../components/AssetCard';
 import { ErrorState, LoadingState } from '../components/StatePanel';
 import { useLibraryData } from '../hooks/useLibraryData';
 import { useI18n } from '../i18n/I18nContext';
+import { useSEO } from '../hooks/useSEO';
 
 const germanNavigation: Record<string, { label: string; description: string }> = {
   world: { label: 'Welten', description: 'Vollständig erstellte Realitäten und ihr Kanon.' },
@@ -24,6 +25,37 @@ export function HomeView() {
   const { locale } = useI18n();
   const de = locale === 'de';
   const bannerSrc = de ? '/assets/orbis-banner-de.webp' : '/assets/orbis-banner.webp';
+
+  useSEO({
+    title: de
+      ? 'Orbis | Die Bibliothek von Howling Whispers — NovelAI-Integration für KI-Rollenspiel & Weltenbau'
+      : 'Orbis | The Library of Howling Whispers — NovelAI-Integrated Worldbuilding & Character Archive',
+    description: de
+      ? 'Orbis ist die Bibliothek von Howling Whispers — ein Weltenbau- und Charakterarchiv mit NovelAI-Integration für KI-Rollenspiel, Charaktersimulation und interaktive Fiktion. Durchstöbere Welten, Charaktere, Orte und mehr.'
+      : 'Orbis is the Library of Howling Whispers — a worldbuilding and character archive with NovelAI integration for AI roleplay, character simulation, and interactive fiction. Browse worlds, characters, places, and more.',
+    canonicalPath: '/',
+    ogImage: bannerSrc,
+    structuredData: {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: 'Orbis',
+      alternateName: 'The Library of Howling Whispers',
+      url: 'https://lib.thehowlingwhispers.com/',
+      description: de
+        ? 'Ein Weltenbau- und Charakterarchiv mit NovelAI-Integration für KI-Rollenspiel, Charaktersimulation und interaktive Fiktion.'
+        : 'A worldbuilding and character archive with NovelAI integration for AI roleplay, character simulation, and interactive fiction.',
+      publisher: {
+        '@type': 'Organization',
+        name: 'Howling Whispers',
+        url: 'https://thehowlingwhispers.com/',
+      },
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: 'https://lib.thehowlingwhispers.com/all?search={search_term_string}',
+        'query-input': 'required name=search_term_string',
+      },
+    },
+  });
 
   return (
     <div className="page home-page">

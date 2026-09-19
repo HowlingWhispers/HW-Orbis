@@ -1,0 +1,31 @@
+# Orbis - The Library of Howling Whispers
+# Canonical: https://lib.thehowlingwhispers.com
+
+User-agent: *
+Allow: /
+
+# Public content that should be indexed
+Allow: /$
+Allow: /all
+Allow: /library/
+Allow: /asset/
+Allow: /projects/
+
+# Private/admin/API routes - do not crawl
+Disallow: /account
+Disallow: /verification
+Disallow: /admin
+Disallow: /api/
+Disallow: /auth/
+Disallow: /asset/*/edit
+Disallow: /asset/*/saves
+Disallow: /projects/*/edit
+Disallow: /settings
+Disallow: /profile
+Disallow: /search?
+Disallow: *?search=
+Disallow: *?source=
+Disallow: *?sort=
+
+# Sitemap
+Sitemap: https://lib.thehowlingwhispers.com/sitemap.xml
