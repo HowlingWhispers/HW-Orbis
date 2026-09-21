@@ -35,7 +35,7 @@
 
 .project-eta__name {
   color: var(--amber);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: .13em;
   text-transform: uppercase;
@@ -53,7 +53,7 @@
 .project-eta small {
   grid-column: 1 / -1;
   color: var(--faint);
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: .08em;
   white-space: nowrap;
