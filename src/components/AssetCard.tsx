@@ -1,4 +1,4 @@
-import { Archive, ArrowUpRight, Boxes, MapPin, MoreHorizontal, Pin, UserRound } from 'lucide-react';
+import { Archive, ArrowUpRight, Boxes, MapPin, Pin, UserRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { LibraryAsset } from '../types/library';
 import { findNavigationItem } from '../app/library-nav';
@@ -28,7 +28,6 @@ export function AssetCard({ asset, featured = false }: { asset: LibraryAsset; fe
       <div className="asset-card__body">
         <div className="asset-card__title-row">
           <div><span className="asset-card__source">{asset.restricted ? 'Protected record' : sourceLabels[asset.sourceType]}</span><h3><Link to={target}>{asset.name}</Link></h3></div>
-          {!asset.restricted && <button className="icon-button" aria-label={`More actions for ${asset.name}`}><MoreHorizontal size={19} /></button>}
         </div>
         <p>{asset.summary}</p>
         <div className="asset-card__meta">
