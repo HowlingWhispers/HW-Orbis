@@ -11,7 +11,7 @@ Before changing a project, use the current repository under the `HowlingWhispers
 - `HowlingWhispers/HW-Orbis` - active Orbis application and API. Canonical branch: `main`.
 - `HowlingWhispers/HW-Speculus` - active Speculus simulator/runtime. Canonical branch: `main`.
 - `HowlingWhispers/HW-Fabula` - Fabula planning/future implementation home. Canonical branch: `main`.
-- `HowlingWhispers/HW-Studium` - placeholder repository. No implemented system is established by the repository yet.
+- `HowlingWhispers/HW-Studium` - active research and world-development analysis service. Receives sanitized Speculus/Fabula research bundles, prepares evidence-backed findings and proposals, and returns owner-reviewed development work toward Orbis without directly writing canon.
 - `HowlingWhispers/HW-Mens` - private placeholder repository. No implemented system is established by the repository yet.
 - `HowlingWhispers/HW-Library` - historical predecessor of Orbis. Do not start new Orbis work here.
 
