@@ -2,6 +2,7 @@ import { Archive, ArrowLeft, Boxes, Clock3, Download, MapPin, Pencil, Sparkles, 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
+import type { DeleteImpact } from '../api/contracts';
 import { downloadRecordArchive } from '../api/archive-transfer';
 import { useAuth } from '../auth/AuthContext';
 import { findNavigationItem } from '../app/library-nav';
@@ -19,6 +20,8 @@ export function AssetDetailView() {
   const [launchError, setLaunchError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpact | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const { data: asset, error, loading, retry } = useLibraryData((signal) => libraryApi.getAsset(id, signal), [id]);
@@ -86,38 +89,33 @@ export function AssetDetailView() {
     }
   };
 
-  const deleteWorld = async () => {
+  const reviewDeleteWorld = async () => {
     if (!canEdit || asset.type !== 'world' || deleting) return;
     setDeleting(true);
     setDeleteError('');
     try {
       const impact = await libraryApi.getDeleteImpact(asset.id);
-      if (impact.totalChildren === 0) {
-        if (!window.confirm(`Delete the empty world “${asset.name}”? This cannot be undone.`)) { setDeleting(false); return; }
-        const typed = window.prompt(`Type the world name exactly to confirm deletion:\n\n${asset.name}`);
-        if (typed !== asset.name) { setDeleting(false); return; }
-        await libraryApi.deleteAsset(asset.id, { confirmName: asset.name });
-        navigate('/library/world', { replace: true });
-        return;
-      }
+      setDeleteImpact(impact);
+      setDeleteConfirmation('');
+    } catch (reason) {
+      setDeleteError(reason instanceof Error ? reason.message : 'Orbis could not inspect this world for deletion.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
-      const breakdown = Object.entries(impact.byType).map(([type, count]) => `${count} ${type}${count === 1 ? '' : 's'}`).join(', ');
-      if (!window.confirm(`1/10 — Permanently delete “${asset.name}” and everything authored inside it?`)) { setDeleting(false); return; }
-      if (!window.confirm(`2/10 — This will delete ${impact.totalChildren} child records:\n\n${breakdown}`)) { setDeleting(false); return; }
-      if (!window.confirm('3/10 — Deleted SPC records will be retired from the Speculus catalogue and their designations will not be reused. Continue?')) { setDeleting(false); return; }
-      if (!window.confirm('4/10 — Have you exported or backed up anything you may want later? Cancel now if you need a backup first.')) { setDeleting(false); return; }
-      if (!window.confirm('5/10 — References from records outside this world may become invalid after deletion. Continue?')) { setDeleting(false); return; }
-      const childrenPhrase = window.prompt('6/10 — Type DELETE CHILDREN to confirm that the child records should be destroyed too.');
-      if (childrenPhrase !== 'DELETE CHILDREN') { setDeleting(false); return; }
-      if (!window.confirm(`7/10 — Final inventory: 1 world + ${impact.totalChildren} child records will be permanently deleted.`)) { setDeleting(false); return; }
-      const typedName = window.prompt(`8/10 — Type the world name exactly:\n\n${asset.name}`);
-      if (typedName !== asset.name) { setDeleting(false); return; }
-      const finalPhrase = `DELETE ${asset.name}`;
-      const typedPhrase = window.prompt(`9/10 — Type this exact phrase:\n\n${finalPhrase}`);
-      if (typedPhrase !== finalPhrase) { setDeleting(false); return; }
-      if (!window.confirm(`10/10 — LAST CHANCE. Permanently delete “${asset.name}” and ${impact.totalChildren} child records now?`)) { setDeleting(false); return; }
+  const deleteWorld = async () => {
+    if (!canEdit || asset.type !== 'world' || deleting || !deleteImpact) return;
+    const expected = `DELETE ${asset.name}`;
+    if (deleteConfirmation !== expected) return;
 
-      await libraryApi.deleteAsset(asset.id, { cascade: true, confirmName: asset.name });
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await libraryApi.deleteAsset(asset.id, {
+        cascade: deleteImpact.totalChildren > 0,
+        confirmName: asset.name,
+      });
       navigate('/library/world', { replace: true });
     } catch (reason) {
       setDeleteError(reason instanceof Error ? reason.message : 'Orbis could not delete this world.');
@@ -150,11 +148,30 @@ export function AssetDetailView() {
             <button className="button button--secondary" disabled={launching} onClick={() => void simulate()}><Sparkles size={16} /> {launching ? 'Packaging...' : 'Simulate'}</button>
             {asset.type === 'world' && <Link className="button button--secondary" to={`/asset/${asset.id}/saves`}><Archive size={16} /> Save Archive</Link>}
             {canEdit && <button className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : asset.type === 'world' ? 'Download world' : 'Download SPC'}</button>}
-            {canEdit && asset.type === 'world' && <button className="button button--danger" disabled={deleting} onClick={() => void deleteWorld()}><Trash2 size={16} /> {deleting ? 'Deleting...' : 'Delete World'}</button>}
+            {canEdit && asset.type === 'world' && <button className="button button--danger" disabled={deleting} onClick={() => void reviewDeleteWorld()}><Trash2 size={16} /> {deleting ? 'Checking...' : 'Delete World'}</button>}
           </div>
           {launchError && <p className="form-message" role="alert">{launchError} {launchError.includes('Account settings') && <Link to="/account">Open Account</Link>}</p>}
           {deleteError && <p className="form-message" role="alert">{deleteError}</p>}
           {downloadError && <p className="form-message" role="alert">{downloadError}</p>}
+          {deleteImpact && asset.type === 'world' && <section className="world-delete-review" role="dialog" aria-modal="true" aria-labelledby="world-delete-title">
+            <header>
+              <div><span className="eyebrow">Permanent action</span><h2 id="world-delete-title">Delete {asset.name}</h2></div>
+              <button type="button" className="button button--secondary" onClick={() => { setDeleteImpact(null); setDeleteConfirmation(''); }}>Cancel</button>
+            </header>
+            <p>This permanently removes the world{deleteImpact.totalChildren ? ` and ${deleteImpact.totalChildren} authored child record${deleteImpact.totalChildren === 1 ? '' : 's'}` : ''}. Deleted SPC catalogue designations are retired and external references may become invalid.</p>
+            {deleteImpact.totalChildren > 0 && <div className="world-delete-review__impact">
+              {Object.entries(deleteImpact.byType).filter(([, count]) => count > 0).map(([type, count]) => <span key={type}><strong>{count}</strong> {type}{count === 1 ? '' : 's'}</span>)}
+            </div>}
+            <div className="world-delete-review__backup">
+              <strong>Back up first if you may need this world again.</strong>
+              <button type="button" className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : 'Download world backup'}</button>
+            </div>
+            <label className="world-delete-review__confirm">
+              <span>Type <strong>DELETE {asset.name}</strong> to confirm.</span>
+              <input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
+            </label>
+            <button type="button" className="button button--danger" disabled={deleting || deleteConfirmation !== `DELETE ${asset.name}`} onClick={() => void deleteWorld()}><Trash2 size={16} /> {deleting ? 'Deleting permanently...' : 'Permanently delete world'}</button>
+          </section>}
         </div>
       </section>
       <div className="detail-layout">
