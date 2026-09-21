@@ -82,8 +82,8 @@ export function CollectionView({ all = false }: { all?: boolean }) {
       ? `${title} | Orbis — Bibliothek von Howling Whispers`
       : `${title} | Orbis — Library of Howling Whispers`,
     description: de
-      ? `Durchsuche ${all ? 'das gesamte Archiv' : title.toLowerCase()} in Orbis, der Bibliothek von Howling Whispers. NovelAI-Integration für KI-Rollenspiel & Weltenbau.`
-      : `Browse ${all ? 'the complete archive' : title.toLowerCase()} in Orbis, the Library of Howling Whispers. NovelAI integration for AI roleplay & worldbuilding.`,
+      ? `Durchsuche ${all ? 'das gesamte Archiv' : title.toLowerCase()} in Orbis, der Bibliothek von Howling Whispers. Kanonische Weltenbau-Daten für das Howling-Whispers-Ökosystem.`
+      : `Browse ${all ? 'the complete archive' : title.toLowerCase()} in Orbis, the Library of Howling Whispers. Canonical worldbuilding data for the Howling Whispers ecosystem.`,
     canonicalPath,
     structuredData: {
       '@context': 'https://schema.org',
