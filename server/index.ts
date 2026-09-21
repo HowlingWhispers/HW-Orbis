@@ -18,6 +18,7 @@ import { PostgresSettingsStore } from './settings.js';
 import { createSpeculusGenerationRouter, createSpeculusLaunchRouter } from './speculus.js';
 import { createWorldDeleteRouter } from './world-delete.js';
 import { createWorldBrainRouter } from './world-brain.js';
+import { canDiscoverAssetRow } from './world-access.js';
 import './types.js';
 
 const config = loadConfig();
@@ -72,10 +73,14 @@ app.get('/sitemap.xml', async (_request, response, next) => {
     const baseUrl = 'https://lib.thehowlingwhispers.com';
     const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 
-    // Get all public assets (sfw, not restricted, discoverable)
+    // Sitemap discovery follows the same public-world policy as Orbis browse/search.
+    // Child records inherit the visibility of their origin world.
     const result = await pool.query(`
-      SELECT a.id, a.type, a.updated_at
+      SELECT a.id, a.type, a.updated_at, a.creator_user_id, a.document,
+        origin.document AS origin_world_document,
+        origin.creator_user_id AS origin_world_creator_user_id
       FROM library_assets a
+      LEFT JOIN library_assets origin ON origin.id = a.origin_world_id
       WHERE a.content_rating = 'sfw'
       ORDER BY a.updated_at DESC
     `);
@@ -87,12 +92,14 @@ app.get('/sitemap.xml', async (_request, response, next) => {
       { url: '/projects/speculus', changefreq: 'weekly', priority: '0.7', lastmod: '' },
     ];
 
-    const assetUrls = result.rows.map(row => ({
-      url: `/asset/${row.id}`,
-      lastmod: new Date(row.updated_at).toISOString().split('T')[0],
-      changefreq: 'weekly',
-      priority: '0.6',
-    }));
+    const assetUrls = result.rows
+      .filter((row) => canDiscoverAssetRow(row))
+      .map(row => ({
+        url: `/asset/${row.id}`,
+        lastmod: new Date(row.updated_at).toISOString().split('T')[0],
+        changefreq: 'weekly',
+        priority: '0.6',
+      }));
 
     const allUrls = [...staticUrls, ...assetUrls];
 
