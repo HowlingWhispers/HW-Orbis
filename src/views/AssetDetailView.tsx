@@ -38,7 +38,7 @@ export function AssetDetailView() {
 
   useSEO({
     title: asset ? `${asset.name} | ${category?.label} | Orbis — Library of Howling Whispers` : 'Orbis — Library of Howling Whispers',
-    description: asset?.summary || (asset ? `View ${asset.name}, a ${recordType} record in Orbis, the Library of Howling Whispers. NovelAI-integrated worldbuilding and character archive.` : 'Opening an Orbis library record.'),
+    description: asset?.summary || (asset ? `View ${asset.name}, a ${recordType} record in Orbis, the Library of Howling Whispers. Canonical worldbuilding record connected to the Howling Whispers ecosystem.` : 'Opening an Orbis library record.'),
     canonicalPath,
     ogType: 'article',
     noindex: !asset,
