@@ -8,7 +8,7 @@
   border-color: rgba(214, 177, 119, .2);
   background: rgba(214, 177, 119, .08);
   color: var(--amber-bright);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: .025em;
 }
 
@@ -171,7 +171,7 @@
   border-radius: 6px;
   color: var(--amber);
   background: rgba(210, 173, 115, .06);
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: .09em;
   text-transform: uppercase;
