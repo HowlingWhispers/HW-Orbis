@@ -28,11 +28,11 @@ export function HomeView() {
 
   useSEO({
     title: de
-      ? 'Orbis | Die Bibliothek von Howling Whispers — NovelAI-Integration für KI-Rollenspiel & Weltenbau'
-      : 'Orbis | The Library of Howling Whispers — NovelAI-Integrated Worldbuilding & Character Archive',
+      ? 'Orbis | Kanonische Weltenbau-Bibliothek von Howling Whispers'
+      : 'Orbis | Canonical Worldbuilding Library for Howling Whispers',
     description: de
-      ? 'Orbis ist die Bibliothek von Howling Whispers — ein Weltenbau- und Charakterarchiv mit NovelAI-Integration für KI-Rollenspiel, Charaktersimulation und interaktive Fiktion. Durchstöbere Welten, Charaktere, Orte und mehr.'
-      : 'Orbis is the Library of Howling Whispers — a worldbuilding and character archive with NovelAI integration for AI roleplay, character simulation, and interactive fiction. Browse worlds, characters, places, and more.',
+      ? 'Orbis ist die kanonische Weltenbau-Bibliothek von Howling Whispers. Durchstöbere Welten, Charaktere, Orte, Familien, Fraktionen, Erinnerungen und simulationsbereiten Kanon.'
+      : 'Orbis is the canonical worldbuilding library of Howling Whispers. Browse worlds, characters, places, families, factions, memories and simulation-ready canon used across the ecosystem.',
     canonicalPath: '/',
     ogImage: bannerSrc,
     structuredData: {
@@ -42,8 +42,8 @@ export function HomeView() {
       alternateName: 'The Library of Howling Whispers',
       url: 'https://lib.thehowlingwhispers.com/',
       description: de
-        ? 'Ein Weltenbau- und Charakterarchiv mit NovelAI-Integration für KI-Rollenspiel, Charaktersimulation und interaktive Fiktion.'
-        : 'A worldbuilding and character archive with NovelAI integration for AI roleplay, character simulation, and interactive fiction.',
+        ? 'Die kanonische Weltenbau-Bibliothek von Howling Whispers für verbundene Welten und simulationsbereiten Kanon.'
+        : 'The canonical worldbuilding library for Howling Whispers, connecting authored worlds and simulation-ready canon across the ecosystem.',
       publisher: {
         '@type': 'Organization',
         name: 'Howling Whispers',
@@ -95,7 +95,7 @@ export function HomeView() {
         {data && <div className="asset-grid">{data.recent.map((asset) => <AssetCard asset={asset} key={asset.id} />)}</div>}
       </section>
 
-      <section className="quiet-note"><span className="quiet-note__paw">●</span><div><strong>{de ? 'Coda hält Wache.' : 'Coda is keeping watch.'}</strong><p>{de ? 'Deine Quelldatensätze bleiben beim Durchsuchen unverändert. Die Simulationsbereiche werden diese Geschichten später öffnen, sobald sie bereit sind.' : 'Your source records stay unchanged when you browse. The simulation wings will open these stories later, when they are ready.'}</p></div></section>
+      <section className="quiet-note"><span className="quiet-note__paw">●</span><div><strong>{de ? 'Coda hält Wache.' : 'Coda is keeping watch.'}</strong><p>{de ? 'Deine Quelldatensätze bleiben hier kanonisch. Speculus kann sie simulieren, Fabula wird persistente Folgen tragen und Studium kann belegte Entwicklungsvorschläge zur Prüfung zurückbringen.' : 'Your source records remain canonical here. Speculus can simulate them, Fabula will carry persistent consequences, and Studium can return evidence-backed development proposals for your review.'}</p></div></section>
     </div>
   );
 }
