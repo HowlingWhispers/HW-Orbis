@@ -6,24 +6,35 @@ import type { DatabasePool } from './db.js';
 import { canDirectViewAssetRow } from './world-access.js';
 
 const identitySchema = z.object({ id: z.string().uuid(), revision: z.string().min(1).max(200), name: z.string().min(1).max(200) });
-const saveSchema = z.object({
-  format: z.literal('speculus-v2-session'),
-  version: z.literal(2),
-  engine: z.literal('v2'),
-  source: z.object({
-    id: z.string().uuid(),
-    type: z.string().min(1).max(40),
-    revision: z.string().min(1).max(200),
-    name: z.string().max(200).optional(),
-    world: identitySchema.nullable().optional(),
-    location: identitySchema.nullable().optional(),
-    persona: z.object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200) }).optional(),
-    character: z.object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200) }).nullable().optional(),
-    elapsedSeconds: z.number().int().nonnegative().safe().optional(),
-    simulationDay: z.number().int().positive().safe().optional(),
-  }).passthrough(),
-  turns: z.array(z.unknown()).max(20000),
+const saveSourceSchema = z.object({
+  id: z.string().uuid(),
+  type: z.string().min(1).max(40),
+  revision: z.string().min(1).max(200),
+  name: z.string().max(200).optional(),
+  world: identitySchema.nullable().optional(),
+  location: identitySchema.nullable().optional(),
+  persona: z.object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200) }).optional(),
+  character: z.object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200) }).nullable().optional(),
+  elapsedSeconds: z.number().int().nonnegative().safe().optional(),
+  simulationDay: z.number().int().positive().safe().optional(),
 }).passthrough();
+
+const saveSchema = z.union([
+  z.object({
+    format: z.literal('speculus-v3-session'),
+    version: z.literal(3),
+    engine: z.literal('v3'),
+    source: saveSourceSchema,
+    turns: z.array(z.unknown()).max(20000),
+  }).passthrough(),
+  z.object({
+    format: z.literal('speculus-v2-session'),
+    version: z.literal(2),
+    engine: z.literal('v2'),
+    source: saveSourceSchema,
+    turns: z.array(z.unknown()).max(20000),
+  }).passthrough(),
+]);
 const uploadSchema = z.object({ save: saveSchema, title: z.string().trim().min(1).max(120).optional() });
 const renameSchema = z.object({ title: z.string().trim().min(1).max(120) });
 
