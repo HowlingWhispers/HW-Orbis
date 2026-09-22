@@ -42,14 +42,13 @@ describe('Speculus security bridge', () => {
     expect(() => openCredential(sealed, Buffer.alloc(32, 8))).toThrow();
   });
 
-  it.each(['v1', 'v2', 'v3'] as const)('boxes a record for saved engine %s and deposits only an opaque grant', async (engine) => {
+  it('boxes a record for the primary V3 runtime and deposits only an opaque grant', async () => {
     const captured: { body?: Record<string, unknown>; authorization?: string; url?: string } = {};
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       captured.url = String(url);
       captured.body = JSON.parse(String(init?.body));
       captured.authorization = new Headers(init?.headers).get('authorization') ?? undefined;
-      const bridgeEngine = engine === 'v1' ? '' : 'v2';
-      return new Response(JSON.stringify({ launchUrl: `https://spec.thehowlingwhispers.com/${bridgeEngine}?launch=once` }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ launchUrl: 'https://spec.thehowlingwhispers.com/?launch=once' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
     }));
     const pool = { query: vi.fn(async (sql: string) => {
       if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [{
@@ -58,7 +57,6 @@ describe('Speculus security bridge', () => {
         tags: ['Werewolf'], document: { description: 'Terse and observant.', personality: 'Protective' },
       }] };
       if (sql.includes('SELECT model FROM user_provider_settings')) return { rowCount: 1, rows: [{ model: 'xialong-v1' }] };
-      if (sql.includes('FROM user_simulation_settings')) return { rowCount: 1, rows: [{ engine }] };
       if (sql.includes('SELECT id, display_name FROM users')) return { rowCount: 1, rows: [{ id: userId, display_name: 'Eirvargr' }] };
       if (sql.includes('id <> $1')) return { rowCount: 1, rows: [{
         id: relatedPlaceId, type: 'place', name: 'Brackenjaw Enclave', summary: 'An upland settlement.',
@@ -81,10 +79,12 @@ describe('Speculus security bridge', () => {
     app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
 
     const response = await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).expect(201);
-    expect(response.body.launchUrl).toContain('spec.thehowlingwhispers.com');
+    expect(response.body.launchUrl).toBe('https://spec.thehowlingwhispers.com/?launch=once');
     expect(captured.authorization).toBe('Bearer shared-test-bridge-secret');
     expect(captured.body).toMatchObject({
-      version: engine === 'v1' ? 1 : 2, model: 'xialong-v1',
+      version: 3,
+      engine: 'v3',
+      model: 'xialong-v1',
       primaryAsset: { id: assetId, type: 'character', revision: updatedAt },
       catalog: { code: 'SPC-C-KD41827', classification: 'character' },
       persona: { name: 'Eirvargr' },
@@ -103,10 +103,7 @@ describe('Speculus security bridge', () => {
     });
     expect(JSON.stringify(relatedAssets[0])).not.toContain('privateNarrativeField');
     expect(String(captured.body?.generationGrant)).toHaveLength(43);
-    expect(captured.url).toBe(`http://127.0.0.1:8790${engine === 'v1' ? '/api/launch' : '/api/v2/launch'}`);
-    if (engine === 'v1') expect(captured.body).not.toHaveProperty('engine');
-    else expect(captured.body?.engine).toBe('v2');
-    expect(response.body.launchUrl).toContain(engine === 'v3' ? '/v3?launch=once' : engine === 'v2' ? '/v2?launch=once' : '/?launch=once');
+    expect(captured.url).toBe('http://127.0.0.1:8790/api/v3/launch');
     expect(JSON.stringify(captured.body)).not.toContain('novelai-secret-token');
   });
 
