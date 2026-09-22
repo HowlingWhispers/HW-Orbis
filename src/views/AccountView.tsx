@@ -4,7 +4,6 @@ import { discordLoginPath, useAuth } from '../auth/AuthContext';
 import { deleteNovelAiSettings, getNovelAiSettings, saveNovelAiSettings, type NovelAiSettings } from '../api/provider-settings';
 import { downloadAccountArchive, uploadArchive } from '../api/archive-transfer';
 import { UserAvatar } from '../components/UserAvatar';
-import { SimulationEngineSetting } from '../components/SimulationEngineSetting';
 import { useI18n } from '../i18n/I18nContext';
 import type { Locale } from '../i18n/translations';
 import { useTheme, type ThemePreference } from '../theme/ThemeContext';
@@ -110,8 +109,6 @@ export function AccountView() {
           <small>The token is encrypted in Orbis and never sent to the Speculus browser or service. Speculus receives only a temporary generation grant.</small>
           {providerMessage && <p className="form-message" role="status">{providerMessage}</p>}
         </form>
-
-        <SimulationEngineSetting key={user.id} />
 
         <div className="profile-form language-setting">
           <label htmlFor="interface-language">{t('Interface language')}</label>
