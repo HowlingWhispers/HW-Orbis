@@ -1,6 +1,6 @@
 # Orbis to Speculus bridge
 
-Orbis is the launch authority and credential boundary for Speculus. A user opens a Library record and selects **Simulate**. Orbis snapshots the selected record, related world context, the current Orbis identity as the fallback persona, and a short-lived generation grant. It then deposits that version 1 package into Speculus over the private server bridge and redirects the browser to the returned one-time URL.
+Orbis is the launch authority and credential boundary for Speculus. A user opens a Library record and selects **Simulate**. Orbis snapshots the selected record, related world context, the current Orbis identity as the fallback persona, and a short-lived generation grant. It deposits a V3 package into Speculus over the private `/api/v3/launch` bridge and redirects the browser to the returned one-time root URL.
 
 ## Credential boundary
 
@@ -95,42 +95,35 @@ ORBIS_GENERATION_API_URL=http://127.0.0.1:8789/api/v1/generation/speculus
 SPECULUS_UPDATE_DATE=<YYYY-MM-DD deployment date>
 ```
 
-The public domain remains intentionally non-navigable without a one-time launch package. Direct visits show the missing-system-medium boot failure.
+The public domain now opens the V3 boot/recovery surface. A direct visit still cannot generate without a fresh one-time Orbis launch authorization.
 
 ## Launch package content
 
 The primary record is immutable for the lifetime of the launch and carries its `updated_at` value as the source revision. Its canonical SPC registry identity is packaged separately from its editable display fields. A world launch includes its children. A child-record launch includes its origin world and accessible sibling records. Related adult records remain excluded unless the launching user has adult access or owns the related record.
 
 Character records are adapted to Character Card V2 fields when matching structured fields exist. Other record types run through Speculus's narrator subject. Until Orbis has a dedicated persona model, the signed-in user's display name is sent as a minimal anti-impersonation persona.
-# V1 / V2 / V3 engine preference
+# Speculus V3 primary runtime
 
-Orbis Account settings now persist `engine = v1 | v2 | v3` per user through
-`GET/PUT /api/simulation-settings`. An account with no preference defaults to V1.
-Simulate reads that saved account preference server-side; the caller cannot supply
-an arbitrary simulator URL or another user's setting.
+Orbis no longer exposes a per-user engine selector. Every **Simulate** action now
+targets Speculus V3.
 
-| Saved engine | Deposit endpoint on Speculus | Package | Browser path |
+| Runtime | Status | Deposit endpoint | Browser path |
 | --- | --- | --- | --- |
-| V1 (legacy/default) | `/api/launch` | `version: 1` (unchanged) | `/` |
-| V2 (stable) | `/api/v2/launch` | `version: 2, engine: "v2"` | `/v2` |
-| V3 (experimental) | `/api/v2/launch` compatibility bridge | `version: 2, engine: "v2"` temporarily | `/v3` |
+| V3 | Primary | `/api/v3/launch` | `/` |
+| V2 | Frozen legacy | Not used by Orbis | `/v2` |
+| V1 | Frozen legacy | Not used by Orbis | `/v1` |
 
-Apply `server/migrations/007_simulation_engine_settings.sql` and then
-`server/migrations/011_simulation_engine_v3.sql` before enabling the full selector. It adds one account-preference table only. Before that migration, reads
-fall back to V1 and the selector reports unavailable; writes do not falsely report
-success. Other database failures are surfaced, not disguised as a preference.
+The old simulation-engine preference table and migrations remain historical
+database artifacts, but the selector API and account UI are retired. Existing V1
+and V2 code in HW-Speculus is preserved only for deliberate legacy recovery or
+comparison and is not part of the normal Orbis launch path.
 
-Deploy the matching HW-Speculus runtime before enabling an engine. If the requested
-engine is unavailable, the launch fails and the unused grant is revoked. Orbis
-does not silently switch the requested engine. V3 currently reuses the V2 deposit/package authorization contract while Orbis rewrites the returned browser path to `/v3`; this is a compatibility bridge, not the final V3 launch contract.
+V3 now has its own package identity (`version: 3, engine: "v3"`), launch cookie,
+generation route, and research route. Orbis must not rewrite V2 launch URLs into
+V3 or silently fall back to a legacy runtime.
 
-Existing sessions are unaffected by preference changes. V1, V2 and V3 browser/session stores remain isolated even while V3 is launch-contract-compatible with V2. The provider model continues to come from the existing
-Orbis NovelAI settings; raw credentials never leave Orbis. V2 output settings live
-in its isolated session and use the existing generation gateway contract.
-
-The initial `/v2` is a foundation, not the completed world engine. See the
-HW-Speculus `docs/v2-foundation.md` for exact limitations and rollout checks.
-
+The provider model continues to come from the existing Orbis NovelAI settings;
+raw credentials never leave Orbis.
 ## Generation failures
 
 The generation bridge returns a static, safe error message plus a `NOVELAI_*`
