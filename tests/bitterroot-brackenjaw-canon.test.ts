@@ -61,7 +61,7 @@ describe('Brackenjaw civilian canon', () => {
   });
 
   it('expands the synchronized Bitterroot collection to the complete authored cast', () => {
-    expect(assets).toHaveLength(77);
+    expect(assets).toHaveLength(87);
     expect(assets.filter((asset) => asset.type === 'character')).toHaveLength(23);
     expect(assets.filter((asset) => asset.type === 'place')).toHaveLength(30);
     expect(assets.filter((asset) => asset.type === 'family')).toHaveLength(9);
