@@ -15,7 +15,9 @@
       "All intelligent peoples are beastfolk, anthropomorphic peoples, or intelligent feral-bodied peoples.",
       "Bitterroot remains pre-industrial unless later canon explicitly changes a place or era.",
       "Different intelligent peoples may have very different body forms while still speaking, building communities, and participating in society.",
-      "The world has no predetermined ending. Actions and remembered events may permanently change places, families, societies, and relationships."
+      "The world has no predetermined ending. Actions and remembered events may permanently change places, families, societies, and relationships.",
+      "Species heritage can influence cultural traditions, but it does not dictate an individual's personality, morality, profession, or musical taste.",
+      "Every major Bitterroot place may develop its own dominant and secondary species mix, folk tradition, instruments, rhythms, and contemporary genre identity."
     ]
   },
   "lore": {
@@ -41,6 +43,381 @@
       "id": "werewolf-upright-feral",
       "name": "Werewolf",
       "description": "Intelligent speaking werewolves of Bitterroot. Ragna Holt and Pip Holt are upright feral werewolves."
+    },
+    {
+      "id": "foxfolk",
+      "name": "Foxfolk",
+      "description": "Anthropomorphic fox peoples of Bitterroot. Fox communities are often associated with quick social reading, expressive performance, negotiation, trade, nightlife, improvisation, and fast-moving local cultures.",
+      "culturalProfile": {
+        "socialCharacter": [
+          "socially agile",
+          "expressive",
+          "competitive",
+          "image-conscious",
+          "strong traditions of bargaining and performance"
+        ],
+        "commonThemes": [
+          "travel",
+          "trickery",
+          "romance",
+          "gambling",
+          "escaping trouble",
+          "outsmarting rivals"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Fast, nimble, improvisational folk built around dance, storytelling, competitive solos, and playful rhythmic turns.",
+        "traditionalInstruments": [
+          "fiddle",
+          "mandolin",
+          "small hand drums",
+          "plucked strings",
+          "whistles"
+        ],
+        "rhythmicCharacter": "Syncopated dance rhythms, quick tempo shifts, sudden stops, and call-and-response figures.",
+        "vocalTradition": "Fast storytelling, teasing verses, call-and-response, and improvised lyrical exchanges.",
+        "commonModernGenres": [
+          "folk rock",
+          "folk punk",
+          "electro-swing",
+          "bluegrass",
+          "dance rock",
+          "folk-rave",
+          "high-energy electronic folk"
+        ]
+      }
+    },
+    {
+      "id": "bearfolk",
+      "name": "Bearfolk",
+      "description": "Anthropomorphic bear peoples of Bitterroot. Bear communities commonly favor physically grounded craft, communal labor, heavy celebration, deep vocal traditions, and music that emphasizes weight, resonance, and endurance.",
+      "culturalProfile": {
+        "commonThemes": [
+          "labor",
+          "winter",
+          "home",
+          "strength",
+          "mourning",
+          "feasting",
+          "endurance"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Heavy, slow folk with large drums, low strings, stomping rhythms, and resonant group singing.",
+        "traditionalInstruments": [
+          "large frame drums",
+          "low bowed strings",
+          "wooden horns",
+          "jaw harp",
+          "stomp percussion"
+        ],
+        "rhythmicCharacter": "Broad pulses, heavy downbeats, slow dances, and physically forceful communal rhythms.",
+        "vocalTradition": "Deep solo voices, drones, and massed low choruses.",
+        "commonModernGenres": [
+          "doom metal",
+          "sludge",
+          "heavy blues",
+          "southern rock",
+          "death-doom",
+          "slow folk rock"
+        ]
+      }
+    },
+    {
+      "id": "cervidfolk",
+      "name": "Cervidfolk",
+      "description": "Anthropomorphic deer, elk, and related cervid peoples of Bitterroot. Their cultures often develop ceremonial, melodic, seasonal, and landscape-centered traditions with strong regional variation.",
+      "culturalProfile": {
+        "commonThemes": [
+          "seasons",
+          "migration",
+          "ancestry",
+          "forests",
+          "courtship",
+          "memory",
+          "open country"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Spacious ceremonial folk using layered melody, bells, flutes, bowed strings, and measured dance.",
+        "traditionalInstruments": [
+          "flutes",
+          "bells",
+          "bowed strings",
+          "small drums",
+          "wooden pipes"
+        ],
+        "rhythmicCharacter": "Measured dances, flowing meters, long phrases, and gradual crescendos.",
+        "vocalTradition": "Layered harmonies, sustained melodic lines, and ceremonial group singing.",
+        "commonModernGenres": [
+          "progressive folk",
+          "atmospheric rock",
+          "melodic trance",
+          "symphonic metal",
+          "ambient folk"
+        ]
+      }
+    },
+    {
+      "id": "harefolk",
+      "name": "Harefolk",
+      "description": "Anthropomorphic rabbits and hares of Bitterroot. Harefolk communities are frequently known for quick communal dances, rapid instrumental traditions, busy markets, and music built for movement.",
+      "culturalProfile": {
+        "commonThemes": [
+          "speed",
+          "luck",
+          "harvest",
+          "courtship",
+          "escape",
+          "community",
+          "roads"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Fast dance folk driven by rapid fiddle, plucked strings, clapping, whistles, and compact percussion.",
+        "traditionalInstruments": [
+          "fiddle",
+          "small banjo-like lutes",
+          "whistles",
+          "hand drums",
+          "clappers"
+        ],
+        "rhythmicCharacter": "Fast repeating patterns, hopping accents, sudden bursts, and relentless dance momentum.",
+        "vocalTradition": "Quick refrains, communal choruses, and short energetic verses.",
+        "commonModernGenres": [
+          "bluegrass",
+          "speed folk",
+          "breakbeat",
+          "happy hardcore",
+          "folk-rave",
+          "fast punk"
+        ]
+      }
+    },
+    {
+      "id": "boarfolk",
+      "name": "Boarfolk",
+      "description": "Anthropomorphic boar peoples of Bitterroot. Boarfolk traditions often prize blunt expression, physical celebration, endurance, territorial pride, and loud communal performance.",
+      "culturalProfile": {
+        "commonThemes": [
+          "territory",
+          "work",
+          "feuds",
+          "victory",
+          "food",
+          "family",
+          "defiance"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Rough, loud folk centered on war drums, horn calls, shouted refrains, and forceful string rhythms.",
+        "traditionalInstruments": [
+          "war drums",
+          "horns",
+          "rough fiddles",
+          "lutes",
+          "stomp boards"
+        ],
+        "rhythmicCharacter": "Driving straight beats, pounding marches, and aggressive dance rhythms.",
+        "vocalTradition": "Shouted choruses, gravelly solos, drinking songs, and competitive chants.",
+        "commonModernGenres": [
+          "punk",
+          "hardcore",
+          "thrash metal",
+          "death metal",
+          "dirty pub rock",
+          "groove metal"
+        ]
+      }
+    },
+    {
+      "id": "badgerfolk",
+      "name": "Badgerfolk",
+      "description": "Anthropomorphic badger peoples of Bitterroot. Badger communities often grow around dense local networks, practical crafts, digging or stonework traditions, and stubbornly persistent musical forms.",
+      "culturalProfile": {
+        "commonThemes": [
+          "work",
+          "stone",
+          "tunnels",
+          "home ground",
+          "persistence",
+          "secrecy",
+          "craft"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Dense rhythmic folk built from repetitive work patterns, low strings, percussion, and communal chants.",
+        "traditionalInstruments": [
+          "low fiddles",
+          "work percussion",
+          "drums",
+          "hammered metal",
+          "reed pipes"
+        ],
+        "rhythmicCharacter": "Repetitive grooves, layered work rhythms, and gradually intensifying patterns.",
+        "vocalTradition": "Work chants, low group singing, and terse narrative songs.",
+        "commonModernGenres": [
+          "industrial rock",
+          "groove metal",
+          "industrial techno",
+          "dark folk",
+          "post-metal"
+        ]
+      }
+    },
+    {
+      "id": "felinefolk",
+      "name": "Felinefolk",
+      "description": "Anthropomorphic feline peoples of Bitterroot. Feline communities often develop precise, expressive performance traditions with strong attention to timing, movement, personal style, and musical finesse.",
+      "culturalProfile": {
+        "commonThemes": [
+          "beauty",
+          "rivalry",
+          "nightlife",
+          "independence",
+          "desire",
+          "status",
+          "craft"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Precise, expressive folk using plucked strings, hand drums, ornamented melody, and controlled rhythmic tension.",
+        "traditionalInstruments": [
+          "plucked strings",
+          "hand drums",
+          "bowed strings",
+          "small bells",
+          "reed instruments"
+        ],
+        "rhythmicCharacter": "Flexible syncopation, graceful pauses, intricate meter, and dance-focused phrasing.",
+        "vocalTradition": "Expressive solo voices, ornamentation, close harmonies, and intimate performance.",
+        "commonModernGenres": [
+          "jazz rock",
+          "dark cabaret",
+          "trip-hop",
+          "progressive rock",
+          "electronic lounge",
+          "art rock"
+        ]
+      }
+    },
+    {
+      "id": "avianfolk",
+      "name": "Avianfolk",
+      "description": "Anthropomorphic bird peoples of Bitterroot. Avian traditions often emphasize voice, height, distance, layered calls, aerial symbolism, and music that travels clearly across open spaces.",
+      "culturalProfile": {
+        "commonThemes": [
+          "sky",
+          "distance",
+          "migration",
+          "weather",
+          "messages",
+          "freedom",
+          "homecoming"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Voice-led folk with whistles, flutes, layered harmony, bright percussion, and long-distance call patterns.",
+        "traditionalInstruments": [
+          "whistles",
+          "flutes",
+          "small bells",
+          "light drums",
+          "harps"
+        ],
+        "rhythmicCharacter": "Interlocking patterns, fast ornamentation, suspended phrases, and soaring melodic arcs.",
+        "vocalTradition": "Complex harmony, antiphonal calls, whistles, and high sustained lines.",
+        "commonModernGenres": [
+          "art rock",
+          "trance",
+          "ambient",
+          "drum and bass",
+          "choral electronic",
+          "progressive folk"
+        ]
+      }
+    },
+    {
+      "id": "otterfolk",
+      "name": "Otterfolk",
+      "description": "Anthropomorphic otter peoples of Bitterroot. Otter communities are frequently river- or coast-oriented and favor social, rhythmic, playful musical traditions built around movement and communal gathering.",
+      "culturalProfile": {
+        "commonThemes": [
+          "rivers",
+          "travel",
+          "trade",
+          "play",
+          "storms",
+          "friendship",
+          "boats"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Buoyant river folk with hand drums, whistles, fiddles, clapping, and strongly social dance forms.",
+        "traditionalInstruments": [
+          "hand drums",
+          "whistles",
+          "fiddle",
+          "wood blocks",
+          "small accordions"
+        ],
+        "rhythmicCharacter": "Bouncy syncopation, rolling dance grooves, and rhythms inspired by rowing and water work.",
+        "vocalTradition": "Group refrains, humorous verses, and fast communal singing.",
+        "commonModernGenres": [
+          "ska folk",
+          "funk rock",
+          "dance rock",
+          "house",
+          "upbeat rave",
+          "folk-pop"
+        ]
+      }
+    },
+    {
+      "id": "reptilefolk",
+      "name": "Reptilefolk",
+      "description": "Anthropomorphic reptilian peoples of Bitterroot. Reptilefolk cultures vary widely, but many regional traditions favor hypnotic repetition, percussion, drones, ritual pacing, and strong environmental adaptation.",
+      "culturalProfile": {
+        "commonThemes": [
+          "heat",
+          "stone",
+          "water",
+          "patience",
+          "ritual",
+          "territory",
+          "old memory"
+        ],
+        "note": "Regional cultures may reshape this baseline. Species heritage influences traditions, but individuals and settlements are not required to conform to one personality or genre."
+      },
+      "musicCulture": {
+        "folkCore": "Sparse, hypnotic folk built from drums, drones, rattles, low pipes, and repetitive ceremonial patterns.",
+        "traditionalInstruments": [
+          "frame drums",
+          "rattles",
+          "low pipes",
+          "drone strings",
+          "stone percussion"
+        ],
+        "rhythmicCharacter": "Steady repetition, polyrhythm, slow-building loops, and ritual pulse.",
+        "vocalTradition": "Chanted lines, low drones, sparse solo phrases, and cyclical refrains.",
+        "commonModernGenres": [
+          "dark techno",
+          "industrial",
+          "doom",
+          "ritual ambient",
+          "psychedelic rock",
+          "tribal electronic"
+        ]
+      }
     }
   ],
   "locations": [
@@ -413,7 +790,7 @@
     }
   ],
   "createdAt": "2026-09-03T00:00:00.000Z",
-  "updatedAt": "2026-09-06T04:31:49.058Z",
+  "updatedAt": "2026-09-23T16:43:00.000Z",
   "timeWeather": {
     "preset": "custom",
     "mode": "tick",
