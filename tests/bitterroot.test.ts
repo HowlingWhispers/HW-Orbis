@@ -17,10 +17,28 @@ describe('Bitterroot canonical import', () => {
   });
 
   it('maps every canonical Rebrand record into Orbis', () => {
-    expect(assets).toHaveLength(28);
+    expect(assets).toHaveLength(38);
     expect(Object.fromEntries(['world', 'species', 'place', 'faction', 'society', 'family', 'memory', 'character'].map((type) => [type, assets.filter((asset) => asset.type === type).length]))).toEqual({
-      world: 1, species: 2, place: 14, faction: 1, society: 6, family: 1, memory: 1, character: 2,
+      world: 1, species: 12, place: 14, faction: 1, society: 6, family: 1, memory: 1, character: 2,
     });
+  });
+
+  it('imports the expanded anthro species set', () => {
+    const speciesIds = assets.filter((asset) => asset.type === 'species').map((asset) => asset.sourceAssetId);
+    expect(speciesIds).toEqual(expect.arrayContaining([
+      'species:bitterroot-beastfolk',
+      'species:werewolf-upright-feral',
+      'species:foxfolk',
+      'species:bearfolk',
+      'species:cervidfolk',
+      'species:harefolk',
+      'species:boarfolk',
+      'species:badgerfolk',
+      'species:felinefolk',
+      'species:avianfolk',
+      'species:otterfolk',
+      'species:reptilefolk',
+    ]));
   });
 
   it('gives every source record one stable and unique import identity', () => {
