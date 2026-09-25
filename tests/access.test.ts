@@ -13,8 +13,8 @@ describe('Discord access policy', () => {
     expect(decideAccess(false, ['adult-role'], policy)).toEqual({ isGuildMember: false, canViewAdult: false, canCreate: false, canAdmin: false });
   });
 
-  it('keeps members without an accepted role on SFW read-only access', () => {
-    expect(decideAccess(true, ['ordinary-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: false, canAdmin: false });
+  it('allows ordinary guild members to create while keeping adult content gated', () => {
+    expect(decideAccess(true, ['ordinary-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: true, canAdmin: false });
   });
 
   it('allows verified adults to view and create', () => {
@@ -22,14 +22,14 @@ describe('Discord access policy', () => {
   });
 
   it('does not let a creator or staff role imply adult access', () => {
-    expect(decideAccess(true, ['moderator-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: false, canAdmin: false });
+    expect(decideAccess(true, ['moderator-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: true, canAdmin: false });
   });
 
   it('keeps administration separate from adult viewing', () => {
-    expect(decideAccess(true, ['admin-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: false, canAdmin: true });
+    expect(decideAccess(true, ['admin-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: true, canAdmin: true });
   });
 
   it('allows the protected bootstrap role to recover administration', () => {
-    expect(decideAccess(true, ['recovery-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: false, canAdmin: true });
+    expect(decideAccess(true, ['recovery-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: true, canAdmin: true });
   });
 });
