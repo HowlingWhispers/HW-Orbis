@@ -75,7 +75,7 @@ export function CollectionView({ all = false }: { all?: boolean }) {
     ? (de ? 'Jeder Datensatz aus jedem Regal, von einem ruhigen Ort aus durchsuchbar.' : 'Every record across every shelf, ready to search from one quiet place.')
     : localizedNavigation?.description ?? navigation?.description;
   const canonicalPath = all ? '/all' : `/library/${type}`;
-  const canCreateWorld = selectedType === 'world' && Boolean(user?.permissions.canCreate || user?.isSuperAdmin);
+  const canCreateWorld = selectedType === 'world' && Boolean(user);
 
   useSEO({
     title: de
