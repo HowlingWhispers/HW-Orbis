@@ -6,6 +6,7 @@ import session from 'express-session';
 import helmet from 'helmet';
 import { ZodError } from 'zod';
 import { createAuthRouter } from './auth.js';
+import { createCodaAssistantRouter } from './coda-assistant.js';
 import { createArchiveTransferRouter } from './archive-transfer.js';
 import { createAdminRouter, requireAdmin } from './admin.js';
 import { loadConfig } from './config.js';
@@ -123,6 +124,7 @@ ${allUrls.map(u => `  <url>
 
 app.use('/api/auth', createAuthRouter(config, pool, settingsStore));
 app.use('/api/provider-settings', createProviderSettingsRouter(config, pool));
+app.use('/api/coda-assistant', createCodaAssistantRouter(config, pool, settingsStore));
 app.use('/api/simulation-settings', createSimulationSettingsRouter(pool));
 app.use('/api/admin', requireAdmin(config, pool, settingsStore), createAdminRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
