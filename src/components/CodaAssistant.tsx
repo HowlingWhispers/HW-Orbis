@@ -1,7 +1,9 @@
 import { BookOpen, Search, Send, Sparkles, WandSparkles, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaMode } from '../api/coda-assistant';
+import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaMode, type CodaProposal } from '../api/coda-assistant';
+import { libraryApi } from '../api/client';
+import type { ContentRating } from '../types/library';
 import { useAuth } from '../auth/AuthContext';
 
 const modes: Array<{ id: CodaMode; label: string; icon: typeof BookOpen; hint: string; placeholder: string }> = [
@@ -33,16 +35,56 @@ function StringList({ title, values, tone }: { title: string; values?: string[];
   return <section className={`coda-result-list ${tone === 'warning' ? 'is-warning' : ''}`}><strong>{title}</strong><ul>{values.map((value, index) => <li key={`${index}-${value}`}>{value}</li>)}</ul></section>;
 }
 
-function SortResult({ result, canApply, onApply }: { result: CodaAssistantResponse; canApply: boolean; onApply: () => void }) {
+function ProposalCard({ proposal, index, canCreate, onCreate }: {
+  proposal: CodaProposal;
+  index: number;
+  canCreate: boolean;
+  onCreate: (proposal: CodaProposal, rating: ContentRating) => Promise<string>;
+}) {
+  const [rating, setRating] = useState<ContentRating>('sfw');
+  const [creating, setCreating] = useState(false);
+  const [createdId, setCreatedId] = useState('');
+  const [createError, setCreateError] = useState('');
+
+  const create = async () => {
+    if (creating || createdId) return;
+    setCreating(true);
+    setCreateError('');
+    try {
+      setCreatedId(await onCreate(proposal, rating));
+    } catch (reason) {
+      setCreateError(reason instanceof Error ? reason.message : 'Coda could not create that record.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return <article className="coda-proposal" key={`${proposal.type}-${proposal.name}-${index}`}>
+    <header><span>{proposal.type}</span><b>{proposal.name}</b><small className={`confidence confidence--${proposal.confidence}`}>{proposal.confidence}</small></header>
+    {proposal.reason && <p>{proposal.reason}</p>}
+    {proposal.fields && Object.keys(proposal.fields).length > 0 && <details className="coda-field-preview"><summary>Proposed fields</summary><pre>{JSON.stringify(proposal.fields, null, 2)}</pre></details>}
+    {canCreate && proposal.type !== 'world' && <div className="coda-proposal__create">
+      <label><span>Rating</span><select value={rating} onChange={(event) => setRating(event.target.value as ContentRating)} disabled={creating || Boolean(createdId)}><option value="sfw">SFW</option><option value="adult">Adult</option></select></label>
+      {createdId
+        ? <Link className="button button--secondary" to={`/asset/${createdId}/edit`}>Open created {proposal.type}</Link>
+        : <button type="button" className="button button--primary" disabled={creating} onClick={() => void create()}>{creating ? 'Creating...' : `Create ${proposal.type}`}</button>}
+    </div>}
+    {createError && <p className="coda-create-error" role="alert">{createError}</p>}
+  </article>;
+}
+
+function SortResult({ result, canApply, canCreate, onApply, onCreate }: {
+  result: CodaAssistantResponse;
+  canApply: boolean;
+  canCreate: boolean;
+  onApply: () => void;
+  onCreate: (proposal: CodaProposal, rating: ContentRating) => Promise<string>;
+}) {
   return <div className="coda-result">
     {result.summary && <p className="coda-result__summary">{result.summary}</p>}
     {result.proposals?.length ? <section className="coda-proposals">
       <strong>Proposed records</strong>
-      {result.proposals.map((proposal, index) => <article className="coda-proposal" key={`${proposal.type}-${proposal.name}-${index}`}>
-        <header><span>{proposal.type}</span><b>{proposal.name}</b><small className={`confidence confidence--${proposal.confidence}`}>{proposal.confidence}</small></header>
-        {proposal.reason && <p>{proposal.reason}</p>}
-        {proposal.fields && Object.keys(proposal.fields).length > 0 && <details className="coda-field-preview"><summary>Proposed fields</summary><pre>{JSON.stringify(proposal.fields, null, 2)}</pre></details>}
-      </article>)}
+      {result.proposals.map((proposal, index) => <ProposalCard proposal={proposal} index={index} canCreate={canCreate} onCreate={onCreate} key={`${proposal.type}-${proposal.name}-${index}`} />)}
     </section> : null}
     <StringList title="Needs your answer" values={result.questions} />
     <StringList title="Coda noticed" values={result.warnings} tone="warning" />
@@ -110,6 +152,28 @@ export function CodaAssistant() {
     setApplied(true);
   };
 
+  const createProposal = async (proposal: CodaProposal, rating: ContentRating) => {
+    const worldId = result?.record?.originWorldId;
+    if (!worldId || result?.record?.canAddToWorld !== true) throw new Error('Open a world you own and include the current record first.');
+    const fields = proposal.fields ?? {};
+    const fieldSummary = typeof fields.summary === 'string'
+      ? fields.summary
+      : typeof fields.description === 'string'
+        ? fields.description
+        : proposal.reason ?? '';
+    const created = await libraryApi.createAsset({
+      type: proposal.type,
+      name: proposal.name,
+      summary: fieldSummary.slice(0, 2000),
+      originWorldId: worldId,
+      contentRating: rating,
+      tags: [],
+      visualTone: 'moon',
+      document: fields,
+    });
+    return created.id;
+  };
+
   return <>
     {open && <aside className="coda-assistant" aria-label="Coda Assistant">
       <header className="coda-assistant__header">
@@ -138,7 +202,13 @@ export function CodaAssistant() {
         </>}
         {error && <div className="coda-notice is-error"><strong>{error}</strong>{settingsPath && <Link to={settingsPath}>Open Account settings</Link>}</div>}
         {result && (mode === 'sort'
-          ? <SortResult result={result} canApply={Boolean(inEditor && result.record?.type === 'world' && result.record.id === assetId)} onApply={applyDraft} />
+          ? <SortResult
+              result={result}
+              canApply={Boolean(inEditor && result.record?.type === 'world' && result.record.id === assetId)}
+              canCreate={Boolean(result.record?.canAddToWorld && result.record.originWorldId)}
+              onApply={applyDraft}
+              onCreate={createProposal}
+            />
           : <div className="coda-result coda-result--text"><p>{result.text}</p></div>)}
         {applied && <div className="coda-notice is-success"><strong>Draft placed in the editor.</strong><span>Review the filled fields and use the normal Save button when you are satisfied.</span></div>}
       </div>
