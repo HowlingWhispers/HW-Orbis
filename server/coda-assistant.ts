@@ -39,6 +39,8 @@ type AssetContext = {
   name: string;
   summary: string;
   document: unknown;
+  originWorldId?: string;
+  canAddToWorld: boolean;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -94,6 +96,10 @@ export function parseCodaSortResponse(text: string) {
   if (!structured.success) return undefined;
   return {
     ...structured.data,
+    proposals: structured.data.proposals.map((proposal) => ({
+      ...proposal,
+      fields: sanitizeCodaPatch(proposal.fields) as Record<string, unknown>,
+    })),
     recordPatch: structured.data.recordPatch ? sanitizeCodaPatch(structured.data.recordPatch) : null,
   };
 }
@@ -135,7 +141,8 @@ Explain findings in concise plain language. Separate observed facts from possibl
 
   return `
 Task: answer the user's Orbis/Speculus question as a concise guide.
-Useful platform facts: Orbis organizes worlds, characters, places, items, factions, species, societies, families and memories. Record ownership is creator-protected. Private worlds and their linked records are owner-only except protected super-admin recovery access. Speculus is launched from Orbis records for simulation. Coda proposes and explains; she does not silently change canon.
+Useful platform facts: Orbis organizes worlds, characters, places, items, factions, species, societies, families and memories. Record ownership is creator-protected. Private worlds and their linked records are owner-only except protected super-admin recovery access. Speculus is launched from Orbis records for simulation. Coda can propose structured records from pasted text and, when the user is working in a world they own, the overlay can create an approved proposed record after the user clicks Create. Coda never silently creates or changes canon.
+If asked whether you can add or create a character/record, do not say you cannot. Explain that you can prepare it and the user can approve creation from the structured proposal.
 If the available context does not establish an answer, say what is missing instead of inventing it.
 `;
 }
@@ -202,12 +209,16 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
         if (row.content_rating === 'adult' && request.session.access?.canViewAdult !== true && !ownsAsset && !isSuperAdmin) {
           return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
         }
+        const originWorldId = row.type === 'world' ? String(row.id) : row.origin_world_id ? String(row.origin_world_id) : undefined;
+        const worldOwnerId = row.type === 'world' ? row.creator_user_id : row.origin_world_creator_user_id;
         asset = {
           id: String(row.id),
           type: String(row.type),
           name: String(row.name),
           summary: String(row.summary ?? ''),
           document: row.document ?? {},
+          originWorldId,
+          canAddToWorld: Boolean(originWorldId && (isSuperAdmin || worldOwnerId === request.session.userId)),
         };
       }
 
@@ -276,13 +287,13 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
               mode: body.mode,
               model: String(provider.model),
               ...structured,
-              ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name } } : {}),
+              ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name, originWorldId: asset.originWorldId, canAddToWorld: asset.canAddToWorld } } : {}),
             });
           }
           return response.json({
             mode: body.mode,
             model: String(provider.model),
-            ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name } } : {}),
+            ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name, originWorldId: asset.originWorldId, canAddToWorld: asset.canAddToWorld } } : {}),
             summary: 'Coda produced a draft that could not be parsed into structured fields.',
             proposals: [],
             questions: [],
@@ -292,7 +303,7 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
           });
         }
 
-        response.json({ mode: body.mode, model: String(provider.model), ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name } } : {}), text });
+        response.json({ mode: body.mode, model: String(provider.model), ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name, originWorldId: asset.originWorldId, canAddToWorld: asset.canAddToWorld } } : {}), text });
       } finally {
         clearTimeout(timeout);
       }
