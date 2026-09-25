@@ -41,6 +41,7 @@ function SortResult({ result, canApply, onApply }: { result: CodaAssistantRespon
       {result.proposals.map((proposal, index) => <article className="coda-proposal" key={`${proposal.type}-${proposal.name}-${index}`}>
         <header><span>{proposal.type}</span><b>{proposal.name}</b><small className={`confidence confidence--${proposal.confidence}`}>{proposal.confidence}</small></header>
         {proposal.reason && <p>{proposal.reason}</p>}
+        {proposal.fields && Object.keys(proposal.fields).length > 0 && <details className="coda-field-preview"><summary>Proposed fields</summary><pre>{JSON.stringify(proposal.fields, null, 2)}</pre></details>}
       </article>)}
     </section> : null}
     <StringList title="Needs your answer" values={result.questions} />
@@ -48,6 +49,7 @@ function SortResult({ result, canApply, onApply }: { result: CodaAssistantRespon
     {result.text && <pre className="coda-raw-draft">{result.text}</pre>}
     {result.recordPatch && <section className="coda-draft-ready">
       <div><strong>Current-record draft ready</strong><small>Nothing has been saved. Existing authored values are protected when the draft is applied.</small></div>
+      <details className="coda-field-preview"><summary>Preview draft patch</summary><pre>{JSON.stringify(result.recordPatch, null, 2)}</pre></details>
       {canApply && <button type="button" className="button button--primary" onClick={onApply}>Apply draft locally</button>}
     </section>}
   </div>;
