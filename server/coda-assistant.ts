@@ -228,10 +228,11 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
 
         if (body.mode === 'sort') {
           const structured = parseJsonObject(text);
-          if (structured) return response.json({ mode: body.mode, model: String(provider.model), ...structured });
+          if (structured) return response.json({ mode: body.mode, model: String(provider.model), ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name } } : {}), ...structured });
           return response.json({
             mode: body.mode,
             model: String(provider.model),
+            ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name } } : {}),
             summary: 'Coda produced a draft that could not be parsed into structured fields.',
             proposals: [],
             questions: [],
@@ -241,7 +242,7 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
           });
         }
 
-        response.json({ mode: body.mode, model: String(provider.model), text });
+        response.json({ mode: body.mode, model: String(provider.model), ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name } } : {}), text });
       } finally {
         clearTimeout(timeout);
       }
