@@ -21,6 +21,7 @@ import './styles/record-detail.css';
 import './styles/collection-actions.css';
 import './styles/destructive.css';
 import './styles/coda-assistant.css';
+import './styles/coda-admin.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

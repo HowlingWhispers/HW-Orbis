@@ -3,6 +3,7 @@ import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import { ensureSuperAdminAccess, refreshSessionAccess } from './auth.js';
 import { adminSettingsSchema, SettingsLockoutError, type SettingsStore } from './settings.js';
+import { CodaDiscordError, codaDiscordMessageSchema, listCodaDiscordChannels, listCodaDiscordMessageHistory, sendCodaDiscordMessage } from './coda-discord.js';
 import './types.js';
 
 export function requireAdmin(config: AppConfig, poolOrSettingsStore: DatabasePool | SettingsStore, maybeSettingsStore?: SettingsStore) {
@@ -39,11 +40,13 @@ export function createAdminRouter(config: AppConfig, pool: DatabasePool, setting
           creatorPolicyConfigured: settings.effectiveCreatorRoleIds.length > 0,
           adminPolicyConfigured: settings.adminRoleIds.length > 0 || settings.bootstrapAdminRoleIds.length > 0,
           inviteUrlConfigured: Boolean(settings.inviteUrl),
+          codaDiscordConfigured: Boolean(config.CODA_DISCORD_BOT_TOKEN && config.codaDiscordChannelIds.length > 0 && settings.guildId),
         },
         secrets: {
           databaseUrl: 'configured',
           sessionSecret: 'configured',
           discordClientSecret: config.DISCORD_CLIENT_SECRET ? 'configured' : 'missing',
+          codaDiscordBotToken: config.CODA_DISCORD_BOT_TOKEN ? 'configured' : 'missing',
         },
         system: {
           version: config.ORBIS_VERSION,
@@ -84,6 +87,35 @@ export function createAdminRouter(config: AppConfig, pool: DatabasePool, setting
       const requested = typeof request.query.limit === 'string' ? Number(request.query.limit) : 30;
       response.json({ items: await settingsStore.getAudit(Number.isFinite(requested) ? requested : 30) });
     } catch (error) { next(error); }
+  });
+
+  router.get('/coda/channels', async (_request, response, next) => {
+    try {
+      const settings = await settingsStore.getEffective();
+      response.json(await listCodaDiscordChannels(config, settings.guildId));
+    } catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.get('/coda/messages', async (request, response, next) => {
+    try {
+      const requested = typeof request.query.limit === 'string' ? Number(request.query.limit) : 20;
+      response.json({ items: await listCodaDiscordMessageHistory(pool, Number.isFinite(requested) ? requested : 20) });
+    } catch (error) { next(error); }
+  });
+
+  router.post('/coda/messages', async (request, response, next) => {
+    try {
+      const settings = await settingsStore.getEffective();
+      const body = codaDiscordMessageSchema.parse(request.body);
+      const result = await sendCodaDiscordMessage(config, pool, settings.guildId, request.session.userId!, body);
+      response.status(201).json(result);
+    } catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
   });
 
   return router;

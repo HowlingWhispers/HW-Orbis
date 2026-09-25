@@ -11,9 +11,38 @@ export interface AdminSettings {
 }
 
 export interface AdminOverview {
-  status: Record<'apiOnline' | 'databaseConnected' | 'discordOAuthConfigured' | 'discordGuildConfigured' | 'adultPolicyConfigured' | 'creatorPolicyConfigured' | 'adminPolicyConfigured' | 'inviteUrlConfigured', boolean>;
-  secrets: Record<'databaseUrl' | 'sessionSecret' | 'discordClientSecret', 'configured' | 'missing'>;
+  status: Record<'apiOnline' | 'databaseConnected' | 'discordOAuthConfigured' | 'discordGuildConfigured' | 'adultPolicyConfigured' | 'creatorPolicyConfigured' | 'adminPolicyConfigured' | 'inviteUrlConfigured' | 'codaDiscordConfigured', boolean>;
+  secrets: Record<'databaseUrl' | 'sessionSecret' | 'discordClientSecret' | 'codaDiscordBotToken', 'configured' | 'missing'>;
   system: { version: string; buildSha: string | null; environment: string };
+}
+
+export interface AdminCodaChannel {
+  id: string;
+  name: string;
+  type: number;
+  parentId: string | null;
+  position: number;
+}
+
+export interface AdminCodaChannelState {
+  configured: boolean;
+  guildId: string;
+  items: AdminCodaChannel[];
+  reason?: string;
+}
+
+export interface AdminCodaMessage {
+  id: string;
+  guildId: string;
+  channelId: string;
+  discordMessageId: string | null;
+  content: string;
+  replyToMessageId: string | null;
+  status: 'sent' | 'failed';
+  errorMessage: string | null;
+  sentByUserId: string | null;
+  sentByName: string | null;
+  createdAt: string;
 }
 
 export interface AdminAuditEntry {
@@ -40,6 +69,10 @@ export const adminApi = {
   overview: () => request<AdminOverview>('/overview'),
   settings: () => request<{ settings: AdminSettings; roleResolution: { available: boolean; reason: string } }>('/settings'),
   audit: () => request<{ items: AdminAuditEntry[] }>('/audit'),
+  codaChannels: () => request<AdminCodaChannelState>('/coda/channels'),
+  codaMessages: (limit = 20) => request<{ items: AdminCodaMessage[] }>('/coda/messages?limit=' + encodeURIComponent(String(limit))),
+  sendCodaMessage: (input: { channelId: string; content: string; replyTo?: string }) =>
+    request<{ message: AdminCodaMessage }>('/coda/messages', { method: 'POST', body: JSON.stringify(input) }),
   updateSettings: (settings: Pick<AdminSettings, 'guildId' | 'adultRoleIds' | 'creatorRoleIds' | 'adminRoleIds' | 'inviteUrl'>) =>
     request<{ settings: AdminSettings }>('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
 };

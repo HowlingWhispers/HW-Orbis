@@ -12,6 +12,8 @@ const envSchema = z.object({
   DISCORD_CLIENT_SECRET: z.string().min(1),
   DISCORD_REDIRECT_URI: z.string().url(),
   DISCORD_GUILD_ID: z.string().regex(/^$|^\d{17,20}$/).default(''),
+  CODA_DISCORD_BOT_TOKEN: z.string().default(''),
+  CODA_DISCORD_CHANNEL_IDS: z.string().default(''),
   DISCORD_ADULT_ROLE_IDS: z.string().default(''),
   DISCORD_CREATOR_ROLE_IDS: z.string().default(''),
   DISCORD_ADMIN_ROLE_IDS: z.string().default(''),
@@ -40,6 +42,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
   }
   return {
     ...env,
+    codaDiscordChannelIds: parseRoleIds(env.CODA_DISCORD_CHANNEL_IDS),
     envAdultRoleIds: parseRoleIds(env.DISCORD_ADULT_ROLE_IDS),
     envCreatorRoleIds: parseRoleIds(env.DISCORD_CREATOR_ROLE_IDS),
     envAdminRoleIds: parseRoleIds(env.DISCORD_ADMIN_ROLE_IDS),
