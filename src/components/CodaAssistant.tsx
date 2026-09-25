@@ -116,11 +116,11 @@ export function CodaAssistant() {
         {result && (mode === 'sort'
           ? <SortResult result={result} canApply={Boolean(inEditor && result.record?.type === 'world')} onApply={applyDraft} />
           : <div className="coda-result coda-result--text"><p>{result.text}</p></div>)}
-        {applied && <div className="coda-notice is-success"><strong>Draft placed in the editor.</strong><span>Review the highlighted/filled fields and use the normal Save button when you are satisfied.</span></div>}
+        {applied && <div className="coda-notice is-success"><strong>Draft placed in the editor.</strong><span>Review the filled fields and use the normal Save button when you are satisfied.</span></div>}
       </div>
 
       <footer className="coda-assistant__footer">
-        <span>Coda proposes. You decide.</span>
+        <span>Coda proposes. You decide. Requests go only to your configured provider and are not saved by Coda.</span>
         {result?.model && <small>{result.model}</small>}
       </footer>
     </aside>}
