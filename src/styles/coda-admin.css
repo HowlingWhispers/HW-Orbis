@@ -1,0 +1,33 @@
+.coda-console { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 14px; align-items: start; }
+.coda-console__composer { display: grid; gap: 14px; }
+.coda-console__composer .admin-field > span { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.coda-console__composer select, .coda-console__composer input, .coda-console__composer textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 8px; outline: none; background: rgba(5, 14, 29, .68); color: var(--text); }
+.coda-console__composer select, .coda-console__composer input { min-height: 42px; padding: 0 12px; }
+.coda-console__composer textarea { padding: 12px; resize: vertical; line-height: 1.55; }
+.coda-console__composer select:focus, .coda-console__composer input:focus, .coda-console__composer textarea:focus { border-color: rgba(229, 190, 129, .58); box-shadow: 0 0 0 3px rgba(217, 170, 112, .08); }
+.coda-count { color: var(--faint); font-size: 12px; font-weight: 600; }
+.coda-count.is-over { color: #efb4b4; }
+.coda-console__actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+.coda-console__actions > span { margin-right: auto; color: #a9d7bf; font-size: 13px; }
+.coda-console__preview { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: rgba(8, 20, 39, .7); }
+.coda-preview-label { display: block; margin-bottom: 12px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.coda-preview-message { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 10px; }
+.coda-preview-avatar { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: linear-gradient(145deg, #263e63, #12223c); color: var(--amber-bright); font-family: var(--serif); font-size: 22px; font-weight: 700; }
+.coda-preview-message strong { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.coda-preview-message strong small { padding: 2px 5px; border-radius: 4px; background: #5865f2; color: white; font-size: 9px; }
+.coda-preview-message pre { margin: 5px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); font: 14px/1.45 'Nunito Sans', system-ui, sans-serif; }
+.coda-console__preview > p { margin: 13px 0 0 48px; color: var(--faint); font-size: 11px; line-height: 1.45; }
+.coda-console-status { color: var(--muted); font-size: 14px; }
+.coda-console-error { border-color: rgba(210, 111, 111, .35); color: #efb4b4; }
+.coda-message-history { display: grid; gap: 8px; }
+.coda-message-history article { padding: 13px 14px; border: 1px solid var(--line); border-radius: 9px; background: rgba(8, 20, 39, .58); }
+.coda-message-history article.is-failed { border-color: rgba(210, 111, 111, .3); }
+.coda-message-history header { display: flex; justify-content: space-between; gap: 12px; }
+.coda-message-history header strong { color: var(--moon); font-size: 13px; }
+.coda-message-history header span { color: #a9d7bf; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.coda-message-history article.is-failed header span, .coda-message-history article.is-failed em { color: #efb4b4; }
+.coda-message-history p { margin: 7px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); font-size: 13px; line-height: 1.5; }
+.coda-message-history small, .coda-message-history em { display: block; color: var(--faint); font-size: 11px; }
+.coda-message-history em { margin-top: 4px; font-style: normal; }
+@media (max-width: 900px) { .coda-console { grid-template-columns: 1fr; } }
+@media (max-width: 650px) { .coda-console__actions { align-items: stretch; flex-direction: column; } .coda-console__actions > span { margin-right: 0; } .coda-console__actions .button { justify-content: center; } .coda-console__preview > p { margin-left: 0; } }
