@@ -17,7 +17,7 @@ export interface CodaAssistantResponse {
   questions?: string[];
   warnings?: string[];
   recordPatch?: Record<string, unknown> | null;
-  record?: { id: string; type: string; name: string };
+  record?: { id: string; type: string; name: string; originWorldId?: string; canAddToWorld?: boolean };
 }
 
 export class CodaAssistantError extends Error {
