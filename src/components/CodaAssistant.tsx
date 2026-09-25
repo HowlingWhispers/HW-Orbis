@@ -1,5 +1,5 @@
 import { BookOpen, Search, Send, Sparkles, WandSparkles, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaMode } from '../api/coda-assistant';
 import { useAuth } from '../auth/AuthContext';
@@ -70,6 +70,14 @@ export function CodaAssistant() {
   const inEditor = Boolean(assetId && location.pathname === `/asset/${assetId}/edit`);
   const active = modes.find((item) => item.id === mode)!;
 
+  useEffect(() => {
+    setIncludeContext(false);
+    setResult(null);
+    setError('');
+    setSettingsPath('');
+    setApplied(false);
+  }, [assetId]);
+
   const run = async () => {
     if (!text.trim() || working) return;
     setWorking(true);
@@ -93,7 +101,7 @@ export function CodaAssistant() {
   };
 
   const applyDraft = () => {
-    if (!assetId || !result?.recordPatch) return;
+    if (!assetId || !result?.recordPatch || result.record?.id !== assetId) return;
     window.dispatchEvent(new CustomEvent('orbis:coda-apply-draft', {
       detail: { assetId, patch: result.recordPatch },
     }));
@@ -128,7 +136,7 @@ export function CodaAssistant() {
         </>}
         {error && <div className="coda-notice is-error"><strong>{error}</strong>{settingsPath && <Link to={settingsPath}>Open Account settings</Link>}</div>}
         {result && (mode === 'sort'
-          ? <SortResult result={result} canApply={Boolean(inEditor && result.record?.type === 'world')} onApply={applyDraft} />
+          ? <SortResult result={result} canApply={Boolean(inEditor && result.record?.type === 'world' && result.record.id === assetId)} onApply={applyDraft} />
           : <div className="coda-result coda-result--text"><p>{result.text}</p></div>)}
         {applied && <div className="coda-notice is-success"><strong>Draft placed in the editor.</strong><span>Review the filled fields and use the normal Save button when you are satisfied.</span></div>}
       </div>
