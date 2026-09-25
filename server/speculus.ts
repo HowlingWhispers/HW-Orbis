@@ -93,6 +93,19 @@ function sourceIdentityForRow(row: Record<string, unknown>) {
   if (sourceAssetId.startsWith(prefix) && sourceAssetId.length > prefix.length) return sourceAssetId.slice(prefix.length);
   return stringValue(document.id);
 }
+function familyReferencedCharacterRows(family: Record<string, unknown>, rows: Record<string, unknown>[]) {
+  const familyText = JSON.stringify(family.document ?? {}).toLowerCase();
+  return rows.filter((row) => {
+    if (row.type !== 'character') return false;
+    const id = String(row.id).toLowerCase();
+    const sourceId = sourceIdentityForRow(row).toLowerCase();
+    const name = String(row.name).trim().toLowerCase();
+    return (id && familyText.includes(id))
+      || (sourceId && familyText.includes(sourceId))
+      || (name && familyText.includes(name));
+  });
+}
+
 
 export function simulationNavigationData(row: Record<string, unknown>, bitterroot = false) {
   if (row.type !== 'place') return {};
@@ -214,11 +227,14 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const primaryAsset = asset.type === 'place'
         ? { ...simulationAsset(asset), data: { ...asRecord(asset.document), ...simulationNavigationData(asset, isBitterroot) } }
         : simulationAsset(asset);
-      const relatedAssets = relatedResult.rows.map((row) => {
+      const scopedRelatedRows = asset.type === 'family'
+        ? familyReferencedCharacterRows(asset, relatedResult.rows)
+        : relatedResult.rows;
+      const relatedAssets = scopedRelatedRows.map((row) => {
         const packaged = simulationAsset(row, false);
         return row.type === 'place' ? { ...packaged, data: simulationNavigationData(row, isBitterroot) } : packaged;
       });
-      const initialLocationId = resolveInitialLocationId(asset, relatedResult.rows);
+      const initialLocationId = resolveInitialLocationId(asset, scopedRelatedRows);
       const card = characterCard(asset);
       const catalog = await catalogueIdentity(pool, asset);
       const packageBody = {
@@ -240,7 +256,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
           description: 'The active Orbis user. The simulator must not invent this person\'s actions, thoughts, or dialogue.',
         },
         scene: card?.scenario || String(asset.summary ?? ''),
-        contextBlocks: relatedResult.rows.slice(0, 20).map((row) => ({
+        contextBlocks: scopedRelatedRows.slice(0, 20).map((row) => ({
           id: String(row.id),
           title: String(row.name),
           content: JSON.stringify(row.document ?? {}).slice(0, 60_000),
