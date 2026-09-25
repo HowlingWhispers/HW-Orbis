@@ -14,6 +14,7 @@ const requestSchema = z.object({
   mode: z.enum(modes),
   text: z.string().trim().min(1).max(60_000),
   assetId: z.string().uuid().optional(),
+  includeRecordContext: z.boolean().default(false),
   pageHint: z.string().trim().min(1).max(120).optional(),
 });
 
@@ -252,7 +253,7 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               model: String(provider.model),
-              prompt: buildPrompt(body.mode, body.text, asset, body.pageHint),
+              prompt: buildPrompt(body.mode, body.text, body.includeRecordContext ? asset : undefined, body.pageHint),
               max_tokens: body.mode === 'sort' ? 1600 : 1100,
               temperature: body.mode === 'sort' ? 0.25 : 0.45,
               top_k: 180,
