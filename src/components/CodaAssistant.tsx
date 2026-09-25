@@ -14,6 +14,20 @@ function currentAssetId(pathname: string) {
   return pathname.match(/^\/asset\/([0-9a-f-]{36})(?:\/|$)/i)?.[1];
 }
 
+function pageHint(pathname: string) {
+  if (pathname === '/') return 'Orbis home';
+  if (pathname === '/account') return 'Account settings';
+  if (pathname === '/admin') return 'Administration';
+  if (/^\/asset\/[0-9a-f-]{36}\/edit$/i.test(pathname)) return 'Record editor';
+  if (/^\/asset\/[0-9a-f-]{36}\/saves$/i.test(pathname)) return 'Save archive';
+  if (/^\/asset\/[0-9a-f-]{36}(?:\/)?$/i.test(pathname)) return 'Record detail';
+  const collection = pathname.match(/^\/library\/([a-z-]+)$/i)?.[1];
+  if (collection) return `${collection} collection`;
+  if (pathname === '/all') return 'Complete archive';
+  if (pathname.startsWith('/projects/')) return 'Project information';
+  return 'Orbis';
+}
+
 function StringList({ title, values, tone }: { title: string; values?: string[]; tone?: 'warning' }) {
   if (!values?.length) return null;
   return <section className={`coda-result-list ${tone === 'warning' ? 'is-warning' : ''}`}><strong>{title}</strong><ul>{values.map((value, index) => <li key={`${index}-${value}`}>{value}</li>)}</ul></section>;
@@ -63,7 +77,7 @@ export function CodaAssistant() {
     setSettingsPath('');
     setApplied(false);
     try {
-      const next = await askCoda({ mode, text: text.trim(), ...(includeContext && assetId ? { assetId } : {}) });
+      const next = await askCoda({ mode, text: text.trim(), pageHint: pageHint(location.pathname), ...(includeContext && assetId ? { assetId } : {}) });
       setResult(next);
     } catch (reason) {
       setResult(null);
