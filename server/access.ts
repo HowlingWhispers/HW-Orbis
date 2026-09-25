@@ -18,12 +18,10 @@ export function decideAccess(isGuildMember: boolean, roles: readonly string[], p
   if (!isGuildMember) return { isGuildMember: false, canViewAdult: false, canCreate: false, canAdmin: false };
 
   const hasAdultRole = hasAnyRole(roles, policy.adultRoleIds);
-  const hasCreatorRole = hasAnyRole(roles, policy.creatorRoleIds);
-
   return {
     isGuildMember: true,
     canViewAdult: hasAdultRole,
-    canCreate: hasAdultRole && hasCreatorRole,
+    canCreate: true,
     canAdmin: hasAnyRole(roles, policy.adminRoleIds) || hasAnyRole(roles, policy.bootstrapAdminRoleIds),
   };
 }
