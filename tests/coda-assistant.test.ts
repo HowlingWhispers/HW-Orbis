@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { parseCodaSortResponse, sanitizeCodaPatch } from '../server/coda-assistant';
+import { buildCodaPrompt, parseCodaSortResponse, sanitizeCodaPatch } from '../server/coda-assistant';
 
 describe('Coda Assistant draft safety', () => {
+  it('keeps owner-directed dark worldbuilding as valid authoring input', () => {
+    const prompt = buildCodaPrompt(
+      'sort',
+      'Add enslaved characters to this tribe.',
+      {
+        id: 'world-1',
+        type: 'world',
+        name: 'Test',
+        summary: '',
+        document: { rules: { society: 'Communal living. Characters have independent agency.' } },
+        originWorldId: 'world-1',
+        canAddToWorld: true,
+      },
+      'Record editor',
+    );
+
+    expect(prompt).toContain('Do not moralize about fictional worldbuilding.');
+    expect(prompt).toContain('do not suppress the proposal');
+    expect(prompt).toContain('Existing culture, rules, customs, or setting text are not a veto');
+    expect(prompt).toContain('Independent agency');
+    expect(prompt).toContain('enslaved');
+  });
+
   it('removes ownership, privacy and credential-shaped fields from record patches', () => {
     expect(sanitizeCodaPatch({
       identity: { name: 'Test World', description: 'A place.' },
