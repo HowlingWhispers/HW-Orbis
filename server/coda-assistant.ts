@@ -76,14 +76,25 @@ const protectedPatchKeys = new Set([
   'visibility', 'showInLibrary', 'allowForking',
 ]);
 
-function sanitizePatch(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sanitizePatch);
+export function sanitizeCodaPatch(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeCodaPatch);
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
       .filter(([key]) => !protectedPatchKeys.has(key))
-      .map(([key, child]) => [key, sanitizePatch(child)]),
+      .map(([key, child]) => [key, sanitizeCodaPatch(child)]),
   );
+}
+
+export function parseCodaSortResponse(text: string) {
+  const parsed = parseJsonObject(text);
+  if (!parsed) return undefined;
+  const structured = sortResponseSchema.safeParse(parsed);
+  if (!structured.success) return undefined;
+  return {
+    ...structured.data,
+    recordPatch: structured.data.recordPatch ? sanitizeCodaPatch(structured.data.recordPatch) : null,
+  };
 }
 
 function modeInstructions(mode: CodaMode, hasAsset: boolean) {
@@ -258,17 +269,12 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
         if (!text) return response.status(502).json({ error: generationErrors.NOVELAI_EMPTY_REPLY, requestId });
 
         if (body.mode === 'sort') {
-          const parsed = parseJsonObject(text);
-          const structured = parsed ? sortResponseSchema.safeParse(parsed) : undefined;
-          if (structured?.success) {
-            const safe = {
-              ...structured.data,
-              recordPatch: structured.data.recordPatch ? sanitizePatch(structured.data.recordPatch) : null,
-            };
+          const structured = parseCodaSortResponse(text);
+          if (structured) {
             return response.json({
               mode: body.mode,
               model: String(provider.model),
-              ...safe,
+              ...structured,
               ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name } } : {}),
             });
           }
