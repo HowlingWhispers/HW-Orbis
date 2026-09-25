@@ -1,6 +1,9 @@
-import { Activity, Database, History, KeyRound, MessageSquareText, RefreshCw, Save, Send, ServerCog, Settings2, ShieldCheck, UsersRound } from 'lucide-react';
+import { Activity, BookOpen, Clock, Database, History, KeyRound, MessageCircle, MessageSquareText, Pencil, Power, RefreshCw, Save, Search, Send, ServerCog, Settings2, ShieldCheck, Trash2, User, UsersRound, Wifi } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { adminApi, type AdminAuditEntry, type AdminCodaChannel, type AdminCodaMessage, type AdminOverview, type AdminSettings } from '../admin/api';
+import {
+  adminApi, type AdminAuditEntry, type AdminCodaChannel, type AdminCodaMember, type AdminCodaMessage,
+  type AdminCodaScheduled, type AdminCodaStatus, type AdminCodaTemplate, type AdminOverview, type AdminSettings,
+} from '../admin/api';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
 
 type AdminTab = 'overview' | 'discord' | 'coda' | 'access' | 'system';
@@ -99,72 +102,243 @@ function Capability({ title, ids, extra = [], note }: { title: string; ids: stri
 }
 
 function CodaDiscordPanel() {
+  type CodaSubTab = 'channels' | 'dm' | 'templates' | 'schedule' | 'history' | 'status';
+  const [subTab, setSubTab] = useState<CodaSubTab>('channels');
   const [channels, setChannels] = useState<AdminCodaChannel[]>([]);
   const [history, setHistory] = useState<AdminCodaMessage[]>([]);
+  const [templates, setTemplates] = useState<AdminCodaTemplate[]>([]);
+  const [scheduled, setScheduled] = useState<AdminCodaScheduled[]>([]);
+  const [status, setStatus] = useState<AdminCodaStatus>();
   const [configured, setConfigured] = useState<boolean>();
   const [configurationReason, setConfigurationReason] = useState('');
-  const [channelId, setChannelId] = useState('');
-  const [content, setContent] = useState('');
-  const [replyTo, setReplyTo] = useState('');
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [message, setMessage] = useState('');
+  const [working, setWorking] = useState(false);
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+
+  const [channelId, setChannelId] = useState('');
+  const [channelContent, setChannelContent] = useState('');
+  const [replyTo, setReplyTo] = useState('');
+
+  const [memberQuery, setMemberQuery] = useState('');
+  const [members, setMembers] = useState<AdminCodaMember[]>([]);
+  const [recipient, setRecipient] = useState('');
+  const [dmContent, setDmContent] = useState('');
+
+  const [templateName, setTemplateName] = useState('');
+  const [templateContent, setTemplateContent] = useState('');
+
+  const [scheduleType, setScheduleType] = useState<'channel' | 'dm'>('channel');
+  const [scheduleTarget, setScheduleTarget] = useState('');
+  const [scheduleContent, setScheduleContent] = useState('');
+  const [scheduleAt, setScheduleAt] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const [channelState, messageState] = await Promise.all([adminApi.codaChannels(), adminApi.codaMessages()]);
-      setChannels(channelState.items);
-      setConfigured(channelState.configured);
-      setConfigurationReason(channelState.reason ?? '');
-      setHistory(messageState.items);
+      const [channelState, messageState, templateState, scheduledState, statusState] = await Promise.all([
+        adminApi.codaChannels(), adminApi.codaMessages(), adminApi.codaTemplates(), adminApi.codaScheduled(), adminApi.codaStatus(),
+      ]);
+      setChannels(channelState.items); setConfigured(channelState.configured); setConfigurationReason(channelState.reason ?? '');
+      setHistory(messageState.items); setTemplates(templateState.items); setScheduled(scheduledState.items); setStatus(statusState);
       setChannelId((current) => current && channelState.items.some((channel) => channel.id === current) ? current : channelState.items[0]?.id ?? '');
+      setScheduleTarget((current) => current || channelState.items[0]?.id || '');
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Coda Discord controls could not be loaded.');
+      setError(loadError instanceof Error ? loadError.message : 'Coda command center could not be loaded.');
     } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
 
-  const send = async (event: React.FormEvent) => {
+  const refreshHistory = async () => setHistory((await adminApi.codaMessages()).items);
+  const useTemplate = (template: AdminCodaTemplate, destination: 'channel' | 'dm' | 'schedule') => {
+    if (destination === 'channel') { setChannelContent(template.content); setSubTab('channels'); }
+    if (destination === 'dm') { setDmContent(template.content); setSubTab('dm'); }
+    if (destination === 'schedule') { setScheduleContent(template.content); setSubTab('schedule'); }
+  };
+
+  const sendChannel = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!channelId || !content.trim() || content.length > 2000) return;
-    setSending(true); setMessage(''); setError('');
+    if (!channelId || !channelContent.trim() || channelContent.length > 2000) return;
+    setWorking(true); setNotice(''); setError('');
     try {
-      const result = await adminApi.sendCodaMessage({ channelId, content, ...(replyTo.trim() ? { replyTo: replyTo.trim() } : {}) });
-      setMessage('Coda posted the message to Discord.');
-      setContent(''); setReplyTo('');
-      setHistory((current) => [result.message, ...current].slice(0, 20));
-    } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : 'Coda could not post that message.');
-      try { setHistory((await adminApi.codaMessages()).items); } catch { /* Keep the existing history visible. */ }
-    } finally { setSending(false); }
+      const result = await adminApi.sendCodaMessage({ channelId, content: channelContent, ...(replyTo.trim() ? { replyTo: replyTo.trim() } : {}) });
+      setNotice('Coda posted the message to Discord.'); setChannelContent(''); setReplyTo('');
+      setHistory((current) => [result.message, ...current].slice(0, 50));
+    } catch (sendError) { setError(sendError instanceof Error ? sendError.message : 'Coda could not post that message.'); }
+    finally { setWorking(false); }
+  };
+
+  const searchMembers = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!memberQuery.trim()) return;
+    setWorking(true); setError(''); setNotice('');
+    try {
+      const result = await adminApi.codaMembers(memberQuery);
+      setMembers(result.items);
+      if (result.items.length === 1) setRecipient(result.items[0].id);
+      if (result.items.length === 0) setNotice('No matching Discord members found. You can still use an exact user ID.');
+    } catch (searchError) { setError(searchError instanceof Error ? searchError.message : 'Coda could not search members.'); }
+    finally { setWorking(false); }
+  };
+
+  const sendDm = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!recipient.trim() || !dmContent.trim() || dmContent.length > 2000) return;
+    setWorking(true); setNotice(''); setError('');
+    try {
+      const result = await adminApi.sendCodaDm({ recipient: recipient.trim(), content: dmContent });
+      setNotice('Private message delivered by Coda.'); setDmContent('');
+      setHistory((current) => [result.message, ...current].slice(0, 50));
+    } catch (sendError) { setError(sendError instanceof Error ? sendError.message : 'Coda could not send that private message.'); }
+    finally { setWorking(false); }
+  };
+
+  const createTemplate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!templateName.trim() || !templateContent.trim()) return;
+    setWorking(true); setError(''); setNotice('');
+    try {
+      const result = await adminApi.createCodaTemplate({ name: templateName, content: templateContent });
+      setTemplates((current) => [...current, result.item].sort((a, b) => a.name.localeCompare(b.name)));
+      setTemplateName(''); setTemplateContent(''); setNotice('Template saved.');
+    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : 'Template could not be saved.'); }
+    finally { setWorking(false); }
+  };
+
+  const scheduleMessage = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const target = scheduleType === 'channel' ? scheduleTarget : scheduleTarget.trim();
+    if (!target || !scheduleContent.trim() || !scheduleAt) return;
+    setWorking(true); setError(''); setNotice('');
+    try {
+      const result = await adminApi.scheduleCodaMessage({
+        destinationType: scheduleType, targetId: target, content: scheduleContent,
+        sendAt: new Date(scheduleAt).toISOString(), ...(scheduleType === 'channel' && replyTo.trim() ? { replyTo: replyTo.trim() } : {}),
+      });
+      setScheduled((current) => [result.item, ...current]); setScheduleContent(''); setNotice('Coda queued the message.');
+    } catch (scheduleError) { setError(scheduleError instanceof Error ? scheduleError.message : 'Coda could not schedule that message.'); }
+    finally { setWorking(false); }
+  };
+
+  const editHistory = async (item: AdminCodaMessage) => {
+    const next = window.prompt('Edit Coda message', item.content);
+    if (next === null || !next.trim() || next === item.content) return;
+    setWorking(true); setError('');
+    try { await adminApi.editCodaMessage(item.id, next); await refreshHistory(); setNotice('Coda message edited.'); }
+    catch (editError) { setError(editError instanceof Error ? editError.message : 'Message could not be edited.'); }
+    finally { setWorking(false); }
+  };
+
+  const deleteHistory = async (item: AdminCodaMessage) => {
+    if (!window.confirm('Delete this message from Discord?')) return;
+    setWorking(true); setError('');
+    try { await adminApi.deleteCodaMessage(item.id); await refreshHistory(); setNotice('Coda message deleted from Discord.'); }
+    catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : 'Message could not be deleted.'); }
+    finally { setWorking(false); }
   };
 
   const channelNames = useMemo(() => new Map(channels.map((channel) => [channel.id, channel.name])), [channels]);
+  const subTabs: Array<{ id: CodaSubTab; label: string; icon: React.ReactNode }> = [
+    { id: 'channels', label: 'Channels', icon: <MessageSquareText size={15} /> },
+    { id: 'dm', label: 'Private DMs', icon: <MessageCircle size={15} /> },
+    { id: 'templates', label: 'Templates', icon: <BookOpen size={15} /> },
+    { id: 'schedule', label: 'Schedule', icon: <Clock size={15} /> },
+    { id: 'history', label: 'History', icon: <History size={15} /> },
+    { id: 'status', label: 'Status', icon: <Wifi size={15} /> },
+  ];
 
-  return <div className="admin-stack">
-    <section className="admin-section">
-      <div className="admin-section__title"><MessageSquareText /><div><h2>Speak as Coda</h2><p>Post through the real Coda bot from the protected Orbis control room.</p></div></div>
-      {loading && <div className="coda-console-status">Loading Coda's Discord channels...</div>}
+  return <div className="admin-stack coda-hub">
+    <section className="admin-section coda-hub__header">
+      <div className="admin-section__title"><MessageSquareText /><div><h2>Coda command center</h2><p>Speak in channels, send private messages, keep templates, schedule deliveries and control Coda's outbound access.</p></div></div>
+      <nav className="coda-subtabs" aria-label="Coda controls">{subTabs.map((item) => <button key={item.id} className={subTab === item.id ? 'is-active' : ''} onClick={() => { setSubTab(item.id); setError(''); setNotice(''); }}>{item.icon}{item.label}</button>)}</nav>
+      {loading && <div className="coda-console-status">Waking Coda's command desk...</div>}
       {!loading && error && <div className="policy-notice coda-console-error">{error}</div>}
-      {!loading && configured === false && <div className="policy-notice">Coda sending is disabled on the server. {configurationReason || 'Configure the Coda bot token and an allowlist of Discord channel IDs.'}</div>}
-      {!loading && configured && <div className="coda-console">
-        <form className="coda-console__composer" onSubmit={send}>
+      {!loading && notice && <div className="coda-console-notice">{notice}</div>}
+      {!loading && status && !status.outboundEnabled && <div className="coda-kennel-banner"><Power size={17} /><span><strong>Coda is in the kennel.</strong> Outbound channel posts, DMs and scheduled deliveries are paused.</span></div>}
+    </section>
+
+    {!loading && subTab === 'channels' && <section className="admin-section">
+      <div className="admin-section__title"><MessageSquareText /><div><h2>Speak in Discord</h2><p>Send a public server message through Coda.</p></div></div>
+      {configured === false ? <div className="policy-notice">{configurationReason || 'Configure Coda channel access on the Orbis server.'}</div> : <div className="coda-console">
+        <form className="coda-console__composer" onSubmit={sendChannel}>
           <label className="admin-field"><span><strong>Discord channel</strong></span><select value={channelId} onChange={(event) => setChannelId(event.target.value)}>{channels.map((channel) => <option key={channel.id} value={channel.id}>#{channel.name}</option>)}</select></label>
-          <label className="admin-field"><span><strong>Message as Coda</strong><small className={content.length > 2000 ? 'coda-count is-over' : 'coda-count'}>{content.length}/2000</small></span><textarea value={content} onChange={(event) => setContent(event.target.value)} rows={10} placeholder="Paste exactly what Coda should say..." /></label>
+          <TemplatePicker templates={templates} onUse={(template) => setChannelContent(template.content)} />
+          <label className="admin-field"><span><strong>Message as Coda</strong><small className={channelContent.length > 2000 ? 'coda-count is-over' : 'coda-count'}>{channelContent.length}/2000</small></span><textarea value={channelContent} onChange={(event) => setChannelContent(event.target.value)} rows={10} placeholder="Paste exactly what Coda should say..." /></label>
           <label className="admin-field"><span><strong>Reply to message</strong></span><input value={replyTo} onChange={(event) => setReplyTo(event.target.value)} placeholder="Optional Discord message link or message ID" /><small>The reply must be in the selected channel.</small></label>
-          <div className="coda-console__actions"><span role="status">{message}</span><button type="button" className="button button--ghost" onClick={() => void load()} disabled={sending}><RefreshCw size={16} /> Refresh</button><button className="button button--primary" disabled={sending || !channelId || !content.trim() || content.length > 2000}><Send size={16} /> {sending ? 'Sending...' : 'Send as Coda'}</button></div>
+          <div className="coda-console__actions"><span /><button type="button" className="button button--ghost" onClick={() => void load()} disabled={working}><RefreshCw size={16} /> Refresh</button><button className="button button--primary" disabled={working || !status?.outboundEnabled || !channelId || !channelContent.trim() || channelContent.length > 2000}><Send size={16} /> {working ? 'Sending...' : 'Send as Coda'}</button></div>
         </form>
-        <aside className="coda-console__preview" aria-label="Coda message preview"><span className="coda-preview-label">Preview</span><div className="coda-preview-message"><div className="coda-preview-avatar">C</div><div><strong>Coda <small>APP</small></strong><pre>{content || 'Your message will appear here.'}</pre></div></div><p>Discord will apply its normal Markdown formatting after the message is sent.</p></aside>
+        <CodaPreview content={channelContent} />
       </div>}
-    </section>
-    <section className="admin-section">
-      <div className="admin-section__title"><History /><div><h2>Recent Coda messages</h2><p>Administrative sends are recorded with their destination and operator.</p></div></div>
-      <div className="coda-message-history">{history.length === 0 && <p className="admin-empty">No Coda messages have been sent from Orbis yet.</p>}{history.map((item) => <article key={item.id} className={item.status === 'failed' ? 'is-failed' : ''}><header><strong>#{channelNames.get(item.channelId) ?? item.channelId}</strong><span>{item.status}</span></header><p>{item.content}</p><small>{item.sentByName ?? 'Unknown administrator'} · {new Date(item.createdAt).toLocaleString()}{item.discordMessageId ? ' · ' + item.discordMessageId : ''}</small>{item.errorMessage && <em>{item.errorMessage}</em>}</article>)}</div>
-    </section>
+    </section>}
+
+    {!loading && subTab === 'dm' && <section className="admin-section">
+      <div className="admin-section__title"><MessageCircle /><div><h2>Private courier</h2><p>Tell Coda who to bother privately. Search the server or paste an exact Discord user ID/mention.</p></div></div>
+      <div className="coda-dm-layout">
+        <form className="coda-console__composer" onSubmit={sendDm}>
+          <form className="coda-member-search" onSubmit={searchMembers}><input value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} placeholder="Search David Silver, username, ID..." /><button type="submit" className="button button--ghost" disabled={working}><Search size={16} /> Find</button></form>
+          {members.length > 0 && <div className="coda-member-results">{members.map((member) => <button type="button" key={member.id} className={recipient === member.id ? 'is-selected' : ''} onClick={() => setRecipient(member.id)}><User size={16} /><span><strong>{member.displayName}</strong><small>@{member.username} · {member.id}{member.bot ? ' · bot' : ''}</small></span></button>)}</div>}
+          <label className="admin-field"><span><strong>Recipient</strong></span><input value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="Discord user ID or <@mention>" /></label>
+          <TemplatePicker templates={templates} onUse={(template) => setDmContent(template.content)} />
+          <label className="admin-field"><span><strong>Private message</strong><small className={dmContent.length > 2000 ? 'coda-count is-over' : 'coda-count'}>{dmContent.length}/2000</small></span><textarea value={dmContent} onChange={(event) => setDmContent(event.target.value)} rows={9} placeholder="What should Coda whisper to them?" /></label>
+          <div className="coda-console__actions"><span /><button className="button button--primary" disabled={working || !status?.outboundEnabled || !recipient.trim() || !dmContent.trim() || dmContent.length > 2000}><Send size={16} /> {working ? 'Delivering...' : 'Send private DM'}</button></div>
+        </form>
+        <CodaPreview content={dmContent} privateMessage />
+      </div>
+    </section>}
+
+    {!loading && subTab === 'templates' && <section className="admin-section">
+      <div className="admin-section__title"><BookOpen /><div><h2>Coda message templates</h2><p>Keep reusable welcomes, notices and recurring messages without retyping them.</p></div></div>
+      <div className="coda-template-layout">
+        <form className="coda-console__composer" onSubmit={createTemplate}>
+          <label className="admin-field"><span><strong>Template name</strong></span><input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Welcome new member" /></label>
+          <label className="admin-field"><span><strong>Message</strong><small className="coda-count">{templateContent.length}/2000</small></span><textarea value={templateContent} onChange={(event) => setTemplateContent(event.target.value)} rows={8} /></label>
+          <div className="coda-console__actions"><span /><button className="button button--primary" disabled={working || !templateName.trim() || !templateContent.trim() || templateContent.length > 2000}><Save size={16} /> Save template</button></div>
+        </form>
+        <div className="coda-template-list">{templates.length === 0 && <p className="admin-empty">No templates yet.</p>}{templates.map((template) => <article key={template.id}><header><strong>{template.name}</strong><button className="icon-button danger" title="Delete template" onClick={async () => { if (!window.confirm('Delete this Coda template?')) return; setWorking(true); try { await adminApi.deleteCodaTemplate(template.id); setTemplates((current) => current.filter((item) => item.id !== template.id)); } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : 'Template could not be deleted.'); } finally { setWorking(false); } }}><Trash2 size={15} /></button></header><p>{template.content}</p><div><button onClick={() => useTemplate(template, 'channel')}>Use in channel</button><button onClick={() => useTemplate(template, 'dm')}>Use in DM</button><button onClick={() => useTemplate(template, 'schedule')}>Schedule it</button></div></article>)}</div>
+      </div>
+    </section>}
+
+    {!loading && subTab === 'schedule' && <section className="admin-section">
+      <div className="admin-section__title"><Clock /><div><h2>Scheduled delivery</h2><p>Queue a channel post or private DM. The Orbis service checks the queue every 30 seconds.</p></div></div>
+      <div className="coda-schedule-layout">
+        <form className="coda-console__composer" onSubmit={scheduleMessage}>
+          <label className="admin-field"><span><strong>Destination</strong></span><select value={scheduleType} onChange={(event) => { const next = event.target.value as 'channel' | 'dm'; setScheduleType(next); setScheduleTarget(next === 'channel' ? channels[0]?.id ?? '' : ''); }}><option value="channel">Discord channel</option><option value="dm">Private DM</option></select></label>
+          {scheduleType === 'channel' ? <label className="admin-field"><span><strong>Channel</strong></span><select value={scheduleTarget} onChange={(event) => setScheduleTarget(event.target.value)}>{channels.map((channel) => <option key={channel.id} value={channel.id}>#{channel.name}</option>)}</select></label> : <label className="admin-field"><span><strong>Discord user ID</strong></span><input value={scheduleTarget} onChange={(event) => setScheduleTarget(event.target.value)} placeholder="123456789012345678" /></label>}
+          <TemplatePicker templates={templates} onUse={(template) => setScheduleContent(template.content)} />
+          <label className="admin-field"><span><strong>Message</strong><small className="coda-count">{scheduleContent.length}/2000</small></span><textarea value={scheduleContent} onChange={(event) => setScheduleContent(event.target.value)} rows={7} /></label>
+          <label className="admin-field"><span><strong>Send at</strong></span><input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} /></label>
+          <div className="coda-console__actions"><span /><button className="button button--primary" disabled={working || !scheduleTarget || !scheduleContent.trim() || !scheduleAt}><Clock size={16} /> Queue message</button></div>
+        </form>
+        <div className="coda-scheduled-list">{scheduled.length === 0 && <p className="admin-empty">Nothing scheduled.</p>}{scheduled.map((item) => <article key={item.id} className={'status-' + item.status}><header><strong>{item.destinationType === 'channel' ? '#' + (channelNames.get(item.targetId) ?? item.targetId) : 'DM · ' + item.targetId}</strong><span>{item.status}</span></header><p>{item.content}</p><small>{new Date(item.sendAt).toLocaleString()} · {item.createdByName ?? 'administrator'}</small>{item.lastError && <em>{item.lastError}</em>}{item.status === 'queued' && <button className="button button--ghost" onClick={async () => { setWorking(true); try { await adminApi.cancelCodaScheduled(item.id); setScheduled((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: 'cancelled' } : entry)); } catch (cancelError) { setError(cancelError instanceof Error ? cancelError.message : 'Scheduled message could not be cancelled.'); } finally { setWorking(false); } }}>Cancel</button>}</article>)}</div>
+      </div>
+    </section>}
+
+    {!loading && subTab === 'history' && <section className="admin-section">
+      <div className="admin-section__title"><History /><div><h2>Message history</h2><p>Everything sent from the Orbis Coda desk, including private deliveries and failures.</p></div></div>
+      <div className="coda-message-history">{history.length === 0 && <p className="admin-empty">No Coda messages have been sent from Orbis yet.</p>}{history.map((item) => <article key={item.id} className={item.status === 'failed' ? 'is-failed' : item.deletedAt ? 'is-deleted' : ''}><header><strong>{item.destinationType === 'dm' ? 'DM → ' + (item.recipientDisplayName ?? item.recipientUserId ?? 'unknown') : '#' + (channelNames.get(item.channelId) ?? item.channelId)}</strong><span>{item.deletedAt ? 'deleted' : item.status}</span></header><p>{item.content}</p><small>{item.sentByName ?? 'Unknown administrator'} · {new Date(item.createdAt).toLocaleString()}{item.editedAt ? ' · edited' : ''}</small>{item.errorMessage && <em>{item.errorMessage}</em>}{item.status === 'sent' && !item.deletedAt && <div className="coda-history-actions"><button className="button button--ghost" disabled={working} onClick={() => void editHistory(item)}><Pencil size={14} /> Edit</button><button className="button button--ghost" disabled={working} onClick={() => void deleteHistory(item)}><Trash2 size={14} /> Delete</button></div>}</article>)}</div>
+    </section>}
+
+    {!loading && subTab === 'status' && <section className="admin-section">
+      <div className="admin-section__title"><Wifi /><div><h2>Coda status & safety</h2><p>Live Discord identity, queue health and the emergency outbound switch.</p></div></div>
+      {status && <div className="coda-status-grid">
+        <article><span>Discord identity</span><strong>{status.bot?.globalName || status.bot?.username || 'Not connected'}</strong><small>{status.bot ? '@' + status.bot.username + ' · ' + status.bot.id : 'Bot token not verified'}</small></article>
+        <article><span>Server</span><strong>{status.guild?.name || 'Not resolved'}</strong><small>{status.guild?.id || 'No guild information'}</small></article>
+        <article><span>Allowed channels</span><strong>{status.allowedChannelCount}</strong><small>Server-side allowlist</small></article>
+        <article><span>Queued deliveries</span><strong>{status.queuedScheduled}</strong><small>{status.lastMessageAt ? 'Last send ' + new Date(status.lastMessageAt).toLocaleString() : 'No sends recorded yet'}</small></article>
+      </div>}
+      <div className={'coda-kill-switch ' + (status?.outboundEnabled ? 'is-live' : 'is-stopped')}><div><Power /><span><strong>{status?.outboundEnabled ? 'Outbound messaging enabled' : 'Coda is in the kennel'}</strong><small>This switch blocks channel posts, DMs, edits/deletes and pauses scheduled deliveries.</small></span></div><button className={'button ' + (status?.outboundEnabled ? 'button--ghost' : 'button--primary')} disabled={working || !status} onClick={async () => { if (!status) return; if (status.outboundEnabled && !window.confirm('Put Coda in the kennel and stop all outbound Discord actions?')) return; setWorking(true); try { const result = await adminApi.setCodaOutbound(!status.outboundEnabled); setStatus({ ...status, outboundEnabled: result.outboundEnabled }); setNotice(result.outboundEnabled ? 'Coda is back out of the kennel.' : 'Coda is safely in the kennel.'); } catch (controlError) { setError(controlError instanceof Error ? controlError.message : 'Coda control could not be changed.'); } finally { setWorking(false); } }}>{status?.outboundEnabled ? 'PUT CODA IN HER KENNEL' : 'Release Coda'}</button></div>
+    </section>}
   </div>;
+}
+
+function TemplatePicker({ templates, onUse }: { templates: AdminCodaTemplate[]; onUse: (template: AdminCodaTemplate) => void }) {
+  if (templates.length === 0) return null;
+  return <label className="admin-field"><span><strong>Quick template</strong></span><select defaultValue="" onChange={(event) => { const template = templates.find((item) => item.id === event.target.value); if (template) onUse(template); event.target.value = ''; }}><option value="">Choose a saved template...</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>;
+}
+
+function CodaPreview({ content, privateMessage = false }: { content: string; privateMessage?: boolean }) {
+  return <aside className="coda-console__preview" aria-label="Coda message preview"><span className="coda-preview-label">{privateMessage ? 'Private preview' : 'Preview'}</span><div className="coda-preview-message"><div className="coda-preview-avatar">C</div><div><strong>Coda <small>APP</small></strong><pre>{content || (privateMessage ? 'Coda will whisper your message here.' : 'Your message will appear here.')}</pre></div></div><p>Discord applies its normal Markdown formatting after delivery.</p></aside>;
 }
 
 function SystemPanel({ overview, settings }: { overview: AdminOverview; settings: AdminSettings }) {

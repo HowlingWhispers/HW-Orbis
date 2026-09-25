@@ -3,7 +3,13 @@ import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import { ensureSuperAdminAccess, refreshSessionAccess } from './auth.js';
 import { adminSettingsSchema, SettingsLockoutError, type SettingsStore } from './settings.js';
-import { CodaDiscordError, codaDiscordMessageSchema, listCodaDiscordChannels, listCodaDiscordMessageHistory, sendCodaDiscordMessage } from './coda-discord.js';
+import {
+  CodaDiscordError, cancelCodaScheduledMessage, codaControlSchema, codaDirectMessageSchema, codaDiscordMessageSchema,
+  codaMessageEditSchema, codaScheduleSchema, createCodaScheduledMessage, createCodaTemplate, deleteCodaDiscordMessage,
+  deleteCodaTemplate, editCodaDiscordMessage, getCodaDiscordStatus, listCodaDiscordChannels, listCodaDiscordMessageHistory,
+  listCodaScheduledMessages, listCodaTemplates, searchCodaDiscordMembers, sendCodaDirectMessage, sendCodaDiscordMessage,
+  setCodaControlState,
+} from './coda-discord.js';
 import './types.js';
 
 export function requireAdmin(config: AppConfig, poolOrSettingsStore: DatabasePool | SettingsStore, maybeSettingsStore?: SettingsStore) {
@@ -116,6 +122,109 @@ export function createAdminRouter(config: AppConfig, pool: DatabasePool, setting
       if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
       next(error);
     }
+  });
+
+  router.patch('/coda/messages/:id', async (request, response, next) => {
+    try {
+      const body = codaMessageEditSchema.parse(request.body);
+      response.json(await editCodaDiscordMessage(config, pool, String(request.params.id), body.content));
+    } catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.delete('/coda/messages/:id', async (request, response, next) => {
+    try {
+      response.json(await deleteCodaDiscordMessage(config, pool, String(request.params.id)));
+    } catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.get('/coda/members', async (request, response, next) => {
+    try {
+      const settings = await settingsStore.getEffective();
+      const query = typeof request.query.query === 'string' ? request.query.query : '';
+      response.json({ items: await searchCodaDiscordMembers(config, settings.guildId, query) });
+    } catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.post('/coda/dms', async (request, response, next) => {
+    try {
+      const settings = await settingsStore.getEffective();
+      const body = codaDirectMessageSchema.parse(request.body);
+      const result = await sendCodaDirectMessage(config, pool, settings.guildId, request.session.userId!, body);
+      response.status(201).json(result);
+    } catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.get('/coda/templates', async (_request, response, next) => {
+    try { response.json({ items: await listCodaTemplates(pool) }); }
+    catch (error) { next(error); }
+  });
+
+  router.post('/coda/templates', async (request, response, next) => {
+    try { response.status(201).json({ item: await createCodaTemplate(pool, request.session.userId!, request.body) }); }
+    catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.delete('/coda/templates/:id', async (request, response, next) => {
+    try { response.json(await deleteCodaTemplate(pool, String(request.params.id))); }
+    catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.get('/coda/scheduled', async (_request, response, next) => {
+    try { response.json({ items: await listCodaScheduledMessages(pool) }); }
+    catch (error) { next(error); }
+  });
+
+  router.post('/coda/scheduled', async (request, response, next) => {
+    try {
+      const body = codaScheduleSchema.parse(request.body);
+      response.status(201).json({ item: await createCodaScheduledMessage(config, pool, request.session.userId!, body) });
+    } catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.delete('/coda/scheduled/:id', async (request, response, next) => {
+    try { response.json(await cancelCodaScheduledMessage(pool, String(request.params.id))); }
+    catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.get('/coda/status', async (_request, response, next) => {
+    try {
+      const settings = await settingsStore.getEffective();
+      response.json(await getCodaDiscordStatus(config, pool, settings.guildId));
+    } catch (error) {
+      if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.put('/coda/control', async (request, response, next) => {
+    try {
+      const body = codaControlSchema.parse(request.body);
+      response.json(await setCodaControlState(pool, request.session.userId!, body.outboundEnabled));
+    } catch (error) { next(error); }
   });
 
   return router;
