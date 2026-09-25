@@ -8,8 +8,49 @@ type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string
 type JsonObject = { [key: string]: JsonValue };
 
 const immutableKeys = new Set(['id', 'sourceId', 'name', 'title']);
+const codaProtectedKeys = new Set(['id', 'sourceId', 'libraryAssetId', 'worldSettings', 'creatorUserId', 'ownerUserId', 'contentRating', 'permissions', 'providerSettings', 'token', 'apiKey', 'secret', 'visibility', 'showInLibrary', 'allowForking']);
 const isObject = (value: JsonValue): value is JsonObject => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const labelOf = (key: string) => key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase());
+function codaItemKey(value: JsonValue) {
+  if (typeof value === 'string') return `string:${value.trim().toLowerCase()}`;
+  if (!isObject(value)) return JSON.stringify(value);
+  const name = typeof value.name === 'string' ? value.name : typeof value.title === 'string' ? value.title : '';
+  return name ? `name:${name.trim().toLowerCase()}` : JSON.stringify(value);
+}
+
+function mergeCodaValue(current: JsonValue | undefined, draft: JsonValue): JsonValue {
+  if (isObject(draft)) {
+    const currentObject = isObject(current as JsonValue) ? current as JsonObject : {};
+    const next: JsonObject = { ...currentObject };
+    for (const [key, value] of Object.entries(draft)) {
+      if (codaProtectedKeys.has(key)) continue;
+      next[key] = mergeCodaValue(currentObject[key], value);
+    }
+    return next;
+  }
+  if (Array.isArray(draft)) {
+    const currentArray = Array.isArray(current) ? current : [];
+    const seen = new Set(currentArray.map(codaItemKey));
+    return [...currentArray, ...draft.filter((item) => {
+      const key = codaItemKey(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })];
+  }
+  if (current === undefined || current === null || current === '') return draft;
+  return current;
+}
+
+function mergeCodaPatch(current: JsonObject, patch: JsonObject): JsonObject {
+  const next: JsonObject = { ...current };
+  for (const [key, value] of Object.entries(patch)) {
+    if (codaProtectedKeys.has(key)) continue;
+    next[key] = mergeCodaValue(current[key], value);
+  }
+  return next;
+}
+
 const blankLike = (value: JsonValue, key = ''): JsonValue => {
   if (key === 'id') return crypto.randomUUID();
   if (typeof value === 'string') return '';
@@ -70,6 +111,18 @@ export function GenericAssetEditor({ asset }: { asset: LibraryAsset }) {
     window.addEventListener('beforeunload', beforeUnload); window.addEventListener('keydown', shortcut);
     return () => { window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('keydown', shortcut); };
   }, [dirty, save]);
+
+  useEffect(() => {
+    const applyCodaDraft = (event: Event) => {
+      const detail = (event as CustomEvent<{ assetId?: string; patch?: unknown }>).detail;
+      if (detail?.assetId !== asset.id || !detail.patch || typeof detail.patch !== 'object' || Array.isArray(detail.patch)) return;
+      setDocument((current) => mergeCodaPatch(current, detail.patch as JsonObject));
+      setDirty(true);
+      setMessage('Coda draft applied locally. Review it before saving.');
+    };
+    window.addEventListener('orbis:coda-apply-draft', applyCodaDraft);
+    return () => window.removeEventListener('orbis:coda-apply-draft', applyCodaDraft);
+  }, [asset.id]);
 
   return <form className="record-editor" onSubmit={save}><header className="editor-header"><div><span className="eyebrow">{asset.type} editor</span><h1>{asset.name}</h1><p>Changes remain connected to this record and its immutable Discord ownership.</p></div><div className="editor-header__actions"><span className={dirty ? 'editor-dirty is-dirty' : 'editor-dirty'}>{dirty ? 'Unsaved changes' : 'All changes saved'}</span><button className="button button--secondary" type="button" onClick={() => navigate(`/asset/${asset.id}`)}>Cancel</button><button className="button button--primary" disabled={saving}><Save size={16} /> {saving ? 'Saving...' : 'Save record'}</button></div></header><div className="editor-layout"><section className="editor-panel"><h2>Library card</h2><div className="editor-grid"><label className="editor-field"><span>Name</span><input value={name} maxLength={120} onChange={(event) => update(setName, event.target.value)} /></label><label className="editor-field editor-field--wide"><span>Summary</span><textarea rows={4} maxLength={2000} value={summary} onChange={(event) => update(setSummary, event.target.value)} /></label><label className="editor-field"><span>Content rating</span><select value={contentRating} onChange={(event) => update(setContentRating, event.target.value as ContentRating)}><option value="sfw">SFW</option><option value="adult">Adult</option></select></label><label className="editor-field"><span>Visual tone</span><select value={visualTone} onChange={(event) => update(setVisualTone, event.target.value as LibraryAsset['visualTone'])}>{['moon','forest','ember','mist','violet','river'].map((tone) => <option value={tone} key={tone}>{labelOf(tone)}</option>)}</select></label><label className="editor-field editor-field--wide"><span>Tags</span><textarea rows={4} value={tags} onChange={(event) => update(setTags, event.target.value)} /><small>One tag per line</small></label></div></section><section className="editor-panel"><h2>Structured record</h2><p className="editor-panel__intro">Edit the authored fields stored with this record. Stable source IDs remain protected.</p><StructuredObjectEditor value={document} onChange={(value) => update(setDocument, value)} /></section></div><footer className="editor-footer"><span role="status">{message}</span><small>Tip: press Ctrl+S to save.</small></footer></form>;
 }

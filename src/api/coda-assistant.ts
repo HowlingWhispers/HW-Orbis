@@ -11,6 +11,7 @@ export interface CodaProposal {
 export interface CodaAssistantResponse {
   mode: CodaMode;
   model?: string;
+  recovered?: boolean;
   text?: string;
   summary?: string;
   proposals?: CodaProposal[];
