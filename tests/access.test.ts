@@ -9,8 +9,8 @@ const policy = {
 };
 
 describe('Discord access policy', () => {
-  it('keeps non-members on SFW read-only access', () => {
-    expect(decideAccess(false, ['adult-role'], policy)).toEqual({ isGuildMember: false, canViewAdult: false, canCreate: false, canAdmin: false });
+  it('allows signed-in non-members to create while keeping Discord-gated access off', () => {
+    expect(decideAccess(false, ['adult-role'], policy)).toEqual({ isGuildMember: false, canViewAdult: false, canCreate: true, canAdmin: false });
   });
 
   it('allows ordinary guild members to create while keeping adult content gated', () => {
