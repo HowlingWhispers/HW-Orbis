@@ -138,7 +138,7 @@ export function requireCreator(config: AppConfig, pool: DatabasePool, settingsSt
     try {
       if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to create in Orbis.' });
       const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
-      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore);
+      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, true);
       if (!request.session.access?.canCreate) return response.status(403).json({ error: 'Join the Howling Whispers Discord to create or edit in Orbis.' });
       await pool.query(
         `UPDATE users SET is_guild_member = $2, can_view_adult = $3, can_create = $4, can_admin = $5, access_checked_at = now(), updated_at = now() WHERE id = $1`,
