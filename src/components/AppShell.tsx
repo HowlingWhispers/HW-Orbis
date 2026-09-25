@@ -7,6 +7,7 @@ import { discordLoginPath, useAuth } from '../auth/AuthContext';
 import { projectList } from '../data/projects';
 import { useI18n } from '../i18n/I18nContext';
 import { UserAvatar } from './UserAvatar';
+import { CodaAssistant } from './CodaAssistant';
 
 function formatCountdown(targetIso: string, now: number, liveLabel: string) {
   const remaining = Math.max(0, new Date(targetIso).getTime() - now);
@@ -117,6 +118,7 @@ export function AppShell() {
         </header>
         <main className="content"><Outlet /></main>
       </div>
+      <CodaAssistant />
     </div>
   );
 }
