@@ -30,7 +30,7 @@ describe('Coda Assistant draft safety', () => {
       '  "recordPatch": {"locations":[{"name":"Hollow","description":"A quiet settlement."}],"worldSettings":{"visibility":"public"}}',
       '}',
       '```',
-    ].join('\\n'));
+    ].join('\n'));
 
     expect(parsed).toMatchObject({
       summary: 'Found one place.',
