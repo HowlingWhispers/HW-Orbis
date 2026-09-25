@@ -55,6 +55,59 @@ function updateObject(root: JsonObject, key: string, childKey: string, value: Js
   return { ...root, [key]: { ...child, [childKey]: value } };
 }
 
+const codaProtectedKeys = new Set(['id', 'sourceId', 'libraryAssetId', 'worldSettings', 'creatorUserId', 'ownerUserId', 'contentRating']);
+const codaEntityArrays = new Set(['locations', 'species', 'factions', 'societies', 'families', 'memories']);
+
+function codaItemKey(value: JsonValue) {
+  if (typeof value === 'string') return `string:${value.trim().toLowerCase()}`;
+  if (!isObject(value)) return JSON.stringify(value);
+  const name = asString(value.name) || asString(value.title);
+  return name ? `name:${name.trim().toLowerCase()}` : JSON.stringify(value);
+}
+
+function normalizeCodaArray(key: string, values: JsonValue[]) {
+  return values.map((value) => {
+    if (!codaEntityArrays.has(key) || !isObject(value) || asString(value.id)) return value;
+    return { ...value, id: crypto.randomUUID() } as JsonObject;
+  });
+}
+
+function mergeCodaValue(current: JsonValue | undefined, draft: JsonValue, key: string): JsonValue {
+  if (isObject(draft)) {
+    const currentObject = asObject(current);
+    const next: JsonObject = { ...currentObject };
+    for (const [childKey, childValue] of Object.entries(draft)) {
+      if (codaProtectedKeys.has(childKey)) continue;
+      next[childKey] = mergeCodaValue(currentObject[childKey], childValue, childKey);
+    }
+    return next;
+  }
+
+  if (Array.isArray(draft)) {
+    const currentArray = Array.isArray(current) ? current : [];
+    const incoming = normalizeCodaArray(key, draft);
+    const seen = new Set(currentArray.map(codaItemKey));
+    return [...currentArray, ...incoming.filter((item) => {
+      const itemKey = codaItemKey(item);
+      if (seen.has(itemKey)) return false;
+      seen.add(itemKey);
+      return true;
+    })];
+  }
+
+  if (current === undefined || current === null || current === '') return draft;
+  return current;
+}
+
+function mergeCodaPatch(current: JsonObject, patch: JsonObject): JsonObject {
+  const next: JsonObject = { ...current };
+  for (const [key, value] of Object.entries(patch)) {
+    if (codaProtectedKeys.has(key)) continue;
+    next[key] = mergeCodaValue(current[key], value, key);
+  }
+  return next;
+}
+
 function wouldCreateCycle(items: JsonObject[], entityId: string, nextParentId: string | undefined, parentKey: 'parentLocationId' | 'parentSocietyId'): boolean {
   if (!nextParentId) return false;
   if (nextParentId === entityId) return true;
@@ -396,6 +449,25 @@ export function WorldForgeEditor({ asset }: { asset: LibraryAsset }) {
   const save = useCallback(async () => { if (!payload.name) return setMessage('World name is required.'); setSaving(true); setMessage(''); try { await libraryApi.updateAsset(asset.id, payload); setDirty(false); setMessage('World saved.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'The world could not be saved.'); } finally { setSaving(false); } }, [asset.id, payload]);
 
   useEffect(() => { const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); }; const shortcut = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save(); } }; window.addEventListener('beforeunload', beforeUnload); window.addEventListener('keydown', shortcut); return () => { window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('keydown', shortcut); }; }, [dirty, save]);
+
+  useEffect(() => {
+    const applyCodaDraft = (event: Event) => {
+      const detail = (event as CustomEvent<{ assetId?: string; patch?: unknown }>).detail;
+      if (detail?.assetId !== asset.id || !detail.patch || typeof detail.patch !== 'object' || Array.isArray(detail.patch)) return;
+      const patch = detail.patch as JsonObject;
+      const patchIdentity = asObject(patch.identity);
+      const proposedName = asString(patchIdentity.name);
+      const proposedDescription = asString(patchIdentity.description);
+      setDocument((current) => mergeCodaPatch(current, patch));
+      if (proposedName) setName((current) => !current.trim() || current.trim().toLowerCase() === 'untitled world' ? proposedName : current);
+      if (proposedDescription) setSummary((current) => current.trim() ? current : proposedDescription.slice(0, 2000));
+      setDirty(true);
+      setActiveTab('identity');
+      setMessage('Coda draft applied locally. Review it before saving.');
+    };
+    window.addEventListener('orbis:coda-apply-draft', applyCodaDraft);
+    return () => window.removeEventListener('orbis:coda-apply-draft', applyCodaDraft);
+  }, [asset.id]);
 
   return <div className="world-forge"><header className="forge-toolbar"><div><span className="eyebrow">World Forge · Root Object</span><h1>{name}</h1></div><div className="forge-toolbar__actions"><span className={dirty ? 'editor-dirty is-dirty' : 'editor-dirty'}>{dirty ? 'Unsaved world changes' : 'World root saved'}</span><button type="button" className="button button--secondary" onClick={() => navigate(`/asset/${asset.id}`)}>Cancel</button><button type="button" className="button button--primary" disabled={saving} onClick={() => void save()}><Save size={16} /> {saving ? 'Saving...' : 'Save world'}</button></div></header>
     <nav className="forge-tabs" aria-label="World editor sections">{tabs.map((tab) => <button key={tab.id} type="button" className={activeTab === tab.id ? 'is-active' : ''} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}</nav>
