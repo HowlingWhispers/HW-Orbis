@@ -60,7 +60,7 @@ export function AccountView() {
     event.preventDefault(); setProviderSaving(true); setProviderMessage('');
     try {
       const next = await saveNovelAiSettings(novelAiToken, provider.model);
-      setProvider(next); setNovelAiToken(''); setProviderMessage('NovelAI connection saved for Speculus.');
+      setProvider(next); setNovelAiToken(''); setProviderMessage('NovelAI connection saved for Speculus and Coda Assistant.');
     } catch (error) { setProviderMessage(error instanceof Error ? error.message : 'Could not save NovelAI settings.'); }
     finally { setProviderSaving(false); }
   };
@@ -96,7 +96,7 @@ export function AccountView() {
         <form className="profile-form" onSubmit={save}><label htmlFor="display-name">{t('Orbis display name')}</label><div><input id="display-name" value={displayName} minLength={2} maxLength={40} onChange={(event) => setDisplayName(event.target.value)} /><button className="button button--primary" disabled={saving || displayName.trim() === user.displayName}>{saving ? t('Saving...') : t('Save name')}</button></div><small>{t('This changes the author name shown on all your creations. Ownership stays tied to your Discord ID.')}</small>{message && <p className="form-message" role="status">{message}</p>}</form>
 
         <form className="profile-form" onSubmit={saveProvider}>
-          <label htmlFor="novelai-token">NovelAI for Speculus</label>
+          <label htmlFor="novelai-token">NovelAI for Speculus & Coda</label>
           <div>
             <input id="novelai-token" type="password" autoComplete="off" value={novelAiToken} minLength={16} maxLength={4096} onChange={(event) => setNovelAiToken(event.target.value)} placeholder={provider.configured ? 'Token saved. Paste to replace it.' : 'Paste your NovelAI access token'} />
             <select aria-label="NovelAI model" value={provider.model} onChange={(event) => setProvider({ ...provider, model: event.target.value as NovelAiSettings['model'] })}>
@@ -106,7 +106,7 @@ export function AccountView() {
             <button className="button button--primary" disabled={providerSaving || novelAiToken.trim().length < 16}>{providerSaving ? 'Saving...' : provider.configured ? 'Replace token' : 'Save token'}</button>
             {provider.configured && <button className="button button--ghost" type="button" disabled={providerSaving} onClick={() => void removeProvider()}>Remove</button>}
           </div>
-          <small>The token is encrypted in Orbis and never sent to the Speculus browser or service. Speculus receives only a temporary generation grant.</small>
+          <small>The token is encrypted in Orbis and never exposed to the browser. Speculus receives only a temporary generation grant; Coda Assistant uses the encrypted token through the Orbis API.</small>
           {providerMessage && <p className="form-message" role="status">{providerMessage}</p>}
         </form>
 

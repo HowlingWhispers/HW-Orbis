@@ -55,6 +55,28 @@ describe('Coda Assistant sandbox boundaries', () => {
     expect(prompt).toContain('Foxes in this species are adults in that age range.');
   });
 
+  it('preserves parent, physical sub-race and spiritual-path distinctions in the sort contract', () => {
+    const prompt = buildCodaPrompt(
+      'sort',
+      'Ponykind has Earth-Bound and Pegasus physical tribes, plus Unique Destiny and Clockwork spiritual paths. Make separate racial entries.',
+      undefined,
+      'Orbis home',
+    );
+    expect(prompt).toContain('Do not flatten a parent species');
+    expect(prompt).toContain('physical sub-races/lineages');
+    expect(prompt).toContain('spiritual paths');
+    expect(prompt).toContain('fields.classification');
+    expect(prompt).toContain('fields.parentSpeciesName');
+    expect(prompt).toContain('Ponykind');
+  });
+
+  it('adds a strict recovery instruction for a malformed structured retry', () => {
+    const prompt = buildCodaPrompt('sort', 'Make entries.', undefined, 'Orbis home', true);
+    expect(prompt).toContain('RECOVERY RETRY');
+    expect(prompt).toContain('did not pass strict JSON/schema validation');
+    expect(prompt).toContain('Return one complete compact JSON object');
+  });
+
   it('removes ownership, privacy and credential-shaped fields from record patches', () => {
     expect(sanitizeCodaPatch({
       identity: { name: 'Test World', description: 'A place.' },

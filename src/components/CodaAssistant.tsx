@@ -38,7 +38,7 @@ function StringList({ title, values, tone }: { title: string; values?: string[];
 function ProposalCard({ proposal, index, canCreate, onCreate }: {
   proposal: CodaProposal;
   index: number;
-  canCreate: boolean;
+  canCreate: (proposal: CodaProposal) => boolean;
   onCreate: (proposal: CodaProposal, rating: ContentRating) => Promise<string>;
 }) {
   const [rating, setRating] = useState<ContentRating>('sfw');
@@ -63,7 +63,7 @@ function ProposalCard({ proposal, index, canCreate, onCreate }: {
     <header><span>{proposal.type}</span><b>{proposal.name}</b><small className={`confidence confidence--${proposal.confidence}`}>{proposal.confidence}</small></header>
     {proposal.reason && <p>{proposal.reason}</p>}
     {proposal.fields && Object.keys(proposal.fields).length > 0 && <details className="coda-field-preview"><summary>Proposed fields</summary><pre>{JSON.stringify(proposal.fields, null, 2)}</pre></details>}
-    {canCreate && proposal.type !== 'world' && <div className="coda-proposal__create">
+    {canCreate && <div className="coda-proposal__create">
       <label><span>Rating</span><select value={rating} onChange={(event) => setRating(event.target.value as ContentRating)} disabled={creating || Boolean(createdId)}><option value="sfw">SFW</option><option value="adult">Adult</option></select></label>
       {createdId
         ? <Link className="button button--secondary" to={`/asset/${createdId}/edit`}>Open created {proposal.type}</Link>
@@ -84,7 +84,7 @@ function SortResult({ result, canApply, canCreate, onApply, onCreate }: {
     {result.summary && <p className="coda-result__summary">{result.summary}</p>}
     {result.proposals?.length ? <section className="coda-proposals">
       <strong>Proposed records</strong>
-      {result.proposals.map((proposal, index) => <ProposalCard proposal={proposal} index={index} canCreate={canCreate} onCreate={onCreate} key={`${proposal.type}-${proposal.name}-${index}`} />)}
+      {result.proposals.map((proposal, index) => <ProposalCard proposal={proposal} index={index} canCreate={canCreate(proposal)} onCreate={onCreate} key={`${proposal.type}-${proposal.name}-${index}`} />)}
     </section> : null}
     <StringList title="Needs your answer" values={result.questions} />
     <StringList title="Coda noticed" values={result.warnings} tone="warning" />
@@ -109,6 +109,7 @@ export function CodaAssistant() {
   const [settingsPath, setSettingsPath] = useState('');
   const [working, setWorking] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [createdWorldTarget, setCreatedWorldTarget] = useState<{ id: string; name: string } | null>(null);
 
   const assetId = useMemo(() => currentAssetId(location.pathname), [location.pathname]);
   const inEditor = Boolean(assetId && location.pathname === `/asset/${assetId}/edit`);
@@ -120,6 +121,7 @@ export function CodaAssistant() {
     setError('');
     setSettingsPath('');
     setApplied(false);
+    setCreatedWorldTarget(null);
   }, [assetId]);
 
   const run = async () => {
@@ -128,6 +130,7 @@ export function CodaAssistant() {
     setError('');
     setSettingsPath('');
     setApplied(false);
+    setCreatedWorldTarget(null);
     try {
       const next = await askCoda({ mode, text: text.trim(), pageHint: pageHint(location.pathname), ...(assetId ? { assetId, includeRecordContext: includeContext } : {}) });
       setResult(next);
@@ -153,14 +156,32 @@ export function CodaAssistant() {
   };
 
   const createProposal = async (proposal: CodaProposal, rating: ContentRating) => {
-    const worldId = result?.record?.originWorldId;
-    if (!worldId || result?.record?.canAddToWorld !== true) throw new Error('Open a world you own and include the current record first.');
     const fields = proposal.fields ?? {};
     const fieldSummary = typeof fields.summary === 'string'
       ? fields.summary
       : typeof fields.description === 'string'
         ? fields.description
         : proposal.reason ?? '';
+
+    if (proposal.type === 'world') {
+      if (!user?.permissions.canCreate) throw new Error('Creator access is required to create a world.');
+      const created = await libraryApi.createAsset({
+        type: 'world',
+        name: proposal.name,
+        summary: fieldSummary.slice(0, 2000),
+        originWorldId: null,
+        contentRating: rating,
+        tags: [],
+        visualTone: 'moon',
+        document: fields,
+      });
+      setCreatedWorldTarget({ id: created.id, name: proposal.name });
+      return created.id;
+    }
+
+    const existingWorldId = result?.record?.canAddToWorld === true ? result.record.originWorldId : undefined;
+    const worldId = existingWorldId ?? createdWorldTarget?.id;
+    if (!worldId) throw new Error('Open a world you own, or create the proposed world first.');
     const created = await libraryApi.createAsset({
       type: proposal.type,
       name: proposal.name,
@@ -172,6 +193,12 @@ export function CodaAssistant() {
       document: fields,
     });
     return created.id;
+  };
+
+  const canCreateProposal = (proposal: CodaProposal) => {
+    if (!user?.permissions.canCreate) return false;
+    if (proposal.type === 'world') return true;
+    return Boolean((result?.record?.canAddToWorld && result.record.originWorldId) || createdWorldTarget?.id);
   };
 
   return <>
@@ -204,12 +231,13 @@ export function CodaAssistant() {
         {result && (mode === 'sort'
           ? <SortResult
               result={result}
-              canApply={Boolean(inEditor && result.record?.type === 'world' && result.record.id === assetId)}
-              canCreate={Boolean(result.record?.canAddToWorld && result.record.originWorldId)}
+              canApply={Boolean(inEditor && result.record?.id === assetId)}
+              canCreate={canCreateProposal}
               onApply={applyDraft}
               onCreate={createProposal}
             />
           : <div className="coda-result coda-result--text"><p>{result.text}</p></div>)}
+        {createdWorldTarget && mode === 'sort' && <div className="coda-notice is-success"><strong>{createdWorldTarget.name} created privately.</strong><span>Other proposed records can now be created inside that world.</span></div>}
         {applied && <div className="coda-notice is-success"><strong>Draft placed in the editor.</strong><span>Review the filled fields and use the normal Save button when you are satisfied.</span></div>}
       </div>
 
