@@ -20,26 +20,17 @@ describe('Coda Assistant draft safety', () => {
   });
 
   it('parses a fenced structured draft and sanitizes the current-record patch', () => {
-    const parsed = parseCodaSortResponse(```json
-{
-  "summary": "Found one place.",
-  "proposals": [
-    {
-      "type": "place",
-      "name": "Hollow",
-      "confidence": "high",
-      "reason": "It is described as a settlement.",
-      "fields": { "description": "A quiet settlement." }
-    }
-  ],
-  "questions": [],
-  "warnings": [],
-  "recordPatch": {
-    "locations": [{ "name": "Hollow", "description": "A quiet settlement." }],
-    "worldSettings": { "visibility": "public" }
-  }
-}
-```);
+    const parsed = parseCodaSortResponse([
+      '```json',
+      '{',
+      '  "summary": "Found one place.",',
+      '  "proposals": [{"type":"place","name":"Hollow","confidence":"high","reason":"It is described as a settlement.","fields":{"description":"A quiet settlement."}}],',
+      '  "questions": [],',
+      '  "warnings": [],',
+      '  "recordPatch": {"locations":[{"name":"Hollow","description":"A quiet settlement."}],"worldSettings":{"visibility":"public"}}',
+      '}',
+      '```',
+    ].join('\\n'));
 
     expect(parsed).toMatchObject({
       summary: 'Found one place.',
