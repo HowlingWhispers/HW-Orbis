@@ -106,7 +106,7 @@ function requestIdentity(request: Request) {
   return {
     userId: request.session.userId,
     isSuperAdmin,
-    canSeePrivateWorlds: isSuperAdmin || request.session.access?.canAdmin === true,
+    canSeePrivateWorlds: isSuperAdmin,
   };
 }
 
@@ -291,10 +291,28 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
   router.post('/assets', requireCreator(config, pool, settingsStore), async (request, response, next) => {
     try {
       const asset = createAssetSchema.parse(request.body);
+      const document = asset.type === 'world' ? (() => {
+        const rawSettings = asset.document.worldSettings;
+        const settings = rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
+          ? rawSettings as Record<string, unknown>
+          : {};
+        const visibility = settings.visibility === 'public' || settings.visibility === 'unlisted' || settings.visibility === 'private'
+          ? settings.visibility
+          : 'private';
+        return {
+          ...asset.document,
+          worldSettings: {
+            ...settings,
+            visibility,
+            showInLibrary: visibility === 'public' ? settings.showInLibrary === true : false,
+            allowForking: settings.allowForking === true,
+          },
+        };
+      })() : asset.document;
       const result = await pool.query(
         `INSERT INTO library_assets (id,type,name,summary,origin_world_id,creator_user_id,source_type,content_rating,tags,visual_tone,document)
          VALUES ($1,$2,$3,$4,$5,$6,'user-created',$7,$8,$9,$10::jsonb) RETURNING *`,
-        [randomUUID(), asset.type, asset.name, asset.summary, asset.originWorldId ?? null, request.session.userId, asset.contentRating, asset.tags, asset.visualTone, JSON.stringify(asset.document)],
+        [randomUUID(), asset.type, asset.name, asset.summary, asset.originWorldId ?? null, request.session.userId, asset.contentRating, asset.tags, asset.visualTone, JSON.stringify(document)],
       );
       const registry = await pool.query('SELECT code, classification FROM speculus_catalog_registry WHERE asset_id = $1', [result.rows[0].id]);
       response.status(201).json(mapAsset({
