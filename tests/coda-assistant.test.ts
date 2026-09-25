@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildCodaPrompt, parseCodaSortResponse, sanitizeCodaPatch } from '../server/coda-assistant';
 
-describe('Coda Assistant draft safety', () => {
+describe('Coda Assistant sandbox boundaries', () => {
   it('keeps owner-directed dark worldbuilding as valid authoring input', () => {
     const prompt = buildCodaPrompt(
       'sort',
@@ -18,10 +18,10 @@ describe('Coda Assistant draft safety', () => {
       'Record editor',
     );
 
-    expect(prompt).toContain('Do not moralize about fictional worldbuilding.');
-    expect(prompt).toContain('do not suppress the proposal');
-    expect(prompt).toContain('Existing culture, rules, customs, or setting text are not a veto');
-    expect(prompt).toContain('Independent agency');
+    expect(prompt).toContain('open creative sandbox');
+    expect(prompt).toContain('Fictional subject matter is not a reason to refuse');
+    expect(prompt).toContain('Existing lore is context, not a veto');
+    expect(prompt).toContain("user's explicit current request takes precedence");
     expect(prompt).toContain('enslaved');
   });
 
