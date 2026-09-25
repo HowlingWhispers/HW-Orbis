@@ -60,7 +60,7 @@ export function CollectionView({ all = false }: { all?: boolean }) {
         contentRating: 'sfw',
         tags: [],
         visualTone: 'moon',
-        document: {},
+        document: { worldSettings: { visibility: 'private', showInLibrary: false, allowForking: false } },
       });
       navigate(`/asset/${world.id}/edit`);
     } catch (creationError) {
