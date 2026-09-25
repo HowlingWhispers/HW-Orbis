@@ -16,6 +16,21 @@ const requestSchema = z.object({
   assetId: z.string().uuid().optional(),
 });
 
+const codaAssetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
+const sortResponseSchema = z.object({
+  summary: z.string().trim().max(2_000).default(''),
+  proposals: z.array(z.object({
+    type: z.enum(codaAssetTypes),
+    name: z.string().trim().min(1).max(120),
+    confidence: z.enum(['high', 'medium', 'low']).default('medium'),
+    reason: z.string().trim().max(2_000).optional(),
+    fields: z.record(z.string(), z.unknown()).default({}),
+  })).max(40).default([]),
+  questions: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
+  warnings: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
+  recordPatch: z.record(z.string(), z.unknown()).nullable().default(null),
+});
+
 type CodaMode = (typeof modes)[number];
 type AssetContext = {
   id: string;
@@ -53,6 +68,22 @@ function parseJsonObject(text: string): Record<string, unknown> | undefined {
   } catch {
     return undefined;
   }
+}
+
+const protectedPatchKeys = new Set([
+  'id', 'sourceId', 'libraryAssetId', 'worldSettings', 'creatorUserId', 'ownerUserId',
+  'contentRating', 'permissions', 'providerSettings', 'token', 'apiKey', 'secret',
+  'visibility', 'showInLibrary', 'allowForking',
+]);
+
+function sanitizePatch(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizePatch);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !protectedPatchKeys.has(key))
+      .map(([key, child]) => [key, sanitizePatch(child)]),
+  );
 }
 
 function modeInstructions(mode: CodaMode, hasAsset: boolean) {
@@ -189,7 +220,7 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
       }, credentialKey(config.ORBIS_CREDENTIAL_ENCRYPTION_KEY));
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120_000);
+      const timeout = setTimeout(() => controller.abort(), 180_000);
       try {
         let upstream: globalThis.Response;
         try {
@@ -227,8 +258,20 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
         if (!text) return response.status(502).json({ error: generationErrors.NOVELAI_EMPTY_REPLY, requestId });
 
         if (body.mode === 'sort') {
-          const structured = parseJsonObject(text);
-          if (structured) return response.json({ mode: body.mode, model: String(provider.model), ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name } } : {}), ...structured });
+          const parsed = parseJsonObject(text);
+          const structured = parsed ? sortResponseSchema.safeParse(parsed) : undefined;
+          if (structured?.success) {
+            const safe = {
+              ...structured.data,
+              recordPatch: structured.data.recordPatch ? sanitizePatch(structured.data.recordPatch) : null,
+            };
+            return response.json({
+              mode: body.mode,
+              model: String(provider.model),
+              ...safe,
+              ...(asset ? { record: { id: asset.id, type: asset.type, name: asset.name } } : {}),
+            });
+          }
           return response.json({
             mode: body.mode,
             model: String(provider.model),
