@@ -30,6 +30,31 @@ describe('Coda Assistant sandbox boundaries', () => {
     expect(prompt).toContain('enslaved');
   });
 
+  it('uses species adulthood canon and avoids inventing extra systems', () => {
+    const prompt = buildCodaPrompt(
+      'sort',
+      'Add fox captives aged 8 to 14. Foxes in this species are adults in that age range.',
+      {
+        id: 'world-1',
+        type: 'world',
+        name: 'Test',
+        summary: '',
+        document: { lore: { cultures: 'Communal tribe.' } },
+        originWorldId: 'world-1',
+        canAddToWorld: true,
+      },
+      'Record editor',
+    );
+
+    expect(prompt).toContain('Treat numeric age according to the fictional species');
+    expect(prompt).toContain('explicitly says a species or character is adult');
+    expect(prompt).toContain('Do not invent a different minimum age');
+    expect(prompt).toContain('Do not invent a new faction, institution, legal code, rule system');
+    expect(prompt).toContain('Do not rewrite world rules merely to "support"');
+    expect(prompt).toContain('Do not add unrelated sexual, reproductive, consent');
+    expect(prompt).toContain('Foxes in this species are adults in that age range.');
+  });
+
   it('removes ownership, privacy and credential-shaped fields from record patches', () => {
     expect(sanitizeCodaPatch({
       identity: { name: 'Test World', description: 'A place.' },
