@@ -27,7 +27,7 @@ export class CodaAssistantError extends Error {
   }
 }
 
-export async function askCoda(input: { mode: CodaMode; text: string; assetId?: string }) {
+export async function askCoda(input: { mode: CodaMode; text: string; assetId?: string; pageHint?: string }) {
   const response = await fetch('/api/coda-assistant', {
     method: 'POST',
     credentials: 'include',
