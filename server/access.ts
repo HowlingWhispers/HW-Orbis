@@ -15,7 +15,7 @@ export interface AccessDecision {
 const hasAnyRole = (roles: readonly string[], accepted: ReadonlySet<string>) => roles.some((role) => accepted.has(role));
 
 export function decideAccess(isGuildMember: boolean, roles: readonly string[], policy: DiscordAccessPolicy): AccessDecision {
-  if (!isGuildMember) return { isGuildMember: false, canViewAdult: false, canCreate: false, canAdmin: false };
+  if (!isGuildMember) return { isGuildMember: false, canViewAdult: false, canCreate: true, canAdmin: false };
 
   const hasAdultRole = hasAnyRole(roles, policy.adultRoleIds);
   return {
