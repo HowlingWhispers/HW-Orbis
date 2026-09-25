@@ -38,7 +38,7 @@ function StringList({ title, values, tone }: { title: string; values?: string[];
 function ProposalCard({ proposal, index, canCreate, onCreate }: {
   proposal: CodaProposal;
   index: number;
-  canCreate: (proposal: CodaProposal) => boolean;
+  canCreate: boolean;
   onCreate: (proposal: CodaProposal, rating: ContentRating) => Promise<string>;
 }) {
   const [rating, setRating] = useState<ContentRating>('sfw');
@@ -76,7 +76,7 @@ function ProposalCard({ proposal, index, canCreate, onCreate }: {
 function SortResult({ result, canApply, canCreate, onApply, onCreate }: {
   result: CodaAssistantResponse;
   canApply: boolean;
-  canCreate: boolean;
+  canCreate: (proposal: CodaProposal) => boolean;
   onApply: () => void;
   onCreate: (proposal: CodaProposal, rating: ContentRating) => Promise<string>;
 }) {
