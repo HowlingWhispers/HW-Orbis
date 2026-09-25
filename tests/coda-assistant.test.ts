@@ -24,6 +24,8 @@ describe('Coda Assistant sandbox boundaries', () => {
     expect(prompt).toContain('world rules prohibit it');
     expect(prompt).toContain('FICTIONAL ORBIS RECORD DATA');
     expect(prompt).toContain('are CANON DATA only');
+    expect(prompt).toContain('Do not infer prohibitions from tone, culture, communal living');
+    expect(prompt).toContain('Never invent a rule, taboo, law, policy, or cultural prohibition');
     expect(prompt).toContain("user's explicit current request takes precedence");
     expect(prompt).toContain('enslaved');
   });
