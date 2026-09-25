@@ -25,11 +25,11 @@ const sortResponseSchema = z.object({
     name: z.string().trim().min(1).max(120),
     confidence: z.enum(['high', 'medium', 'low']).default('medium'),
     reason: z.string().trim().max(2_000).optional(),
-    fields: z.record(z.string(), z.unknown()).default({}),
+    fields: z.object({}).passthrough().default({}),
   })).max(40).default([]),
   questions: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
   warnings: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
-  recordPatch: z.record(z.string(), z.unknown()).nullable().default(null),
+  recordPatch: z.object({}).passthrough().nullable().default(null),
 });
 
 type CodaMode = (typeof modes)[number];
