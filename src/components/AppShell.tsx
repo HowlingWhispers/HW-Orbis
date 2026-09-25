@@ -1,4 +1,4 @@
-import { LogIn, Menu, Search, Settings, ShieldCheck, SlidersHorizontal, X, MessageSquare } from 'lucide-react';
+import { LogIn, Menu, Search, Settings, SlidersHorizontal, X, MessageSquare } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { libraryNavigation } from '../app/library-nav';
@@ -104,8 +104,7 @@ export function AppShell() {
           {user ? (
             <NavLink className="keeper-badge keeper-badge--user" to="/account" title={t('Account')}>
               <UserAvatar user={user} />
-              <span><small>{user.permissions.canCreate ? t('Verified creator') : t('SFW access')}</small><strong>{user.displayName}</strong></span>
-              {user.permissions.canCreate && <ShieldCheck className="keeper-badge__verified" size={15} />}
+              <span><small>{t('Creator access')}</small><strong>{user.displayName}</strong></span>
             </NavLink>
           ) : (
             <>
