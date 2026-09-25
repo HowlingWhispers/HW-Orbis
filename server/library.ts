@@ -110,6 +110,15 @@ function requestIdentity(request: Request) {
   };
 }
 
+async function canAuthorIntoWorld(pool: DatabasePool, worldId: string, userId: string, isSuperAdmin: boolean) {
+  const result = await pool.query(
+    'SELECT id, type, creator_user_id FROM library_assets WHERE id = $1',
+    [worldId],
+  );
+  if (!result.rowCount || result.rows[0].type !== 'world') return false;
+  return isSuperAdmin || result.rows[0].creator_user_id === userId;
+}
+
 async function syncWorldLocations(
   pool: DatabasePool,
   worldId: string,
@@ -291,6 +300,13 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
   router.post('/assets', requireCreator(config, pool, settingsStore), async (request, response, next) => {
     try {
       const asset = createAssetSchema.parse(request.body);
+      const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
+      if (asset.type === 'world' && asset.originWorldId) {
+        return response.status(400).json({ error: 'A world cannot be created inside another world.' });
+      }
+      if (asset.originWorldId && !await canAuthorIntoWorld(pool, asset.originWorldId, request.session.userId!, isSuperAdmin)) {
+        return response.status(403).json({ error: 'Only the world owner can add records to this world.' });
+      }
       const document = asset.type === 'world' ? (() => {
         const rawSettings = asset.document.worldSettings;
         const settings = rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
@@ -334,6 +350,14 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       if (!current.rowCount) return response.status(404).json({ error: 'Record not found.' });
       const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
       if (current.rows[0].creator_user_id !== request.session.userId && !isSuperAdmin) return response.status(403).json({ error: 'Only the creator can change this record.' });
+      if (asset.originWorldId !== undefined && asset.originWorldId !== current.rows[0].origin_world_id) {
+        if (current.rows[0].type === 'world' && asset.originWorldId) {
+          return response.status(400).json({ error: 'A world cannot be moved inside another world.' });
+        }
+        if (asset.originWorldId && !await canAuthorIntoWorld(pool, asset.originWorldId, request.session.userId!, isSuperAdmin)) {
+          return response.status(403).json({ error: 'Only the world owner can move records into this world.' });
+        }
+      }
       const nextAsset = { ...current.rows[0], ...{
         name: asset.name ?? current.rows[0].name,
         summary: asset.summary ?? current.rows[0].summary,
