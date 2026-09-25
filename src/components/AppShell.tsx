@@ -81,7 +81,7 @@ export function AppShell() {
           ))}
         </nav>
 <div className="sidebar__footer">
-           <a className="sidebar__discord-join" href="https://discord.gg/K3aMbSeYw2" target="_blank" rel="noopener noreferrer" aria-label="Join the Howling Whispers Discord community">
+           <a className="sidebar__discord-join" href="https://discord.gg/Q7RQCmFZ8Y" target="_blank" rel="noopener noreferrer" aria-label="Join the Howling Whispers Discord community">
              <MessageSquare size={17} /><span>{t('Join Discord')}</span>
            </a>
            <div className="api-lamp"><span /> <small>{t('Development archive')}</small></div>
@@ -108,7 +108,7 @@ export function AppShell() {
             </NavLink>
           ) : (
             <>
-              <a className="discord-join-button" href="https://discord.gg/K3aMbSeYw2" target="_blank" rel="noopener noreferrer" aria-label="Join the Howling Whispers Discord community">
+              <a className="discord-join-button" href="https://discord.gg/Q7RQCmFZ8Y" target="_blank" rel="noopener noreferrer" aria-label="Join the Howling Whispers Discord community">
                 <MessageSquare size={16} /><span>{t('Join Discord')}</span>
               </a>
               <a className={`discord-login ${authLoading ? 'is-loading' : ''}`} href={discordLoginPath(location.pathname)}><LogIn size={16} /><span>{t('Sign in with Discord')}</span></a>
