@@ -31,18 +31,66 @@ export interface AdminCodaChannelState {
   reason?: string;
 }
 
+export interface AdminCodaMember {
+  id: string;
+  username: string;
+  displayName: string;
+  bot: boolean;
+}
+
 export interface AdminCodaMessage {
   id: string;
+  auditId?: string | null;
   guildId: string;
   channelId: string;
   discordMessageId: string | null;
+  destinationType: 'channel' | 'dm';
+  recipientUserId: string | null;
+  recipientDisplayName: string | null;
   content: string;
   replyToMessageId: string | null;
   status: 'sent' | 'failed';
   errorMessage: string | null;
   sentByUserId: string | null;
   sentByName: string | null;
+  editedAt: string | null;
+  deletedAt: string | null;
   createdAt: string;
+}
+
+export interface AdminCodaTemplate {
+  id: string;
+  name: string;
+  content: string;
+  createdByUserId: string | null;
+  createdByName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminCodaScheduled {
+  id: string;
+  destinationType: 'channel' | 'dm';
+  targetId: string;
+  content: string;
+  replyTo: string;
+  sendAt: string;
+  status: 'queued' | 'sending' | 'sent' | 'cancelled' | 'failed';
+  lastError: string | null;
+  createdByUserId: string | null;
+  createdByName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminCodaStatus {
+  configured: boolean;
+  outboundEnabled: boolean;
+  allowedChannelCount: number;
+  queuedScheduled: number;
+  lastMessageAt: string | null;
+  bot: { id: string; username: string; globalName: string | null } | null;
+  guild: { id: string; name: string } | null;
 }
 
 export interface AdminAuditEntry {
@@ -70,9 +118,24 @@ export const adminApi = {
   settings: () => request<{ settings: AdminSettings; roleResolution: { available: boolean; reason: string } }>('/settings'),
   audit: () => request<{ items: AdminAuditEntry[] }>('/audit'),
   codaChannels: () => request<AdminCodaChannelState>('/coda/channels'),
-  codaMessages: (limit = 20) => request<{ items: AdminCodaMessage[] }>('/coda/messages?limit=' + encodeURIComponent(String(limit))),
+  codaMessages: (limit = 50) => request<{ items: AdminCodaMessage[] }>('/coda/messages?limit=' + encodeURIComponent(String(limit))),
   sendCodaMessage: (input: { channelId: string; content: string; replyTo?: string }) =>
     request<{ message: AdminCodaMessage }>('/coda/messages', { method: 'POST', body: JSON.stringify(input) }),
+  editCodaMessage: (id: string, content: string) => request<{ ok: boolean }>('/coda/messages/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ content }) }),
+  deleteCodaMessage: (id: string) => request<{ ok: boolean }>('/coda/messages/' + encodeURIComponent(id), { method: 'DELETE' }),
+  codaMembers: (query: string) => request<{ items: AdminCodaMember[] }>('/coda/members?query=' + encodeURIComponent(query)),
+  sendCodaDm: (input: { recipient: string; content: string }) =>
+    request<{ message: AdminCodaMessage }>('/coda/dms', { method: 'POST', body: JSON.stringify(input) }),
+  codaTemplates: () => request<{ items: AdminCodaTemplate[] }>('/coda/templates'),
+  createCodaTemplate: (input: { name: string; content: string }) =>
+    request<{ item: AdminCodaTemplate }>('/coda/templates', { method: 'POST', body: JSON.stringify(input) }),
+  deleteCodaTemplate: (id: string) => request<{ ok: boolean }>('/coda/templates/' + encodeURIComponent(id), { method: 'DELETE' }),
+  codaScheduled: () => request<{ items: AdminCodaScheduled[] }>('/coda/scheduled'),
+  scheduleCodaMessage: (input: { destinationType: 'channel' | 'dm'; targetId: string; content: string; replyTo?: string; sendAt: string }) =>
+    request<{ item: AdminCodaScheduled }>('/coda/scheduled', { method: 'POST', body: JSON.stringify(input) }),
+  cancelCodaScheduled: (id: string) => request<{ ok: boolean }>('/coda/scheduled/' + encodeURIComponent(id), { method: 'DELETE' }),
+  codaStatus: () => request<AdminCodaStatus>('/coda/status'),
+  setCodaOutbound: (outboundEnabled: boolean) => request<{ outboundEnabled: boolean; updatedAt: string; updatedByUserId: string | null }>('/coda/control', { method: 'PUT', body: JSON.stringify({ outboundEnabled }) }),
   updateSettings: (settings: Pick<AdminSettings, 'guildId' | 'adultRoleIds' | 'creatorRoleIds' | 'adminRoleIds' | 'inviteUrl'>) =>
     request<{ settings: AdminSettings }>('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
 };

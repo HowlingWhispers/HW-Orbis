@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { ZodError } from 'zod';
 import { createAuthRouter } from './auth.js';
 import { createCodaAssistantRouter } from './coda-assistant.js';
+import { processDueCodaScheduledMessages } from './coda-discord.js';
 import { createArchiveTransferRouter } from './archive-transfer.js';
 import { createAdminRouter, requireAdmin } from './admin.js';
 import { loadConfig } from './config.js';
@@ -149,6 +150,24 @@ app.use((error: unknown, _request: Request, response: Response, _next: NextFunct
 
 const server = app.listen(config.PORT, config.isProduction ? '127.0.0.1' : '0.0.0.0', () => console.log(`Orbis API listening on ${config.PORT}`));
 
-const shutdown = () => server.close(() => pool.end().finally(() => process.exit(0)));
+let codaSchedulerBusy = false;
+const codaScheduler = setInterval(async () => {
+  if (codaSchedulerBusy) return;
+  codaSchedulerBusy = true;
+  try {
+    const settings = await settingsStore.getEffective();
+    await processDueCodaScheduledMessages(config, pool, settings.guildId);
+  } catch (error) {
+    console.error('Coda scheduler tick failed.', error);
+  } finally {
+    codaSchedulerBusy = false;
+  }
+}, 30_000);
+codaScheduler.unref();
+
+const shutdown = () => {
+  clearInterval(codaScheduler);
+  server.close(() => pool.end().finally(() => process.exit(0)));
+};
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
