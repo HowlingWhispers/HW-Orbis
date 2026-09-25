@@ -25,7 +25,7 @@ const safeEqual = (left: string, right: string) => {
 
 const safeReturnTo = (value: unknown) => typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : '/';
 
-const noAccess = { isGuildMember: false, canViewAdult: false, canCreate: false, canAdmin: false };
+const noAccess = { isGuildMember: false, canViewAdult: false, canCreate: true, canAdmin: false };
 const ownerAccess = () => {
   const now = Date.now();
   return { isGuildMember: true, canViewAdult: true, canCreate: true, canAdmin: true, checkedAt: now, verifiedAt: now };
@@ -45,7 +45,7 @@ function publicProfile(row: Record<string, unknown>, access: { isGuildMember: bo
     permissions: {
       isGuildMember: isSuperAdmin ? true : access.isGuildMember,
       canViewAdult: isSuperAdmin ? true : access.canViewAdult,
-      canCreate: isSuperAdmin ? true : access.canCreate,
+      canCreate: true,
       canAdmin: isSuperAdmin ? true : access.canAdmin,
     },
   };
@@ -139,10 +139,12 @@ export function requireCreator(config: AppConfig, pool: DatabasePool, settingsSt
       if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to create in Orbis.' });
       const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
       if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, true);
-      if (!request.session.access?.canCreate) return response.status(403).json({ error: 'Join the Howling Whispers Discord to create or edit in Orbis.' });
+      const access = request.session.access ?? { ...noAccess, checkedAt: Date.now() };
+      access.canCreate = true;
+      request.session.access = access;
       await pool.query(
-        `UPDATE users SET is_guild_member = $2, can_view_adult = $3, can_create = $4, can_admin = $5, access_checked_at = now(), updated_at = now() WHERE id = $1`,
-        [request.session.userId, request.session.access.isGuildMember, request.session.access.canViewAdult, request.session.access.canCreate, request.session.access.canAdmin],
+        `UPDATE users SET is_guild_member = $2, can_view_adult = $3, can_create = true, can_admin = $4, access_checked_at = now(), updated_at = now() WHERE id = $1`,
+        [request.session.userId, access.isGuildMember, access.canViewAdult, access.canAdmin],
       );
       next();
     } catch (error) {
