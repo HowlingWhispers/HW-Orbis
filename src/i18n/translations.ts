@@ -27,6 +27,7 @@ const de: Record<string, string> = {
   'Search every shelf...': 'Alle Regale durchsuchen...',
   'Search all of Orbis': 'Ganz Orbis durchsuchen',
   'Verified creator': 'Verifizierter Ersteller',
+  'Creator access': 'Erstellerzugriff',
   'SFW access': 'SFW-Zugriff',
   'Sign in with Discord': 'Mit Discord anmelden',
   'Open navigation': 'Navigation öffnen',
