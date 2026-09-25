@@ -129,7 +129,7 @@ export function CodaAssistant() {
     setSettingsPath('');
     setApplied(false);
     try {
-      const next = await askCoda({ mode, text: text.trim(), pageHint: pageHint(location.pathname), ...(includeContext && assetId ? { assetId } : {}) });
+      const next = await askCoda({ mode, text: text.trim(), pageHint: pageHint(location.pathname), ...(assetId ? { assetId, includeRecordContext: includeContext } : {}) });
       setResult(next);
     } catch (reason) {
       setResult(null);
