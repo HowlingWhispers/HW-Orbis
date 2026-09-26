@@ -1,8 +1,8 @@
-import { Archive, ArrowLeft, Boxes, Clock3, Download, MapPin, Pencil, Sparkles, Trash2, UserRound } from 'lucide-react';
+import { Archive, ArrowLeft, ArrowRightLeft, Boxes, Clock3, Download, MapPin, Pencil, Search, Sparkles, Trash2, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
-import type { DeleteImpact } from '../api/contracts';
+import type { DeleteImpact, OwnershipTransferTarget } from '../api/contracts';
 import { downloadRecordArchive } from '../api/archive-transfer';
 import { useAuth } from '../auth/AuthContext';
 import { findNavigationItem } from '../app/library-nav';
@@ -24,6 +24,14 @@ export function AssetDetailView() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferQuery, setTransferQuery] = useState('');
+  const [transferTargets, setTransferTargets] = useState<OwnershipTransferTarget[]>([]);
+  const [transferTarget, setTransferTarget] = useState<OwnershipTransferTarget | null>(null);
+  const [transferSearching, setTransferSearching] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+  const [transferConfirmation, setTransferConfirmation] = useState('');
+  const [transferError, setTransferError] = useState('');
   const { data: asset, error, loading, retry } = useLibraryData((signal) => libraryApi.getAsset(id, signal), [id]);
 
   useEffect(() => {
@@ -76,6 +84,7 @@ export function AssetDetailView() {
 
   const Icon = category?.icon;
   const canEdit = user && asset.canEdit === true;
+  const canTransfer = asset.type === 'world' && asset.isOwner === true;
 
   const simulate = async () => {
     if (!user) { navigate('/account'); return; }
@@ -131,6 +140,53 @@ export function AssetDetailView() {
     finally { setDownloading(false); }
   };
 
+  const openTransfer = () => {
+    setTransferOpen(true);
+    setTransferQuery('');
+    setTransferTargets([]);
+    setTransferTarget(null);
+    setTransferConfirmation('');
+    setTransferError('');
+  };
+
+  const closeTransfer = () => {
+    if (transferring) return;
+    setTransferOpen(false);
+    setTransferTargets([]);
+    setTransferTarget(null);
+    setTransferConfirmation('');
+    setTransferError('');
+  };
+
+  const searchTransferTargets = async () => {
+    const query = transferQuery.trim();
+    if (!canTransfer || query.length < 2 || transferSearching) return;
+    setTransferSearching(true);
+    setTransferError('');
+    setTransferTarget(null);
+    try {
+      setTransferTargets(await libraryApi.searchOwnershipTransferTargets(asset.id, query));
+    } catch (reason) {
+      setTransferTargets([]);
+      setTransferError(reason instanceof Error ? reason.message : 'Orbis could not search for that user.');
+    } finally {
+      setTransferSearching(false);
+    }
+  };
+
+  const transferWorld = async () => {
+    if (!canTransfer || !transferTarget || transferring || transferConfirmation !== `TRANSFER ${asset.name}`) return;
+    setTransferring(true);
+    setTransferError('');
+    try {
+      await libraryApi.transferWorldOwnership(asset.id, { targetUserId: transferTarget.id, confirmName: asset.name });
+      navigate('/library/world', { replace: true });
+    } catch (reason) {
+      setTransferError(reason instanceof Error ? reason.message : 'Orbis could not transfer this world.');
+      setTransferring(false);
+    }
+  };
+
   return (
     <div className="page detail-page">
       <Link className="back-link" to={`/library/${asset.type}`}><ArrowLeft size={16} /> Back to {category?.label}</Link>
@@ -144,15 +200,50 @@ export function AssetDetailView() {
           <div className="detail-actions">
             {canEdit
               ? <Link className="button button--primary" to={`/asset/${asset.id}/edit`}><Pencil size={16} /> Edit record</Link>
-              : <button className="button button--disabled" disabled title="Only the creator can edit this record"><Pencil size={16} /> Creator protected</button>}
+              : <button className="button button--disabled" disabled title="Only the owner can edit this record"><Pencil size={16} /> Owner protected</button>}
             <button className="button button--secondary" disabled={launching} onClick={() => void simulate()}><Sparkles size={16} /> {launching ? 'Packaging...' : 'Simulate'}</button>
             {asset.type === 'world' && <Link className="button button--secondary" to={`/asset/${asset.id}/saves`}><Archive size={16} /> Save Archive</Link>}
             {canEdit && <button className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : asset.type === 'world' ? 'Download world' : 'Download SPC'}</button>}
+            {canTransfer && <button className="button button--secondary" type="button" disabled={transferring} onClick={openTransfer}><ArrowRightLeft size={16} /> Transfer to user</button>}
             {canEdit && asset.type === 'world' && <button className="button button--danger" disabled={deleting} onClick={() => void reviewDeleteWorld()}><Trash2 size={16} /> {deleting ? 'Checking...' : 'Delete World'}</button>}
           </div>
           {launchError && <p className="form-message" role="alert">{launchError} {launchError.includes('Account settings') && <Link to="/account">Open Account</Link>}</p>}
           {deleteError && <p className="form-message" role="alert">{deleteError}</p>}
           {downloadError && <p className="form-message" role="alert">{downloadError}</p>}
+          {transferError && <p className="form-message" role="alert">{transferError}</p>}
+
+          {transferOpen && canTransfer && <section className="world-delete-review" role="dialog" aria-modal="true" aria-labelledby="world-transfer-title">
+            <header>
+              <div><span className="eyebrow">Ownership transfer</span><h2 id="world-transfer-title">Transfer {asset.name}</h2></div>
+              <button type="button" className="button button--secondary" disabled={transferring} onClick={closeTransfer}>Cancel</button>
+            </header>
+            <p>The recipient becomes the owner of this world and all {asset.dependencyCount} linked record{asset.dependencyCount === 1 ? '' : 's'}. Your original creator credit stays attached permanently. Personal Speculus saves are not transferred.</p>
+            <label className="world-delete-review__confirm">
+              <span>Find an Orbis creator by Discord username, display name, or Discord user ID.</span>
+              <div className="detail-actions">
+                <input value={transferQuery} onChange={(event) => setTransferQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void searchTransferTargets(); } }} autoComplete="off" spellCheck={false} placeholder="David Silver or Discord ID" />
+                <button type="button" className="button button--secondary" disabled={transferSearching || transferQuery.trim().length < 2} onClick={() => void searchTransferTargets()}><Search size={16} /> {transferSearching ? 'Searching...' : 'Find user'}</button>
+              </div>
+            </label>
+            {transferTargets.length > 0 && <div className="world-delete-review__impact">
+              {transferTargets.map((target) => <button key={target.id} type="button" className="button button--secondary" disabled={transferring} onClick={() => { setTransferTarget(target); setTransferConfirmation(''); }}>
+                {target.displayName} · @{target.discordUsername} · {target.discordId}
+              </button>)}
+            </div>}
+            {!transferSearching && transferQuery.trim().length >= 2 && transferTargets.length === 0 && !transferTarget && <p>No matching creator account found yet.</p>}
+            {transferTarget && <>
+              <div className="world-delete-review__backup">
+                <strong>Selected recipient: {transferTarget.displayName} (@{transferTarget.discordUsername})</strong>
+                <span>After transfer, only {transferTarget.displayName} can transfer it again.</span>
+              </div>
+              <label className="world-delete-review__confirm">
+                <span>Type <strong>TRANSFER {asset.name}</strong> to confirm.</span>
+                <input value={transferConfirmation} onChange={(event) => setTransferConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
+              </label>
+              <button type="button" className="button button--danger" disabled={transferring || transferConfirmation !== `TRANSFER ${asset.name}`} onClick={() => void transferWorld()}><ArrowRightLeft size={16} /> {transferring ? 'Transferring...' : `Transfer to ${transferTarget.displayName}`}</button>
+            </>}
+          </section>}
+
           {deleteImpact && asset.type === 'world' && <section className="world-delete-review" role="dialog" aria-modal="true" aria-labelledby="world-delete-title">
             <header>
               <div><span className="eyebrow">Permanent action</span><h2 id="world-delete-title">Delete {asset.name}</h2></div>
@@ -187,6 +278,7 @@ export function AssetDetailView() {
           <h2>Record details</h2>
           {asset.speculus && <div><Sparkles /><span><small>Speculus registry</small><strong title={asset.speculus.classification}>{asset.speculus.code}</strong></span></div>}
           {asset.author && <div>{asset.author.avatarUrl ? <img className="author-avatar" src={asset.author.avatarUrl} alt="" /> : <UserRound />}<span><small>Created by</small><strong>{asset.author.displayName}</strong></span></div>}
+          {asset.owner && asset.owner.id !== asset.author?.id && <div>{asset.owner.avatarUrl ? <img className="author-avatar" src={asset.owner.avatarUrl} alt="" /> : <UserRound />}<span><small>Current owner</small><strong>{asset.owner.displayName}</strong></span></div>}
           {asset.originWorldName && <div><MapPin /><span><small>Origin world</small><strong>{asset.originWorldName}</strong></span></div>}
           <div><Boxes /><span><small>Known dependencies</small><strong>{asset.dependencyCount} connected records</strong></span></div>
           <div><Clock3 /><span><small>Last tended</small><strong>{new Date(asset.updatedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}</strong></span></div>
