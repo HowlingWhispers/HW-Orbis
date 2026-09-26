@@ -23,7 +23,7 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg-deep); }
 button, input, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
