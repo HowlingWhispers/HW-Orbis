@@ -1,6 +1,7 @@
 import { ArrowLeft, Download, FileJson, PenLine, Sparkles, Upload } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { uploadArchive } from '../api/archive-transfer';
 import { libraryApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import {
@@ -10,6 +11,12 @@ import {
   type ParsedWorldJson,
 } from '../features/library/world-json';
 import { useSEO } from '../hooks/useSEO';
+
+type WorldTransferPreview = {
+  rootAssetId: string;
+  name: string;
+  records: number;
+};
 
 function downloadTemplate() {
   const blob = new Blob([stringifyWorldAuthoringTemplate()], { type: 'application/json;charset=utf-8' });
@@ -36,6 +43,31 @@ function worldCounts(result: ParsedWorldJson | null) {
   };
 }
 
+function worldTransferPreview(raw: string): WorldTransferPreview | null {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed.format !== 'orbis-transfer' || parsed.version !== 1) return null;
+    const scope = parsed.scope;
+    const records = parsed.records;
+    if (!scope || typeof scope !== 'object' || Array.isArray(scope) || !Array.isArray(records)) return null;
+    const scopeRecord = scope as Record<string, unknown>;
+    if (scopeRecord.kind !== 'world' || typeof scopeRecord.rootAssetId !== 'string') return null;
+    const root = records.find((record) => {
+      if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+      const item = record as Record<string, unknown>;
+      return item.id === scopeRecord.rootAssetId && item.type === 'world';
+    }) as Record<string, unknown> | undefined;
+    if (!root) return null;
+    return {
+      rootAssetId: scopeRecord.rootAssetId,
+      name: typeof root.name === 'string' && root.name.trim() ? root.name.trim() : 'World archive',
+      records: records.length,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function CreateWorldView() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -45,8 +77,9 @@ export function CreateWorldView() {
   const [rawJson, setRawJson] = useState('');
   const [fileName, setFileName] = useState('');
   const [preview, setPreview] = useState<ParsedWorldJson | null>(null);
+  const [transferPreview, setTransferPreview] = useState<WorldTransferPreview | null>(null);
   const [error, setError] = useState('');
-  const [working, setWorking] = useState<'manual' | 'coda' | 'import' | ''>('');
+  const [working, setWorking] = useState<'manual' | 'coda' | 'import' | 'archive' | ''>('');
   const counts = useMemo(() => worldCounts(preview), [preview]);
 
   useSEO({
@@ -70,6 +103,13 @@ export function CreateWorldView() {
 
   const validateJson = (value = rawJson) => {
     setError('');
+    const transfer = worldTransferPreview(value);
+    if (transfer) {
+      setPreview(null);
+      setTransferPreview(transfer);
+      return null;
+    }
+    setTransferPreview(null);
     try {
       const result = parseWorldAuthoringJson(value);
       setPreview(result);
@@ -85,8 +125,9 @@ export function CreateWorldView() {
     if (!file) return;
     setError('');
     setPreview(null);
+    setTransferPreview(null);
     if (file.size > 2_000_000) {
-      setError('This JSON file is larger than 2 MB. Use the transfer archive importer for large multi-record backups.');
+      setError('This JSON file is larger than 2 MB. Use Account → Upload archive for large multi-record backups.');
       return;
     }
     try {
@@ -109,6 +150,24 @@ export function CreateWorldView() {
       navigate(`/asset/${world.id}/edit`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Orbis could not create the imported world.');
+      setWorking('');
+    }
+  };
+
+  const restoreWorldArchive = async () => {
+    if (working || !transferPreview) return;
+    setWorking('archive');
+    setError('');
+    try {
+      const archive = new File(
+        [rawJson],
+        fileName || `${transferPreview.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'world'}.orbis.json`,
+        { type: 'application/octet-stream' },
+      );
+      await uploadArchive(archive);
+      navigate(`/asset/${transferPreview.rootAssetId}/edit`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Orbis could not restore this world archive.');
       setWorking('');
     }
   };
@@ -164,14 +223,14 @@ export function CreateWorldView() {
 
     {importOpen && <section className="world-json-import">
       <header className="world-json-import__header">
-        <div><span className="eyebrow">JSON draft importer</span><h2>Review before anything is saved</h2><p>The file is parsed in your browser first. Orbis does not create the world until you press <strong>Create world from JSON</strong>.</p></div>
+        <div><span className="eyebrow">JSON draft importer</span><h2>Review before anything is saved</h2><p>The file is parsed in your browser first. Orbis does not create the world until you press the matching import button below.</p></div>
         <button className="button button--secondary" type="button" onClick={downloadTemplate}><Download size={16} /> Download blank template</button>
       </header>
 
       <div className="world-json-import__toolbar">
-        <input ref={fileInputRef} className="world-json-import__file" type="file" accept=".json,application/json" onChange={(event) => void loadFile(event.target.files?.[0])} />
+        <input ref={fileInputRef} className="world-json-import__file" type="file" accept=".json,.orbis.json,application/json,application/octet-stream" onChange={(event) => void loadFile(event.target.files?.[0])} />
         <button className="button button--secondary" type="button" onClick={() => fileInputRef.current?.click()}><Upload size={16} /> Choose JSON file</button>
-        <button className="button button--secondary" type="button" onClick={() => { setRawJson(stringifyWorldAuthoringTemplate()); setFileName('orbis-world-template.json'); setPreview(null); setError(''); }}>Load blank template here</button>
+        <button className="button button--secondary" type="button" onClick={() => { setRawJson(stringifyWorldAuthoringTemplate()); setFileName('orbis-world-template.json'); setPreview(null); setTransferPreview(null); setError(''); }}>Load blank template here</button>
         {fileName && <span className="world-json-import__filename">{fileName}</span>}
       </div>
 
@@ -182,14 +241,25 @@ export function CreateWorldView() {
           rows={22}
           spellCheck={false}
           placeholder="Choose a .json file, paste a World JSON document, or load the blank template."
-          onChange={(event) => { setRawJson(event.target.value); setPreview(null); setError(''); }}
+          onChange={(event) => { setRawJson(event.target.value); setPreview(null); setTransferPreview(null); setError(''); }}
         />
       </label>
 
       <div className="world-json-import__actions">
         <button className="button button--secondary" type="button" disabled={!rawJson.trim() || Boolean(working)} onClick={() => validateJson()}>Validate draft</button>
-        <button className="button button--primary" type="button" disabled={!preview || Boolean(working)} onClick={() => void createImportedWorld()}>{working === 'import' ? 'Creating...' : 'Create world from JSON'}</button>
+        {transferPreview
+          ? <button className="button button--primary" type="button" disabled={Boolean(working)} onClick={() => void restoreWorldArchive()}>{working === 'archive' ? 'Restoring...' : 'Restore world archive'}</button>
+          : <button className="button button--primary" type="button" disabled={!preview || Boolean(working)} onClick={() => void createImportedWorld()}>{working === 'import' ? 'Creating...' : 'Create world from JSON'}</button>}
       </div>
+
+      {error && <div className="inline-error world-create-error" role="alert">{error}</div>}
+
+      {transferPreview && <section className="world-json-preview">
+        <div><span>Detected format</span><strong>orbis-transfer</strong></div>
+        <div><span>World</span><strong>{transferPreview.name}</strong></div>
+        <div><span>Records</span><strong>{transferPreview.records}</strong></div>
+        <p>This is a full Orbis world archive, not a draft. Restoring it preserves its original record IDs, world links and SPC identities. If those exact records already exist on this Orbis server, the restore will stop instead of overwriting them.</p>
+      </section>}
 
       {preview && <section className="world-json-preview">
         <div><span>Detected format</span><strong>{preview.format}</strong></div>
@@ -206,7 +276,7 @@ export function CreateWorldView() {
 
       <aside className="world-json-help">
         <strong>Howling Whispers JSON rule</strong>
-        <p>The outer fields tell Orbis what the file is. The <code>data</code> object contains the editable World document. The downloaded template is strict JSON and can be imported directly. Documentation may show <code>//</code> comments for teaching, but comments are not valid inside real JSON files.</p>
+        <p>The outer fields tell Orbis what the file is. A World draft uses a <code>data</code> object for the editable World document. A full <code>orbis-transfer</code> world archive is detected separately and can be restored from this same importer. Documentation may show <code>//</code> comments for teaching, but comments are not valid inside real JSON files.</p>
       </aside>
     </section>}
   </div>;
