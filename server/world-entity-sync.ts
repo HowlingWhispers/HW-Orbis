@@ -1,24 +1,40 @@
 import { randomUUID } from 'node:crypto';
-import type { DatabasePool } from './db.js';
+import type { DatabaseExecutor } from './db.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export type WorldCollectionKey = 'locations' | 'species' | 'factions' | 'societies' | 'families' | 'memories';
+export type WorldEntityType = 'place' | 'species' | 'faction' | 'society' | 'family' | 'memory';
+
 type EmbeddedSpec = {
-  key: 'species' | 'factions' | 'societies' | 'families' | 'memories';
-  type: 'species' | 'faction' | 'society' | 'family' | 'memory';
-  tone: 'forest' | 'ember' | 'river' | 'violet' | 'moon';
+  key: WorldCollectionKey;
+  type: WorldEntityType;
+  tone: 'mist' | 'forest' | 'ember' | 'river' | 'violet' | 'moon';
   label: string;
+  titleField: 'name' | 'title';
 };
 
-const embeddedSpecs: EmbeddedSpec[] = [
-  { key: 'species', type: 'species', tone: 'forest', label: 'species' },
-  { key: 'factions', type: 'faction', tone: 'ember', label: 'faction' },
-  { key: 'societies', type: 'society', tone: 'river', label: 'society' },
-  { key: 'families', type: 'family', tone: 'violet', label: 'family' },
-  { key: 'memories', type: 'memory', tone: 'moon', label: 'memory' },
-];
+export const worldCollectionSpecs: readonly EmbeddedSpec[] = [
+  { key: 'locations', type: 'place', tone: 'mist', label: 'location', titleField: 'name' },
+  { key: 'species', type: 'species', tone: 'forest', label: 'species', titleField: 'name' },
+  { key: 'factions', type: 'faction', tone: 'ember', label: 'faction', titleField: 'name' },
+  { key: 'societies', type: 'society', tone: 'river', label: 'society', titleField: 'name' },
+  { key: 'families', type: 'family', tone: 'violet', label: 'family', titleField: 'name' },
+  { key: 'memories', type: 'memory', tone: 'moon', label: 'memory', titleField: 'title' },
+] as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+const specByType = new Map<string, EmbeddedSpec>(worldCollectionSpecs.map((spec) => [spec.type, spec]));
+const specByKey = new Map<string, EmbeddedSpec>(worldCollectionSpecs.map((spec) => [spec.key, spec]));
+
+export function worldCollectionKeyForType(type: string) {
+  return specByType.get(type)?.key;
+}
+
+export function isWorldCollectionType(type: string): type is WorldEntityType {
+  return specByType.has(type);
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -26,8 +42,18 @@ function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function entityName(item: Record<string, unknown>) {
-  return text(item.name) || text(item.title);
+function canonicalJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalJson(value[key])]));
+}
+
+export function jsonSemanticallyEqual(left: unknown, right: unknown) {
+  return JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
+}
+
+function entityName(spec: EmbeddedSpec, item: Record<string, unknown>) {
+  return text(item[spec.titleField]) || text(item.name) || text(item.title);
 }
 
 function entitySummary(item: Record<string, unknown>) {
@@ -35,82 +61,130 @@ function entitySummary(item: Record<string, unknown>) {
 }
 
 function entityDocument(item: Record<string, unknown>, worldEntryId: string) {
-  const { libraryAssetId: _libraryAssetId, ...rest } = item;
+  const { libraryAssetId: _libraryAssetId, worldEntryId: _oldWorldEntryId, ...rest } = item;
   return { ...rest, worldEntryId };
 }
 
+export function projectionFromAsset(spec: EmbeddedSpec, row: Record<string, unknown>) {
+  const document = isRecord(row.document) ? { ...row.document } : {};
+  const worldEntryId = text(document.worldEntryId) || String(row.id);
+  delete document.worldEntryId;
+  delete document.libraryAssetId;
+
+  const projection: Record<string, unknown> = {
+    ...document,
+    id: worldEntryId,
+    libraryAssetId: String(row.id),
+  };
+  projection[spec.titleField] = String(row.name ?? '');
+  if (!text(projection.description) && text(row.summary)) projection.description = String(row.summary);
+  return projection;
+}
+
+type ManagedMatch = {
+  row: Record<string, unknown> | null;
+  ambiguous: boolean;
+  reason?: string;
+};
+
 async function findManagedAsset(
-  pool: DatabasePool,
+  db: DatabaseExecutor,
   worldId: string,
   spec: EmbeddedSpec,
   worldEntryId: string,
   requestedLibraryAssetId: string,
-) {
+  name: string,
+  allowLegacyNameMatch: boolean,
+): Promise<ManagedMatch> {
   if (requestedLibraryAssetId && uuidPattern.test(requestedLibraryAssetId)) {
-    const direct = await pool.query(
-      `SELECT id, name, summary, content_rating, document
+    const direct = await db.query(
+      `SELECT id, name, summary, source_type, content_rating, visual_tone, document
        FROM library_assets
        WHERE id = $1 AND type = $2 AND origin_world_id = $3
        LIMIT 1`,
       [requestedLibraryAssetId, spec.type, worldId],
     );
-    if (direct.rowCount) return direct.rows[0] as Record<string, unknown>;
+    if (direct.rowCount) return { row: direct.rows[0] as Record<string, unknown>, ambiguous: false };
   }
 
-  const byEntryId = await pool.query(
-    `SELECT id, name, summary, content_rating, document
+  const byEntryId = await db.query(
+    `SELECT id, name, summary, source_type, content_rating, visual_tone, document
      FROM library_assets
      WHERE type = $1 AND origin_world_id = $2 AND document->>'worldEntryId' = $3
-     LIMIT 1`,
+     ORDER BY id
+     LIMIT 2`,
     [spec.type, worldId, worldEntryId],
   );
-  return byEntryId.rowCount ? byEntryId.rows[0] as Record<string, unknown> : null;
+  if ((byEntryId.rowCount ?? 0) > 1) {
+    return {
+      row: null,
+      ambiguous: true,
+      reason: `${spec.label} “${name}” has more than one canonical row for worldEntryId ${worldEntryId}.`,
+    };
+  }
+  if (byEntryId.rowCount === 1) return { row: byEntryId.rows[0] as Record<string, unknown>, ambiguous: false };
+
+  // Name matching exists only for deliberate legacy/backfill work. Normal editor/Coda
+  // writes never guess identity from a display name, because duplicate names are valid.
+  if (allowLegacyNameMatch) {
+    const byName = await db.query(
+      `SELECT id, name, summary, source_type, content_rating, visual_tone, document
+       FROM library_assets
+       WHERE type = $1 AND origin_world_id = $2 AND name = $3
+         AND (document->>'worldEntryId' IS NULL OR document->>'worldEntryId' = $4)
+       ORDER BY id
+       LIMIT 2`,
+      [spec.type, worldId, name, worldEntryId],
+    );
+    if ((byName.rowCount ?? 0) > 1) {
+      return {
+        row: null,
+        ambiguous: true,
+        reason: `${spec.label} “${name}” matches multiple legacy rows; refusing to guess.`,
+      };
+    }
+    if (byName.rowCount === 1) return { row: byName.rows[0] as Record<string, unknown>, ambiguous: false };
+  }
+
+  return { row: null, ambiguous: false };
 }
 
-async function attachLibraryAssetId(
-  pool: DatabasePool,
-  worldId: string,
-  collectionKey: EmbeddedSpec['key'],
-  worldEntryId: string,
-  libraryAssetId: string,
-) {
-  await pool.query(
-    `UPDATE library_assets
-     SET document = jsonb_set(
-       document,
-       '{${collectionKey}}',
-       (
-         SELECT jsonb_agg(
-           CASE
-             WHEN item->>'id' = $2
-               THEN jsonb_set(item, '{libraryAssetId}', to_jsonb($3::text), true)
-             ELSE item
-           END
-         )
-         FROM jsonb_array_elements(COALESCE(document->'${collectionKey}', '[]'::jsonb)) AS item
-       ),
-       true
-     )
-     WHERE id = $1`,
-    [worldId, worldEntryId, libraryAssetId],
-  );
+export class WorldEntitySyncError extends Error {
+  constructor(public readonly issues: string[]) {
+    super(`World entity synchronization failed: ${issues.join(' ')}`);
+    this.name = 'WorldEntitySyncError';
+  }
 }
+
+export type WorldEntitySyncOptions = {
+  allowLegacyNameMatch?: boolean;
+  strict?: boolean;
+  onlyKeys?: readonly WorldCollectionKey[];
+};
 
 export async function syncWorldEmbeddedEntities(
-  pool: DatabasePool,
+  db: DatabaseExecutor,
   worldId: string,
   userId: string,
   document: Record<string, unknown>,
   contentRating: string,
+  options: WorldEntitySyncOptions = {},
 ) {
   const errors: string[] = [];
   let created = 0;
   let updated = 0;
   let linked = 0;
+  const selectedSpecs = options.onlyKeys?.length
+    ? options.onlyKeys.map((key) => specByKey.get(key)).filter((spec): spec is EmbeddedSpec => Boolean(spec))
+    : [...worldCollectionSpecs];
 
-  for (const spec of embeddedSpecs) {
+  for (const spec of selectedSpecs) {
     const rawItems = document[spec.key];
-    if (!Array.isArray(rawItems)) continue;
+    if (rawItems === undefined) continue;
+    if (!Array.isArray(rawItems)) {
+      errors.push(`${spec.key} must be an array.`);
+      continue;
+    }
 
     for (let index = 0; index < rawItems.length; index += 1) {
       const rawItem = rawItems[index];
@@ -120,9 +194,9 @@ export async function syncWorldEmbeddedEntities(
       }
 
       const worldEntryId = text(rawItem.id);
-      const name = entityName(rawItem);
+      const name = entityName(spec, rawItem);
       if (!worldEntryId || !name) {
-        errors.push(`${spec.label} at index ${index} is missing ${!worldEntryId ? 'id' : 'name/title'}.`);
+        errors.push(`${spec.label} at index ${index} is missing ${!worldEntryId ? 'id' : spec.titleField}.`);
         continue;
       }
 
@@ -131,11 +205,25 @@ export async function syncWorldEmbeddedEntities(
       const childDocument = entityDocument(rawItem, worldEntryId);
 
       try {
-        const existing = await findManagedAsset(pool, worldId, spec, worldEntryId, requestedLibraryAssetId);
+        const match = await findManagedAsset(
+          db,
+          worldId,
+          spec,
+          worldEntryId,
+          requestedLibraryAssetId,
+          name,
+          options.allowLegacyNameMatch === true,
+        );
+        if (match.ambiguous) {
+          errors.push(match.reason ?? `${spec.label} “${name}” is ambiguous.`);
+          continue;
+        }
+
+        const existing = match.row;
         let libraryAssetId = existing ? String(existing.id) : '';
 
         if (!existing) {
-          const inserted = await pool.query(
+          const inserted = await db.query(
             `INSERT INTO library_assets
               (id, type, name, summary, origin_world_id, creator_user_id, source_type, content_rating, tags, visual_tone, document)
              VALUES ($1, $2, $3, $4, $5, $6, 'user-created', $7, '{}', $8, $9::jsonb)
@@ -149,10 +237,10 @@ export async function syncWorldEmbeddedEntities(
           const needsUpdate = String(existing.name ?? '') !== name
             || String(existing.summary ?? '') !== summary
             || String(existing.content_rating ?? '') !== contentRating
-            || JSON.stringify(existingDocument) !== JSON.stringify(childDocument);
+            || !jsonSemanticallyEqual(existingDocument, childDocument);
 
           if (needsUpdate) {
-            await pool.query(
+            await db.query(
               `UPDATE library_assets
                SET name = $1, summary = $2, content_rating = $3, document = $4::jsonb, updated_at = now()
                WHERE id = $5`,
@@ -163,7 +251,7 @@ export async function syncWorldEmbeddedEntities(
         }
 
         if (requestedLibraryAssetId !== libraryAssetId) {
-          await attachLibraryAssetId(pool, worldId, spec.key, worldEntryId, libraryAssetId);
+          rawItem.libraryAssetId = libraryAssetId;
           linked += 1;
         }
       } catch (error) {
@@ -172,13 +260,121 @@ export async function syncWorldEmbeddedEntities(
     }
   }
 
-  await pool.query(
+  // Persist only the structural links we deliberately added. This statement does not
+  // bump updated_at; linking metadata is not a user-visible content edit by itself.
+  if (linked > 0) {
+    await db.query('UPDATE library_assets SET document = $2::jsonb WHERE id = $1 AND type = \'world\'', [worldId, JSON.stringify(document)]);
+  }
+
+  await db.query(
     `UPDATE library_assets
      SET dependency_count = (SELECT count(*) FROM library_assets WHERE origin_world_id = $1)
      WHERE id = $1`,
     [worldId],
   );
 
-  if (errors.length) console.warn(`World ${worldId} embedded entity sync warnings:`, errors);
+  if (errors.length) {
+    console.warn(`World ${worldId} entity sync warnings:`, errors);
+    if (options.strict) throw new WorldEntitySyncError(errors);
+  }
   return { created, updated, linked, errors };
+}
+
+/**
+ * Mirror one canonical child row into the world's compatibility projection.
+ * The child row is authoritative; the embedded object is only a projection used by
+ * the existing World Forge / Speculus document format.
+ */
+export async function mirrorCanonicalChildToWorld(db: DatabaseExecutor, row: Record<string, unknown>) {
+  const spec = specByType.get(String(row.type ?? ''));
+  const worldId = text(row.origin_world_id);
+  if (!spec || !worldId) return { changed: false, worldId: '', before: null, after: null };
+
+  let childDocument = isRecord(row.document) ? { ...row.document } : {};
+  let worldEntryId = text(childDocument.worldEntryId);
+  if (!worldEntryId) {
+    worldEntryId = String(row.id);
+    childDocument = { ...childDocument, worldEntryId };
+    await db.query('UPDATE library_assets SET document = $2::jsonb WHERE id = $1', [row.id, JSON.stringify(childDocument)]);
+    row = { ...row, document: childDocument };
+  }
+
+  const worldResult = await db.query('SELECT document FROM library_assets WHERE id = $1 AND type = \'world\' FOR UPDATE', [worldId]);
+  if (!worldResult.rowCount) throw new Error(`Origin world ${worldId} does not exist.`);
+  const before = isRecord(worldResult.rows[0].document) ? worldResult.rows[0].document as Record<string, unknown> : {};
+  const current = Array.isArray(before[spec.key]) ? [...before[spec.key] as unknown[]] : [];
+  const projection = projectionFromAsset(spec, row);
+  const matches: number[] = [];
+  for (let index = 0; index < current.length; index += 1) {
+    const entry = current[index];
+    if (!isRecord(entry)) continue;
+    if (text(entry.libraryAssetId) === String(row.id) || text(entry.id) === worldEntryId) matches.push(index);
+  }
+  if (matches.length > 1) throw new Error(`${spec.label} ${worldEntryId} appears more than once in the world projection.`);
+  if (matches.length === 1) current[matches[0]!] = projection;
+  else current.push(projection);
+
+  const after = { ...before, [spec.key]: current };
+  if (jsonSemanticallyEqual(before, after)) return { changed: false, worldId, before, after };
+  await db.query('UPDATE library_assets SET document = $2::jsonb, updated_at = now() WHERE id = $1', [worldId, JSON.stringify(after)]);
+  return { changed: true, worldId, before, after };
+}
+
+/**
+ * Rebuild collection projections from canonical child rows. Use this after a world
+ * edit has been split into child rows so the stored world document cannot drift.
+ */
+export async function rebuildWorldProjection(
+  db: DatabaseExecutor,
+  worldId: string,
+  options: { dropUnlinked?: boolean } = {},
+) {
+  const worldResult = await db.query('SELECT document FROM library_assets WHERE id = $1 AND type = \'world\' FOR UPDATE', [worldId]);
+  if (!worldResult.rowCount) throw new Error(`World ${worldId} does not exist.`);
+  const before = isRecord(worldResult.rows[0].document) ? worldResult.rows[0].document as Record<string, unknown> : {};
+  const childResult = await db.query(
+    `SELECT id, type, name, summary, origin_world_id, source_type, content_rating, visual_tone, document
+     FROM library_assets
+     WHERE origin_world_id = $1 AND type = ANY($2::text[])
+     ORDER BY created_at, id`,
+    [worldId, worldCollectionSpecs.map((spec) => spec.type)],
+  );
+
+  const after: Record<string, unknown> = { ...before };
+  for (const spec of worldCollectionSpecs) {
+    const children = childResult.rows.filter((row) => row.type === spec.type) as Record<string, unknown>[];
+    const byId = new Map(children.map((row) => [String(row.id), row]));
+    const byEntry = new Map<string, Record<string, unknown>>();
+    for (const row of children) {
+      const entryId = text(isRecord(row.document) ? row.document.worldEntryId : undefined);
+      if (entryId && !byEntry.has(entryId)) byEntry.set(entryId, row);
+    }
+
+    const used = new Set<string>();
+    const projected: Record<string, unknown>[] = [];
+    const current = Array.isArray(before[spec.key]) ? before[spec.key] as unknown[] : [];
+    for (const raw of current) {
+      if (!isRecord(raw)) continue;
+      const linked = text(raw.libraryAssetId);
+      const entryId = text(raw.id);
+      const child = (linked ? byId.get(linked) : undefined) ?? (entryId ? byEntry.get(entryId) : undefined);
+      if (child && !used.has(String(child.id))) {
+        projected.push(projectionFromAsset(spec, child));
+        used.add(String(child.id));
+      } else if (!options.dropUnlinked) {
+        projected.push(raw);
+      }
+    }
+    for (const child of children) {
+      if (used.has(String(child.id))) continue;
+      projected.push(projectionFromAsset(spec, child));
+      used.add(String(child.id));
+    }
+    after[spec.key] = projected;
+  }
+
+  if (!jsonSemanticallyEqual(before, after)) {
+    await db.query('UPDATE library_assets SET document = $2::jsonb WHERE id = $1', [worldId, JSON.stringify(after)]);
+  }
+  return { changed: !jsonSemanticallyEqual(before, after), before, after };
 }
