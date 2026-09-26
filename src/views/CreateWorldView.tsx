@@ -16,6 +16,9 @@ type WorldTransferPreview = {
   rootAssetId: string;
   name: string;
   records: number;
+  counts: Record<string, number>;
+  archivedSpc: number;
+  missingSpc: number;
 };
 
 function downloadTemplate() {
@@ -58,10 +61,28 @@ function worldTransferPreview(raw: string): WorldTransferPreview | null {
       return item.id === scopeRecord.rootAssetId && item.type === 'world';
     }) as Record<string, unknown> | undefined;
     if (!root) return null;
+
+    const counts: Record<string, number> = {};
+    let archivedSpc = 0;
+    for (const rawRecord of records) {
+      if (!rawRecord || typeof rawRecord !== 'object' || Array.isArray(rawRecord)) continue;
+      const record = rawRecord as Record<string, unknown>;
+      const type = typeof record.type === 'string' ? record.type : 'unknown';
+      counts[type] = (counts[type] ?? 0) + 1;
+      const speculus = record.speculus;
+      if (speculus && typeof speculus === 'object' && !Array.isArray(speculus)) {
+        const code = (speculus as Record<string, unknown>).code;
+        if (typeof code === 'string' && code.trim()) archivedSpc += 1;
+      }
+    }
+
     return {
       rootAssetId: scopeRecord.rootAssetId,
       name: typeof root.name === 'string' && root.name.trim() ? root.name.trim() : 'World archive',
       records: records.length,
+      counts,
+      archivedSpc,
+      missingSpc: Math.max(0, records.length - archivedSpc),
     };
   } catch {
     return null;
@@ -206,7 +227,7 @@ export function CreateWorldView() {
 
       <article className="world-create-card world-create-card--coda" id="coda">
         <div className="world-create-card__icon"><Sparkles size={22} /></div>
-        <div><span className="eyebrow">Coda assisted</span><h2>Create with Coda</h2><p>Open a private blank world in the editor, then use Coda on that open file. Her draft stays unsaved until you press Save in the World Forge.</p></div>
+        <div><span className="eyebrow">Coda assisted</span><h2>Create with Coda</h2><p>Open a private blank world in the editor, then use Coda on that open file. Her changes are applied through Orbis after you approve them.</p></div>
         <button className="button button--primary" type="button" disabled={Boolean(working)} onClick={() => void createBlank(true)}>
           {working === 'coda' ? 'Preparing Coda...' : 'Create with Coda'}
         </button>
@@ -214,7 +235,7 @@ export function CreateWorldView() {
 
       <article className="world-create-card" id="import-json">
         <div className="world-create-card__icon"><FileJson size={22} /></div>
-        <div><span className="eyebrow">JSON</span><h2>Import a JSON draft</h2><p>Load a World JSON file, validate it locally, review the detected structure, then explicitly create it in Orbis.</p></div>
+        <div><span className="eyebrow">JSON</span><h2>Import a world</h2><p>Load either a World JSON draft or a complete Orbis world archive. Orbis detects which kind it is before anything is saved.</p></div>
         <button className="button button--secondary" type="button" disabled={Boolean(working)} onClick={() => setImportOpen((open) => !open)}>
           <Upload size={16} /> {importOpen ? 'Close importer' : 'Import JSON'}
         </button>
@@ -223,7 +244,7 @@ export function CreateWorldView() {
 
     {importOpen && <section className="world-json-import">
       <header className="world-json-import__header">
-        <div><span className="eyebrow">JSON draft importer</span><h2>Review before anything is saved</h2><p>The file is parsed in your browser first. Orbis does not create the world until you press the matching import button below.</p></div>
+        <div><span className="eyebrow">World importer</span><h2>Review before anything is saved</h2><p>The file is inspected in your browser first. A draft creates a new world; a complete world archive restores its packaged records.</p></div>
         <button className="button button--secondary" type="button" onClick={downloadTemplate}><Download size={16} /> Download blank template</button>
       </header>
 
@@ -246,19 +267,28 @@ export function CreateWorldView() {
       </label>
 
       <div className="world-json-import__actions">
-        <button className="button button--secondary" type="button" disabled={!rawJson.trim() || Boolean(working)} onClick={() => validateJson()}>Validate draft</button>
+        <button className="button button--secondary" type="button" disabled={!rawJson.trim() || Boolean(working)} onClick={() => validateJson()}>Validate file</button>
         {transferPreview
-          ? <button className="button button--primary" type="button" disabled={Boolean(working)} onClick={() => void restoreWorldArchive()}>{working === 'archive' ? 'Restoring...' : 'Restore world archive'}</button>
+          ? <button className="button button--primary" type="button" disabled={Boolean(working)} onClick={() => void restoreWorldArchive()}>{working === 'archive' ? 'Restoring complete world...' : 'Restore complete world'}</button>
           : <button className="button button--primary" type="button" disabled={!preview || Boolean(working)} onClick={() => void createImportedWorld()}>{working === 'import' ? 'Creating...' : 'Create world from JSON'}</button>}
       </div>
 
       {error && <div className="inline-error world-create-error" role="alert">{error}</div>}
 
       {transferPreview && <section className="world-json-preview">
-        <div><span>Detected format</span><strong>orbis-transfer</strong></div>
+        <div><span>Detected format</span><strong>Complete Orbis world archive</strong></div>
         <div><span>World</span><strong>{transferPreview.name}</strong></div>
-        <div><span>Records</span><strong>{transferPreview.records}</strong></div>
-        <p>This is a full Orbis world archive, not a draft. Restoring it preserves its original record IDs, world links and SPC identities. If those exact records already exist on this Orbis server, the restore will stop instead of overwriting them.</p>
+        <div><span>Packaged records</span><strong>{transferPreview.records}</strong></div>
+        {Object.entries(transferPreview.counts).sort(([left], [right]) => left.localeCompare(right)).map(([type, count]) => <div key={type}><span>{type}</span><strong>{count}</strong></div>)}
+        <div><span>Archived SPC identities</span><strong>{transferPreview.archivedSpc}</strong></div>
+        {transferPreview.missingSpc > 0 && <div><span>SPC identities to regenerate</span><strong>{transferPreview.missingSpc}</strong></div>}
+        <p>
+          This restores the complete packaged world, preserving record IDs and world links.{' '}
+          {transferPreview.missingSpc > 0
+            ? `This is an older archive with ${transferPreview.missingSpc} record${transferPreview.missingSpc === 1 ? '' : 's'} that do not contain a usable SPC identity; Orbis will assign fresh SPC identities to those records during restore.`
+            : 'All packaged SPC identities will be preserved.'}
+          {' '}Existing identical record IDs still stop the restore instead of being overwritten.
+        </p>
       </section>}
 
       {preview && <section className="world-json-preview">
@@ -276,7 +306,7 @@ export function CreateWorldView() {
 
       <aside className="world-json-help">
         <strong>Howling Whispers JSON rule</strong>
-        <p>The outer fields tell Orbis what the file is. A World draft uses a <code>data</code> object for the editable World document. A full <code>orbis-transfer</code> world archive is detected separately and can be restored from this same importer. Documentation may show <code>//</code> comments for teaching, but comments are not valid inside real JSON files.</p>
+        <p>The outer fields tell Orbis what the file is. A World draft uses a <code>data</code> object for the editable World document. A full <code>orbis-transfer</code> world archive is restored as a complete package from this same importer. Older checksum-valid archives are normalized for current metadata rules instead of being rejected merely because they predate them.</p>
       </aside>
     </section>}
   </div>;
