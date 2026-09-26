@@ -297,8 +297,12 @@ export async function applyAssetUpdate(
   }
 
   return inTransaction(pool, async (client) => {
-    const peek = await client.query('SELECT type, origin_world_id FROM library_assets WHERE id = $1', [assetId]);
-    if (!peek.rowCount) throw new AssetWriteError(404, 'Record not found.');
+    // Query the normal row shape here rather than a special projection. Besides
+    // making the preflight reusable by small test executors, this leaves one query
+    // contract for callers while we still acquire the authoritative FOR UPDATE lock
+    // below after locking the origin world first.
+    const peek = await client.query('SELECT * FROM library_assets WHERE id = $1', [assetId]);
+    if (!peek.rowCount || !peek.rows[0]) throw new AssetWriteError(404, 'Record not found.');
     const peekType = String(peek.rows[0].type);
     const peekOriginWorldId = peek.rows[0].origin_world_id ? String(peek.rows[0].origin_world_id) : '';
 
@@ -307,7 +311,7 @@ export async function applyAssetUpdate(
     }
 
     const current = await client.query('SELECT * FROM library_assets WHERE id = $1 FOR UPDATE', [assetId]);
-    if (!current.rowCount) throw new AssetWriteError(404, 'Record not found.');
+    if (!current.rowCount || !current.rows[0]) throw new AssetWriteError(404, 'Record not found.');
     const existing = current.rows[0] as Record<string, unknown>;
     if (existing.creator_user_id !== identity.userId && !identity.isSuperAdmin) {
       throw new AssetWriteError(403, 'Only the creator can change this record.');
