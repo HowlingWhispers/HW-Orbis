@@ -6,7 +6,8 @@ ALTER TABLE library_assets
 
 UPDATE library_assets
 SET original_creator_user_id = creator_user_id
-WHERE original_creator_user_id IS NULL;
+WHERE original_creator_user_id IS NULL
+  AND creator_user_id IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION preserve_library_asset_original_creator()
 RETURNS trigger
@@ -14,7 +15,7 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    IF NEW.original_creator_user_id IS NULL THEN
+    IF NEW.original_creator_user_id IS NULL AND NEW.creator_user_id IS NOT NULL THEN
       NEW.original_creator_user_id := NEW.creator_user_id;
     END IF;
     RETURN NEW;
@@ -33,16 +34,13 @@ BEFORE INSERT OR UPDATE ON library_assets
 FOR EACH ROW
 EXECUTE FUNCTION preserve_library_asset_original_creator();
 
-ALTER TABLE library_assets
-  ALTER COLUMN original_creator_user_id SET NOT NULL;
-
 CREATE INDEX IF NOT EXISTS library_assets_original_creator_idx
   ON library_assets (original_creator_user_id);
 
 COMMENT ON COLUMN library_assets.creator_user_id IS
   'Current controlling owner. Legacy column name retained for compatibility; may change only through the explicit Orbis ownership-transfer flow.';
 COMMENT ON COLUMN library_assets.original_creator_user_id IS
-  'Immutable creator provenance. Set at record creation and never changed by ownership transfer.';
+  'Immutable creator provenance. Set at record creation and never changed by ownership transfer; nullable only for legacy/system records that never had a user creator.';
 
 CREATE TABLE IF NOT EXISTS library_world_ownership_transfers (
   id bigserial PRIMARY KEY,
