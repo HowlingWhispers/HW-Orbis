@@ -1,10 +1,51 @@
 import { BookOpen, Search, Send, Sparkles, WandSparkles, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaHistoryTurn, type CodaMode, type CodaProposal } from '../api/coda-assistant';
 import { libraryApi } from '../api/client';
 import type { ContentRating } from '../types/library';
 import { useAuth } from '../auth/AuthContext';
+
+const THREAD_STORAGE_KEY = 'coda.assistant.thread';
+const OVERLAY_ACTIVE_CLASS = 'coda-overlay-active';
+
+type StoredThread = {
+  mode: CodaMode;
+  text: string;
+  history: CodaHistoryTurn[];
+  result: CodaAssistantResponse | null;
+  createdWorldTarget: { id: string; name: string } | null;
+  createdProposalIds: Record<string, string>;
+};
+
+const emptyThread: StoredThread = { mode: 'guide', text: '', history: [], result: null, createdWorldTarget: null, createdProposalIds: {} };
+
+function readStoredThread(): StoredThread {
+  try {
+    const raw = window.localStorage.getItem(THREAD_STORAGE_KEY);
+    if (!raw) return emptyThread;
+    const parsed = JSON.parse(raw) as Partial<StoredThread>;
+    const history = Array.isArray(parsed.history)
+      ? parsed.history
+        .filter((turn): turn is CodaHistoryTurn => Boolean(turn) && typeof turn === 'object' && typeof (turn as CodaHistoryTurn).content === 'string' && ((turn as CodaHistoryTurn).role === 'user' || (turn as CodaHistoryTurn).role === 'assistant'))
+        .slice(-8)
+      : [];
+    return {
+      mode: parsed.mode === 'sort' || parsed.mode === 'inspect' || parsed.mode === 'guide' ? parsed.mode : 'guide',
+      text: typeof parsed.text === 'string' ? parsed.text : '',
+      history,
+      result: parsed.result && typeof parsed.result === 'object' ? parsed.result : null,
+      createdWorldTarget: parsed.createdWorldTarget && typeof parsed.createdWorldTarget.id === 'string'
+        ? { id: parsed.createdWorldTarget.id, name: String(parsed.createdWorldTarget.name ?? '') }
+        : null,
+      createdProposalIds: parsed.createdProposalIds && typeof parsed.createdProposalIds === 'object' && !Array.isArray(parsed.createdProposalIds)
+        ? Object.fromEntries(Object.entries(parsed.createdProposalIds).filter(([, value]) => typeof value === 'string'))
+        : {},
+    };
+  } catch {
+    return emptyThread;
+  }
+}
 
 const modes: Array<{ id: CodaMode; label: string; icon: typeof BookOpen; hint: string; placeholder: string }> = [
   { id: 'guide', label: 'Ask', icon: BookOpen, hint: 'Explain Orbis or Speculus.', placeholder: 'What are you trying to understand?' },
@@ -125,35 +166,62 @@ export function CodaAssistant() {
   const { user } = useAuth();
   const location = useLocation();
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<CodaMode>('guide');
-  const [text, setText] = useState('');
+  const [restored] = useState(readStoredThread);
+  const [mode, setMode] = useState<CodaMode>(restored.mode);
+  const [text, setText] = useState(restored.text);
   const [includeContext, setIncludeContext] = useState(false);
-  const [result, setResult] = useState<CodaAssistantResponse | null>(null);
+  const [result, setResult] = useState<CodaAssistantResponse | null>(restored.result);
   const [error, setError] = useState('');
   const [settingsPath, setSettingsPath] = useState('');
   const [working, setWorking] = useState(false);
   const [applied, setApplied] = useState(false);
-  const [createdWorldTarget, setCreatedWorldTarget] = useState<{ id: string; name: string } | null>(null);
-  const [history, setHistory] = useState<CodaHistoryTurn[]>([]);
-  const [createdProposalIds, setCreatedProposalIds] = useState<Record<string, string>>({});
+  const [createdWorldTarget, setCreatedWorldTarget] = useState<{ id: string; name: string } | null>(restored.createdWorldTarget);
+  const [history, setHistory] = useState<CodaHistoryTurn[]>(restored.history);
+  const [createdProposalIds, setCreatedProposalIds] = useState<Record<string, string>>(restored.createdProposalIds);
   const [bulkCreating, setBulkCreating] = useState(false);
   const [bulkMessage, setBulkMessage] = useState('');
+  const transcriptRef = useRef<HTMLDivElement>(null);
 
   const assetId = useMemo(() => currentAssetId(location.pathname), [location.pathname]);
   const inEditor = Boolean(assetId && location.pathname === `/asset/${assetId}/edit`);
   const active = modes.find((item) => item.id === mode)!;
 
   useEffect(() => {
+    const node = transcriptRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [result, error, bulkMessage, createdWorldTarget, applied, working]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(THREAD_STORAGE_KEY, JSON.stringify({ mode, text, history, result, createdWorldTarget, createdProposalIds }));
+    } catch {
+      // Storage can be full or blocked; the thread then lives only in this tab.
+    }
+  }, [mode, text, history, result, createdWorldTarget, createdProposalIds]);
+
+  useEffect(() => () => { document.body.classList.remove(OVERLAY_ACTIVE_CLASS); }, []);
+
+  useEffect(() => {
     setIncludeContext(false);
-    setResult(null);
     setError('');
     setSettingsPath('');
     setApplied(false);
-    setCreatedWorldTarget(null);
+  }, [assetId]);
+
+  const clearThread = () => {
     setHistory([]);
+    setResult(null);
+    setText('');
+    setCreatedWorldTarget(null);
     setCreatedProposalIds({});
     setBulkMessage('');
-  }, [assetId]);
+    setError('');
+    try {
+      window.localStorage.removeItem(THREAD_STORAGE_KEY);
+    } catch {
+      // Ignore storage failures; state is already cleared.
+    }
+  };
 
   const run = async () => {
     const input = text.trim();
@@ -297,7 +365,12 @@ export function CodaAssistant() {
   const canCreateProposal = () => Boolean(user?.permissions.canCreate);
 
   return <>
-    {open && <aside className="coda-assistant" aria-label="Coda Assistant">
+    {open && <aside
+      className="coda-assistant"
+      aria-label="Coda Assistant"
+      onMouseEnter={() => document.body.classList.add(OVERLAY_ACTIVE_CLASS)}
+      onMouseLeave={() => document.body.classList.remove(OVERLAY_ACTIVE_CLASS)}
+    >
       <header className="coda-assistant__header">
         <div className="coda-assistant__mark"><Sparkles size={19} /></div>
         <div><span>OVERLAY ACTIVE</span><strong>Coda Assistant</strong></div>
@@ -305,44 +378,50 @@ export function CodaAssistant() {
       </header>
 
       <nav className="coda-mode-tabs" aria-label="Coda modes">
-        {modes.map(({ id, label, icon: Icon }) => <button key={id} type="button" className={mode === id ? 'is-active' : ''} onClick={() => { setMode(id); setResult(null); setError(''); setApplied(false); setHistory([]); setCreatedProposalIds({}); setBulkMessage(''); }}>
+        {modes.map(({ id, label, icon: Icon }) => <button key={id} type="button" className={mode === id ? 'is-active' : ''} onClick={() => { setMode(id); setResult(null); setError(''); setApplied(false); setBulkMessage(''); }}>
           <Icon size={15} /><span>{label}</span>
         </button>)}
       </nav>
 
       <div className="coda-assistant__body">
         <p className="coda-mode-hint">{active.hint}</p>
-        {!user ? <div className="coda-notice"><strong>Coda needs an Orbis account.</strong><span>Sign in with Discord first, then she can use your configured AI provider.</span></div> : <>
-          {history.length > 0 && <div className="coda-thread-status"><span>Coda remembers this thread · {Math.floor(history.length / 2)} exchange{history.length === 2 ? '' : 's'}</span><button type="button" onClick={() => { setHistory([]); setResult(null); setText(''); }}>Clear thread</button></div>}
-          <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={history.length ? (result?.questions?.length ? 'Answer Coda here. She will remember the earlier question and your original material.' : 'Give Coda the next instruction in this thread...') : active.placeholder} rows={mode === 'sort' ? 9 : 6} />
-          {assetId && <label className="coda-context-toggle">
-            <input type="checkbox" checked={includeContext} onChange={(event) => setIncludeContext(event.target.checked)} />
-            <span><strong>Include current record</strong><small>Off by default. Only this record is sent to your configured provider.</small></span>
-          </label>}
-          <button type="button" className="button button--primary coda-submit" disabled={working || !text.trim()} onClick={() => void run()}>
-            <Send size={15} /> {working ? 'Coda is sniffing...' : mode === 'sort' ? 'Sort with Coda' : mode === 'inspect' ? 'Inspect with Coda' : 'Ask Coda'}
-          </button>
-        </>}
-        {error && <div className="coda-notice is-error"><strong>{error}</strong>{settingsPath && <Link to={settingsPath}>Open Account settings</Link>}</div>}
-        {result && (mode === 'sort'
-          ? <SortResult
-              result={result}
-              canApply={Boolean(inEditor && result.record?.id === assetId)}
-              canCreate={canCreateProposal}
-              createdIds={createdProposalIds}
-              bulkCreating={bulkCreating}
-              bulkMessage={bulkMessage}
-              onApply={applyDraft}
-              onCreate={createProposal}
-              onCreateAll={createAllProposals}
-            />
-          : <div className="coda-result coda-result--text"><p>{result.text}</p></div>)}
-        {createdWorldTarget && mode === 'sort' && <div className="coda-notice is-success"><strong>{createdWorldTarget.name} created privately.</strong><span>Related proposals can be created inside that world; standalone proposals remain supported too.</span></div>}
-        {applied && <div className="coda-notice is-success"><strong>Draft placed in the editor.</strong><span>Review the filled fields and use the normal Save button when you are satisfied.</span></div>}
+        <div className="coda-transcript" ref={transcriptRef} role="log" aria-live="polite" aria-label="Coda replies">
+          {result?.record && result.record.id !== assetId && <div className="coda-notice"><strong>Still showing {result.record.name}'s reply.</strong><span>Its proposals stay bound to that record's world. Reopen that record to apply its draft, or clear the thread to start over.</span></div>}
+          {error && <div className="coda-notice is-error"><strong>{error}</strong>{settingsPath && <Link to={settingsPath}>Open Account settings</Link>}</div>}
+          {result && (mode === 'sort'
+            ? <SortResult
+                result={result}
+                canApply={Boolean(inEditor && result.record?.id === assetId)}
+                canCreate={canCreateProposal}
+                createdIds={createdProposalIds}
+                bulkCreating={bulkCreating}
+                bulkMessage={bulkMessage}
+                onApply={applyDraft}
+                onCreate={createProposal}
+                onCreateAll={createAllProposals}
+              />
+            : <div className="coda-result coda-result--text"><p>{result.text}</p></div>)}
+          {createdWorldTarget && mode === 'sort' && <div className="coda-notice is-success"><strong>{createdWorldTarget.name} created privately.</strong><span>Related proposals can be created inside that world; standalone proposals remain supported too.</span></div>}
+          {applied && <div className="coda-notice is-success"><strong>Draft placed in the editor.</strong><span>Review the filled fields and use the normal Save button when you are satisfied.</span></div>}
+        </div>
+
+        <div className="coda-composer">
+          {!user ? <div className="coda-notice"><strong>Coda needs an Orbis account.</strong><span>Sign in with Discord first, then she can use your configured AI provider.</span></div> : <>
+            {history.length > 0 && <div className="coda-thread-status"><span>Coda remembers this thread · {Math.floor(history.length / 2)} exchange{history.length === 2 ? '' : 's'}</span><button type="button" onClick={clearThread}>Clear thread</button></div>}
+            <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={history.length ? (result?.questions?.length ? 'Answer Coda here. She will remember the earlier question and your original material.' : 'Give Coda the next instruction in this thread...') : active.placeholder} rows={mode === 'sort' ? 9 : 6} />
+            {assetId && <label className="coda-context-toggle">
+              <input type="checkbox" checked={includeContext} onChange={(event) => setIncludeContext(event.target.checked)} />
+              <span><strong>Include current record</strong><small>Off by default. Only this record is sent to your configured provider.</small></span>
+            </label>}
+            <button type="button" className="button button--primary coda-submit" disabled={working || !text.trim()} onClick={() => void run()}>
+              <Send size={15} /> {working ? 'Coda is sniffing...' : mode === 'sort' ? 'Sort with Coda' : mode === 'inspect' ? 'Inspect with Coda' : 'Ask Coda'}
+            </button>
+          </>}
+        </div>
       </div>
 
       <footer className="coda-assistant__footer">
-        <span>Coda keeps this assistant thread in your browser while it is open. Create/Save actions still require your explicit click.</span>
+        <span>Coda keeps this thread in your browser, so you can close the tab and pick it up later. Create/Save actions still require your explicit click.</span>
         {result?.model && <small>{result.model}</small>}
       </footer>
     </aside>}
