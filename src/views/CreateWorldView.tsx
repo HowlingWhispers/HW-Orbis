@@ -1,6 +1,6 @@
 import { ArrowLeft, Download, FileJson, PenLine, Sparkles, Upload } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import {
@@ -38,9 +38,10 @@ function worldCounts(result: ParsedWorldJson | null) {
 
 export function CreateWorldView() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importOpen, setImportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(searchParams.get('import') === '1');
   const [rawJson, setRawJson] = useState('');
   const [fileName, setFileName] = useState('');
   const [preview, setPreview] = useState<ParsedWorldJson | null>(null);
@@ -136,7 +137,7 @@ export function CreateWorldView() {
     {error && <div className="inline-error world-create-error" role="alert">{error}</div>}
 
     <section className="world-create-options" aria-label="World creation methods">
-      <article className="world-create-card">
+      <article className="world-create-card" id="manual">
         <div className="world-create-card__icon"><PenLine size={22} /></div>
         <div><span className="eyebrow">Manual</span><h2>Start with a blank world</h2><p>Use the existing World Forge tabs and fields. Nothing changes about the manual workflow.</p></div>
         <button className="button button--primary" type="button" disabled={Boolean(working)} onClick={() => void createBlank(false)}>
@@ -144,7 +145,7 @@ export function CreateWorldView() {
         </button>
       </article>
 
-      <article className="world-create-card world-create-card--coda">
+      <article className="world-create-card world-create-card--coda" id="coda">
         <div className="world-create-card__icon"><Sparkles size={22} /></div>
         <div><span className="eyebrow">Coda assisted</span><h2>Create with Coda</h2><p>Open a private blank world in the editor, then use Coda on that open file. Her draft stays unsaved until you press Save in the World Forge.</p></div>
         <button className="button button--primary" type="button" disabled={Boolean(working)} onClick={() => void createBlank(true)}>
@@ -152,7 +153,7 @@ export function CreateWorldView() {
         </button>
       </article>
 
-      <article className="world-create-card">
+      <article className="world-create-card" id="import-json">
         <div className="world-create-card__icon"><FileJson size={22} /></div>
         <div><span className="eyebrow">JSON</span><h2>Import a JSON draft</h2><p>Load a World JSON file, validate it locally, review the detected structure, then explicitly create it in Orbis.</p></div>
         <button className="button button--secondary" type="button" disabled={Boolean(working)} onClick={() => setImportOpen((open) => !open)}>
