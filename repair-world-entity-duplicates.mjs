@@ -5,8 +5,10 @@
  * older curated/imported row with the same world/type/name.
  *
  * DRY RUN IS THE DEFAULT. Nothing is changed without --apply.
- * Ambiguous names, referenced generated rows, revision history, and Speculus
- * catalogue entries are deliberately refused instead of guessed.
+ * Ambiguous names, referenced generated rows, and post-migration edit history are
+ * deliberately refused instead of guessed. A Speculus catalogue row on the generated
+ * twin is expected: deleting the twin retires that accidental SPC identity via the
+ * existing database trigger while the older canonical row keeps its own identity.
  *
  * Usage:
  *   DATABASE_URL=... npm run repair:world-duplicates
@@ -114,8 +116,8 @@ async function main() {
     ]);
     const revisionCount = Number(revisions.rows[0]?.count ?? 0);
     const registryCount = Number(registry.rows[0]?.count ?? 0);
-    if ((references.rowCount ?? 0) > 0 || revisionCount > 0 || registryCount > 0) {
-      refused.push(`${row.world_name} / ${row.type} / ${row.name}: generated row has ${references.rowCount ?? 0} external refs, ${revisionCount} revisions, ${registryCount} catalogue rows.`);
+    if ((references.rowCount ?? 0) > 0 || revisionCount > 0) {
+      refused.push(`${row.world_name} / ${row.type} / ${row.name}: generated row has ${references.rowCount ?? 0} external refs and ${revisionCount} revisions; refusing a potentially edited twin.`);
       continue;
     }
 
@@ -133,12 +135,13 @@ async function main() {
       worldDocument: backlink.document,
       worldEntryId,
       sourceType: String(canonical.source_type),
+      accidentalRegistryRows: registryCount,
     });
   }
 
   console.log(`${apply ? 'APPLY' : 'DRY RUN'}: ${plans.length} safe duplicate repair(s); ${refused.length} ambiguous/unsafe candidate(s).`);
   for (const plan of plans) {
-    console.log(`REPAIR ${plan.worldName} / ${plan.type} / ${plan.name}: ${plan.generatedId} -> ${plan.canonicalId} (${plan.sourceType})`);
+    console.log(`REPAIR ${plan.worldName} / ${plan.type} / ${plan.name}: ${plan.generatedId} -> ${plan.canonicalId} (${plan.sourceType}); retire ${plan.accidentalRegistryRows} accidental SPC row(s)`);
   }
   for (const message of refused) console.log(`REFUSE ${message}`);
 
@@ -170,7 +173,9 @@ async function main() {
 
       const freshEntryId = text(object(freshGenerated.document).worldEntryId);
       if (freshEntryId !== plan.worldEntryId) throw new Error('Generated worldEntryId changed; refusing stale repair plan.');
-      const backlink = replaceWorldBackLink(object(freshWorld.document), worldCollectionKeyForType(plan.type), plan.worldEntryId, plan.generatedId, plan.canonicalId);
+      const collectionKey = worldCollectionKeyForType(plan.type);
+      if (!collectionKey) throw new Error(`Unsupported world child type ${plan.type}.`);
+      const backlink = replaceWorldBackLink(object(freshWorld.document), collectionKey, plan.worldEntryId, plan.generatedId, plan.canonicalId);
       if (backlink.matches !== 1) throw new Error(`World back-link changed; found ${backlink.matches} matches.`);
 
       const mergedDocument = {
@@ -178,17 +183,21 @@ async function main() {
         ...object(freshGenerated.document),
         worldEntryId: plan.worldEntryId,
       };
+
+      // Point the world at the older canonical row first, then remove the generated
+      // twin, then claim its worldEntryId on the canonical row. This ordering also
+      // works after migration 019's unique worldEntryId index already exists.
+      await client.query(
+        'UPDATE library_assets SET document = $2::jsonb WHERE id = $1',
+        [plan.worldId, JSON.stringify(backlink.document)],
+      );
+      await client.query('DELETE FROM library_assets WHERE id = $1', [plan.generatedId]);
       await client.query(
         `UPDATE library_assets
          SET summary = $2, content_rating = $3, document = $4::jsonb, updated_at = now()
          WHERE id = $1`,
         [plan.canonicalId, plan.summary, plan.contentRating, JSON.stringify(mergedDocument)],
       );
-      await client.query(
-        'UPDATE library_assets SET document = $2::jsonb WHERE id = $1',
-        [plan.worldId, JSON.stringify(backlink.document)],
-      );
-      await client.query('DELETE FROM library_assets WHERE id = $1', [plan.generatedId]);
       await client.query(
         `UPDATE library_assets
          SET dependency_count = (SELECT count(*) FROM library_assets WHERE origin_world_id = $1)
