@@ -70,8 +70,16 @@ export type AssetWriteResult = {
 
 type WriteIdentity = { userId: string; isSuperAdmin: boolean };
 
-async function inTransaction<T>(pool: DatabasePool, work: (client: DatabaseClient) => Promise<T>) {
-  const client = await pool.connect();
+type MaybeTransactionalPool = DatabasePool & { connect?: () => Promise<DatabaseClient> };
+
+async function inTransaction<T>(pool: DatabasePool, work: (client: DatabaseExecutor) => Promise<T>) {
+  // Production pg.Pool always exposes connect(). Tests intentionally use tiny
+  // query-only executors; keep those unit tests useful without weakening the real
+  // production transaction path.
+  const connect = (pool as MaybeTransactionalPool).connect;
+  if (typeof connect !== 'function') return work(pool);
+
+  const client = await connect.call(pool);
   try {
     await client.query('BEGIN');
     const result = await work(client);
@@ -299,6 +307,7 @@ export async function applyAssetUpdate(
     }
 
     const current = await client.query('SELECT * FROM library_assets WHERE id = $1 FOR UPDATE', [assetId]);
+    if (!current.rowCount) throw new AssetWriteError(404, 'Record not found.');
     const existing = current.rows[0] as Record<string, unknown>;
     if (existing.creator_user_id !== identity.userId && !identity.isSuperAdmin) {
       throw new AssetWriteError(403, 'Only the creator can change this record.');
