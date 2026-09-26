@@ -30,6 +30,9 @@ All user-facing agreements, policies, compliance material and launch checks live
 
 Orbis platform and server documentation lives in [`platform/`](./platform/).
 
+- [Howling Whispers JSON Authoring Standard](./platform/JSON_AUTHORING_STANDARD.md) — the human-editable JSON layout used by Create World → Import JSON, with a line-by-line commented example and clean template.
+- [World Privacy and Backup Import](./platform/WORLD_PRIVACY_AND_IMPORT.md) — privacy behavior, legacy backup import, and full Orbis transfer archives.
+
 ## Fabula
 
 Fabula-specific planning belongs in `HowlingWhispers/HW-Fabula`, not in the Orbis documentation tree unless the document specifically defines an Orbis/Fabula interface.
