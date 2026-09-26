@@ -2,10 +2,12 @@ import { createHash } from 'node:crypto';
 import express, { Router, type Request } from 'express';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
+import { parseTransferArchiveForImport, type ImportTransferArchive } from './archive-import-normalizer.js';
 import { ensureSuperAdminAccess, refreshSessionAccess, requireCreator, SUPER_ADMIN_DISCORD_ID } from './auth.js';
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import type { SettingsStore } from './settings.js';
+import { rebuildWorldProjection, syncWorldEmbeddedEntities, WorldEntitySyncError } from './world-entity-sync.js';
 
 const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const sourceTypes = ['curated', 'user-created', 'imported-v2', 'copied', 'public-curated', 'legacy-import'] as const;
@@ -171,6 +173,89 @@ function sendArchive(response: express.Response, archive: OrbisTransferArchive, 
   response.send(body);
 }
 
+async function restoreArchivedRegistry(client: PoolClient, archive: ImportTransferArchive) {
+  const withArchivedRegistry = archive.records.filter((record) => record.speculus !== null);
+  if (withArchivedRegistry.length) {
+    const codes = withArchivedRegistry.map((record) => record.speculus!.code);
+    const registryNumbers = withArchivedRegistry.map((record) => record.speculus!.registryNumber);
+    const plates = withArchivedRegistry.map((record) => `${record.speculus!.generation}:${record.speculus!.plate}`);
+    const ordinals = withArchivedRegistry.map((record) => `${record.speculus!.prefix}:${record.speculus!.ordinal}`);
+    const registryConflicts = await client.query(
+      `SELECT asset_id FROM speculus_catalog_registry
+       WHERE code = ANY($1::text[]) OR registry_number = ANY($2::bigint[])
+         OR generation::text || ':' || plate = ANY($3::text[])
+         OR prefix || ':' || ordinal::text = ANY($4::text[]) LIMIT 1`,
+      [codes, registryNumbers, plates, ordinals],
+    );
+    if (registryConflicts.rowCount) throw Object.assign(new Error('An SPC identity from this archive already exists. Nothing was imported.'), { code: 'ORBisRegistryConflict' });
+  }
+
+  const ids = archive.records.map((record) => record.id);
+  // INSERT triggers assign temporary SPC identities. Remove only those imported IDs,
+  // restore valid archived identities first, then allocate fresh identities for old
+  // archives whose SPC block was empty. This avoids keeping fake placeholder codes.
+  await client.query('DELETE FROM speculus_catalog_registry WHERE asset_id = ANY($1::uuid[])', [ids]);
+
+  for (const record of withArchivedRegistry) {
+    const registry = record.speculus!;
+    await client.query(
+      `INSERT INTO speculus_catalog_registry (
+         asset_id, prefix, ordinal, generation, series, number, plate, code, classification,
+         status, assigned_at, retired_at, registry_number, asset_created_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [record.id, registry.prefix, registry.ordinal, registry.generation, registry.series, registry.number,
+        registry.plate, registry.code, registry.classification, registry.status, registry.assignedAt,
+        registry.retiredAt, registry.registryNumber, registry.assetCreatedAt],
+    );
+  }
+
+  const maxOrdinals = new Map<string, number>();
+  for (const record of withArchivedRegistry) {
+    const registry = record.speculus!;
+    maxOrdinals.set(registry.prefix, Math.max(maxOrdinals.get(registry.prefix) ?? 0, registry.ordinal));
+  }
+  for (const [prefix, ordinal] of maxOrdinals) {
+    await client.query(
+      `INSERT INTO speculus_catalog_sequences (prefix, next_ordinal) VALUES ($1,$2)
+       ON CONFLICT (prefix) DO UPDATE SET next_ordinal = GREATEST(speculus_catalog_sequences.next_ordinal, EXCLUDED.next_ordinal)`,
+      [prefix, ordinal + 1],
+    );
+  }
+
+  for (const record of archive.records) {
+    if (record.speculus) continue;
+    await client.query(
+      'SELECT * FROM ensure_speculus_catalog_entry($1, $2, $3::jsonb)',
+      [record.id, record.type, JSON.stringify(record.document)],
+    );
+  }
+}
+
+async function canonicalizeImportedWorlds(client: PoolClient, archive: ImportTransferArchive, userId: string) {
+  let createdCanonicalChildren = 0;
+  let linkedCanonicalChildren = 0;
+  const worldIds = archive.records.filter((record) => record.type === 'world').map((record) => record.id);
+  for (const worldId of worldIds) {
+    const world = await client.query('SELECT document, content_rating FROM library_assets WHERE id = $1 AND type = \'world\' FOR UPDATE', [worldId]);
+    if (!world.rowCount) throw new Error(`Imported world ${worldId} disappeared before canonicalization.`);
+    const document = world.rows[0].document && typeof world.rows[0].document === 'object' && !Array.isArray(world.rows[0].document)
+      ? world.rows[0].document as Record<string, unknown>
+      : {};
+    const sync = await syncWorldEmbeddedEntities(
+      client,
+      worldId,
+      userId,
+      document,
+      String(world.rows[0].content_rating ?? 'sfw'),
+      { allowLegacyNameMatch: true, strict: true },
+    );
+    createdCanonicalChildren += sync.created;
+    linkedCanonicalChildren += sync.linked;
+    await rebuildWorldProjection(client, worldId, { dropUnlinked: true });
+  }
+  return { createdCanonicalChildren, linkedCanonicalChildren };
+}
+
 export function createArchiveTransferRouter(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
   const router = Router();
 
@@ -218,9 +303,15 @@ export function createArchiveTransferRouter(config: AppConfig, pool: DatabasePoo
     let client: PoolClient | undefined;
     try {
       if (!Buffer.isBuffer(request.body)) return response.status(415).json({ error: 'Upload an Orbis .orbis.json archive.' });
-      let archive: OrbisTransferArchive;
-      try { archive = parseTransferArchive(request.body.toString('utf8')); }
-      catch (error) { return response.status(400).json({ error: error instanceof Error ? error.message : 'Invalid Orbis archive.' }); }
+      let archive: ImportTransferArchive;
+      let repairs: ReturnType<typeof parseTransferArchiveForImport>['repairs'];
+      try {
+        const parsed = parseTransferArchiveForImport(request.body.toString('utf8'));
+        archive = parsed.archive;
+        repairs = parsed.repairs;
+      } catch (error) {
+        return response.status(400).json({ error: error instanceof Error ? error.message : 'Invalid Orbis archive.' });
+      }
 
       client = await pool.connect();
       await client.query('BEGIN');
@@ -229,22 +320,6 @@ export function createArchiveTransferRouter(config: AppConfig, pool: DatabasePoo
       if (existing.rowCount) {
         await client.query('ROLLBACK');
         return response.status(409).json({ error: 'One or more records already exist. Nothing was imported.' });
-      }
-
-      const codes = archive.records.map((record) => record.speculus.code);
-      const registryNumbers = archive.records.map((record) => record.speculus.registryNumber);
-      const plates = archive.records.map((record) => `${record.speculus.generation}:${record.speculus.plate}`);
-      const ordinals = archive.records.map((record) => `${record.speculus.prefix}:${record.speculus.ordinal}`);
-      const registryConflicts = await client.query(
-        `SELECT asset_id FROM speculus_catalog_registry
-         WHERE code = ANY($1::text[]) OR registry_number = ANY($2::bigint[])
-           OR generation::text || ':' || plate = ANY($3::text[])
-           OR prefix || ':' || ordinal::text = ANY($4::text[]) LIMIT 1`,
-        [codes, registryNumbers, plates, ordinals],
-      );
-      if (registryConflicts.rowCount) {
-        await client.query('ROLLBACK');
-        return response.status(409).json({ error: 'An SPC identity from this archive already exists. Nothing was imported.' });
       }
 
       const includedIds = new Set(ids);
@@ -270,34 +345,28 @@ export function createArchiveTransferRouter(config: AppConfig, pool: DatabasePoo
         );
       }
 
-      await client.query('DELETE FROM speculus_catalog_registry WHERE asset_id = ANY($1::uuid[])', [ids]);
-      for (const record of archive.records) {
-        const registry = record.speculus;
-        await client.query(
-          `INSERT INTO speculus_catalog_registry (
-             asset_id, prefix, ordinal, generation, series, number, plate, code, classification,
-             status, assigned_at, retired_at, registry_number, asset_created_at
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-          [record.id, registry.prefix, registry.ordinal, registry.generation, registry.series, registry.number,
-            registry.plate, registry.code, registry.classification, registry.status, registry.assignedAt,
-            registry.retiredAt, registry.registryNumber, registry.assetCreatedAt],
-        );
-      }
-      const maxOrdinals = new Map<string, number>();
-      for (const record of archive.records) maxOrdinals.set(record.speculus.prefix, Math.max(maxOrdinals.get(record.speculus.prefix) ?? 0, record.speculus.ordinal));
-      for (const [prefix, ordinal] of maxOrdinals) {
-        await client.query(
-          `INSERT INTO speculus_catalog_sequences (prefix, next_ordinal) VALUES ($1,$2)
-           ON CONFLICT (prefix) DO UPDATE SET next_ordinal = GREATEST(speculus_catalog_sequences.next_ordinal, EXCLUDED.next_ordinal)`,
-          [prefix, ordinal + 1],
-        );
-      }
+      await restoreArchivedRegistry(client, archive);
+      const canonicalized = await canonicalizeImportedWorlds(client, archive, request.session.userId!);
+
       await client.query('COMMIT');
-      response.status(201).json({ imported: archive.records.length, scope: archive.scope, sha256: archive.sha256 });
+      response.status(201).json({
+        imported: archive.records.length,
+        scope: archive.scope,
+        sha256: archive.sha256,
+        repairs,
+        canonicalized,
+      });
     } catch (error) {
       if (client) await client.query('ROLLBACK').catch(() => undefined);
       const code = (error as { code?: string }).code;
-      if (code === '23505' || code === '23503') return response.status(409).json({ error: 'The archive conflicts with existing records. Nothing was imported.' });
+      if (code === '23505' || code === '23503' || code === 'ORBisRegistryConflict') {
+        return response.status(409).json({ error: error instanceof Error ? error.message : 'The archive conflicts with existing records. Nothing was imported.' });
+      }
+      if (error instanceof WorldEntitySyncError) {
+        return response.status(409).json({
+          error: `The archive contains ambiguous world entities, so nothing was imported. ${error.issues.join(' ')}`,
+        });
+      }
       next(error);
     } finally { client?.release(); }
   });
