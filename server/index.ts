@@ -35,6 +35,9 @@ app.use(helmet({ contentSecurityPolicy: false }));
 // Savegame payloads can contain long transcripts. Keep the larger parser scoped to
 // Library routes instead of raising the body limit for the whole Orbis API.
 app.use('/api/v1/library', express.json({ limit: '16mb' }));
+// Coda intentionally enforces its own 60k-character text cap so oversized pastes
+// can return a useful assistant-specific message instead of Express's raw body error.
+app.use('/api/coda-assistant', express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '256kb' }));
 app.use(session({
   name: config.SESSION_COOKIE_NAME,
@@ -144,6 +147,9 @@ if (config.isProduction) {
 
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   if (error instanceof ZodError) return response.status(400).json({ error: 'Invalid request.', details: error.issues });
+  if (error && typeof error === 'object' && 'type' in error && error.type === 'entity.too.large') {
+    return response.status(413).json({ error: 'That request is too large. Split the paste into smaller sections and try again.' });
+  }
   console.error(error);
   response.status(500).json({ error: 'Orbis could not complete that request.' });
 });

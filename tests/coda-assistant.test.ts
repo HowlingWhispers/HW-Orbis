@@ -77,6 +77,36 @@ describe('Coda Assistant sandbox boundaries', () => {
     expect(prompt).toContain('Return one complete compact JSON object');
   });
 
+  it('defaults to finishing instead of asking repeated minor questions', () => {
+    const prompt = buildCodaPrompt(
+      'sort',
+      'Use the answer I already gave and finish the species entries.',
+      undefined,
+      'Orbis home',
+      false,
+      [
+        { role: 'user', content: 'These are physical sub-races, not spiritual paths.' },
+        { role: 'assistant', content: '{"questions":["Are these physical or spiritual?"]}' },
+        { role: 'user', content: 'Physical sub-races.' },
+      ],
+    );
+    expect(prompt).toContain('Default to finishing the work now');
+    expect(prompt).toContain('Never ask the same question again');
+    expect(prompt).toContain('CONVERSATION SO FAR');
+    expect(prompt).toContain('Physical sub-races.');
+  });
+
+  it('rejects excessive question lists so recovery can retry with a finished answer', () => {
+    const parsed = parseCodaSortResponse(JSON.stringify({
+      summary: 'Needs too many answers.',
+      proposals: [],
+      questions: ['one', 'two', 'three', 'four'],
+      warnings: [],
+      recordPatch: null,
+    }));
+    expect(parsed).toBeUndefined();
+  });
+
   it('removes ownership, privacy and credential-shaped fields from record patches', () => {
     expect(sanitizeCodaPatch({
       identity: { name: 'Test World', description: 'A place.' },
