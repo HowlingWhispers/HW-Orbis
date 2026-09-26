@@ -83,7 +83,9 @@ export async function askCoda(input: {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(input),
+    // Coda generation is draft-only. Explicit user actions may still use the
+    // deterministic execute endpoint, but a model reply may never auto-write.
+    body: JSON.stringify({ ...input, applyOperations: false }),
   });
   const data = await response.json().catch(() => ({})) as CodaAssistantResponse & { error?: string; settingsPath?: string };
   const requestId = response.headers.get('x-request-id') ?? undefined;
@@ -91,7 +93,7 @@ export async function askCoda(input: {
   return requestId ? { ...data, requestId } : data;
 }
 
-/** Runs Coda's operations through the Orbis runtime. Results are the only source of truth. */
+/** Runs explicitly approved operations through the Orbis runtime. Results are the only source of truth. */
 export async function runCodaOperations(input: { operations: CodaOperation[]; originWorldId?: string | null }) {
   const response = await fetch('/api/coda-assistant/execute', {
     method: 'POST',

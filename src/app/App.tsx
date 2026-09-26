@@ -6,6 +6,7 @@ import { AssetDetailView } from '../views/AssetDetailView';
 import { AssetEditorView } from '../views/AssetEditorView';
 import { CodaWorkspaceView } from '../views/CodaWorkspaceView';
 import { CollectionView } from '../views/CollectionView';
+import { CreateWorldView } from '../views/CreateWorldView';
 import { HomeView } from '../views/HomeView';
 import { NotFoundView } from '../views/NotFoundView';
 import { ProjectView } from '../views/ProjectView';
@@ -19,6 +20,7 @@ export function App() {
         <Route index element={<HomeView />} />
         <Route path="all" element={<CollectionView all />} />
         <Route path="library/:type" element={<CollectionView />} />
+        <Route path="worlds/new" element={<CreateWorldView />} />
         <Route path="asset/:id" element={<AssetDetailView />} />
         <Route path="asset/:id/saves" element={<SaveArchiveView />} />
         <Route path="asset/:id/edit" element={<AssetEditorView />} />
