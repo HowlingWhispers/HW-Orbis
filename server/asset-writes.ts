@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { DatabasePool } from './db.js';
-import { syncWorldEmbeddedEntities } from './world-entity-sync.js';
+import type { DatabaseClient, DatabaseExecutor, DatabasePool } from './db.js';
+import {
+  isRecord,
+  isWorldCollectionType,
+  jsonSemanticallyEqual,
+  mirrorCanonicalChildToWorld,
+  rebuildWorldProjection,
+  syncWorldEmbeddedEntities,
+  WorldEntitySyncError,
+} from './world-entity-sync.js';
 
 export const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 export type AssetType = (typeof assetTypes)[number];
@@ -10,12 +18,14 @@ export const visualTones = ['moon', 'forest', 'ember', 'mist', 'violet', 'river'
 
 export const documentSchema = z.record(z.string(), z.unknown()).refine((value) => JSON.stringify(value).length <= 128_000, 'Record content is too large.');
 
+// World-entry IDs are authoring identifiers, not database UUIDs. Bitterroot and
+// imported worlds legitimately use stable slug IDs such as "bitterroot-continent".
 export const locationSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().trim().min(1).max(200),
   name: z.string().trim().min(1).max(120),
   kind: z.string().trim().max(60).optional(),
   description: z.string().trim().max(5000).optional(),
-  parentLocationId: z.string().uuid().nullable().optional(),
+  parentLocationId: z.string().trim().min(1).max(200).nullable().optional(),
   libraryAssetId: z.string().uuid().nullable().optional(),
 }).passthrough();
 
@@ -58,8 +68,25 @@ export type AssetWriteResult = {
   updatedAt: string;
 };
 
-export async function canAuthorIntoWorld(pool: DatabasePool, worldId: string, userId: string, isSuperAdmin: boolean) {
-  const result = await pool.query('SELECT id, type, creator_user_id FROM library_assets WHERE id = $1', [worldId]);
+type WriteIdentity = { userId: string; isSuperAdmin: boolean };
+
+async function inTransaction<T>(pool: DatabasePool, work: (client: DatabaseClient) => Promise<T>) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function canAuthorIntoWorld(db: DatabaseExecutor, worldId: string, userId: string, isSuperAdmin: boolean) {
+  const result = await db.query('SELECT id, type, creator_user_id FROM library_assets WHERE id = $1', [worldId]);
   if (!result.rowCount || result.rows[0].type !== 'world') return false;
   return isSuperAdmin || result.rows[0].creator_user_id === userId;
 }
@@ -84,161 +111,51 @@ export function normalizeWorldDocument(document: Record<string, unknown>) {
   };
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
+/**
+ * Compatibility export used by the old one-off location migration. Runtime world
+ * writes use the all-collection synchronizer below and never guess by name.
+ */
 export async function syncWorldLocations(
-  pool: DatabasePool,
+  db: DatabaseExecutor,
   worldId: string,
   userId: string,
   document: Record<string, unknown>,
   contentRating = 'sfw',
 ) {
-  const rawLocations = document.locations;
-  if (!Array.isArray(rawLocations)) return;
-
-  const locations = rawLocations
-    .map((loc, idx) => {
-      const parsed = locationSchema.safeParse(loc);
-      if (!parsed.success) {
-        console.warn(`World ${worldId}: location at index ${idx} failed validation`, parsed.error.flatten());
-        return null;
-      }
-      return parsed.data;
-    })
-    .filter((loc): loc is z.infer<typeof locationSchema> => loc !== null);
-
-  const seenPlaceIds = new Set<string>();
-  const errors: string[] = [];
-
-  for (const loc of locations) {
-    let placeId = loc.libraryAssetId ?? null;
-    let existingPlace: Record<string, unknown> | null = null;
-    const placeDocument = {
-      kind: loc.kind ?? 'region',
-      parentLocationId: loc.parentLocationId ?? null,
-      description: loc.description ?? '',
-      worldEntryId: loc.id,
-    };
-
-    try {
-      if (placeId) {
-        const direct = await pool.query(
-          `SELECT id, document FROM library_assets
-           WHERE id = $1 AND type = 'place' AND origin_world_id = $2
-           LIMIT 1`,
-          [placeId, worldId],
-        );
-        if (direct.rowCount) {
-          existingPlace = direct.rows[0] as Record<string, unknown>;
-        } else {
-          console.warn(`World ${worldId}: location "${loc.name}" (${loc.id}) has stale place link ${placeId}; attempting safe relink.`);
-          placeId = null;
-        }
-      }
-
-      if (!existingPlace) {
-        const byEntryId = await pool.query(
-          `SELECT id, document FROM library_assets
-           WHERE type = 'place' AND origin_world_id = $1 AND document->>'worldEntryId' = $2
-           LIMIT 2`,
-          [worldId, loc.id],
-        );
-        if (byEntryId.rowCount === 1) {
-          existingPlace = byEntryId.rows[0] as Record<string, unknown>;
-          placeId = String(existingPlace.id);
-        }
-      }
-
-      if (!existingPlace) {
-        const byName = await pool.query(
-          `SELECT id, document FROM library_assets
-           WHERE type = 'place' AND origin_world_id = $1 AND name = $2
-             AND (document->>'worldEntryId' IS NULL OR document->>'worldEntryId' = $3)
-           ORDER BY id
-           LIMIT 2`,
-          [worldId, loc.name, loc.id],
-        );
-        if (byName.rowCount === 1) {
-          existingPlace = byName.rows[0] as Record<string, unknown>;
-          placeId = String(existingPlace.id);
-          console.log(`World ${worldId}: linked embedded location "${loc.name}" (${loc.id}) to existing place ${placeId}.`);
-        } else if ((byName.rowCount ?? 0) > 1) {
-          console.warn(`World ${worldId}: multiple existing places are named "${loc.name}"; refusing to guess which one matches embedded location ${loc.id}.`);
-        }
-      }
-
-      if (!placeId || !existingPlace) {
-        const created = await pool.query(
-          `INSERT INTO library_assets (id, type, name, summary, origin_world_id, creator_user_id, source_type, content_rating, tags, visual_tone, document)
-           VALUES ($1, 'place', $2, $3, $4, $5, 'user-created', $6, '{}', 'mist', $7::jsonb)
-           RETURNING id`,
-          [randomUUID(), loc.name, loc.description ?? '', worldId, userId, contentRating, JSON.stringify(placeDocument)],
-        );
-        placeId = String(created.rows[0].id);
-      } else {
-        const mergedDocument = { ...asRecord(existingPlace.document), ...placeDocument };
-        await pool.query(
-          `UPDATE library_assets
-           SET name = $1, summary = $2, content_rating = $3, document = $4::jsonb, updated_at = now()
-           WHERE id = $5`,
-          [loc.name, loc.description ?? '', contentRating, JSON.stringify(mergedDocument), placeId],
-        );
-      }
-
-      if (loc.libraryAssetId !== placeId) {
-        await pool.query(
-          `UPDATE library_assets SET document = jsonb_set(document, '{locations}', (
-            SELECT jsonb_agg(
-              CASE WHEN item->>'id' = $2 THEN jsonb_set(item, '{libraryAssetId}', to_jsonb($3::text), true) ELSE item END
-            ) FROM jsonb_array_elements(document->'locations') AS item
-          ) WHERE id = $1`,
-          [worldId, loc.id, placeId],
-        );
-      }
-
-      seenPlaceIds.add(placeId);
-    } catch (err) {
-      errors.push(`Location "${loc.name}" (${loc.id}): ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  const existingPlaces = await pool.query('SELECT id FROM library_assets WHERE origin_world_id = $1 AND type = $2', [worldId, 'place']);
-  for (const row of existingPlaces.rows) {
-    if (!seenPlaceIds.has(row.id)) {
-      console.warn(`World ${worldId}: place asset ${row.id} exists but no embedded location references it; retaining (not auto-deleted)`);
-    }
-  }
-
-  await pool.query(
-    `UPDATE library_assets SET dependency_count = (SELECT count(*) FROM library_assets WHERE origin_world_id = $1) WHERE id = $1`,
-    [worldId],
-  );
-
-  if (errors.length) {
-    console.warn(`World ${worldId} location sync warnings:`, errors);
-  }
+  return syncWorldEmbeddedEntities(db, worldId, userId, document, contentRating, {
+    allowLegacyNameMatch: true,
+    onlyKeys: ['locations'],
+  });
 }
 
 async function syncWorldCollections(
-  pool: DatabasePool,
+  db: DatabaseExecutor,
   worldId: string,
   userId: string,
   document: Record<string, unknown>,
   contentRating: string,
+  strict: boolean,
 ) {
-  await syncWorldLocations(pool, worldId, userId, document, contentRating);
-  await syncWorldEmbeddedEntities(pool, worldId, userId, document, contentRating);
+  try {
+    return await syncWorldEmbeddedEntities(db, worldId, userId, document, contentRating, {
+      strict,
+      allowLegacyNameMatch: false,
+    });
+  } catch (error) {
+    if (error instanceof WorldEntitySyncError) {
+      throw new AssetWriteError(409, 'Orbis refused an ambiguous world-entity write. No part of the change was saved.', error.issues);
+    }
+    throw error;
+  }
 }
 
-export async function currentAssetRevision(pool: DatabasePool, assetId: string) {
-  const result = await pool.query('SELECT max(revision) AS revision FROM library_asset_revisions WHERE asset_id = $1', [assetId]);
+export async function currentAssetRevision(db: DatabaseExecutor, assetId: string) {
+  const result = await db.query('SELECT max(revision) AS revision FROM library_asset_revisions WHERE asset_id = $1', [assetId]);
   return Number(result.rows[0]?.revision ?? 0);
 }
 
 export async function recordAssetRevision(
-  pool: DatabasePool,
+  db: DatabaseExecutor,
   input: {
     assetId: string;
     operation: 'create' | 'update' | 'delete' | 'location-sync';
@@ -249,8 +166,8 @@ export async function recordAssetRevision(
     performedBy?: string | null;
   },
 ) {
-  const revision = await currentAssetRevision(pool, input.assetId) + 1;
-  await pool.query(
+  const revision = await currentAssetRevision(db, input.assetId) + 1;
+  await db.query(
     `INSERT INTO library_asset_revisions (asset_id, revision, operation, source, changed_fields, document_before, document_after, performed_by)
      VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8)
      ON CONFLICT (asset_id, revision) DO NOTHING`,
@@ -264,7 +181,36 @@ export async function recordAssetRevision(
   return revision;
 }
 
-type WriteIdentity = { userId: string; isSuperAdmin: boolean };
+async function recordProjectionRevision(
+  db: DatabaseExecutor,
+  projection: Awaited<ReturnType<typeof mirrorCanonicalChildToWorld>>,
+  performedBy: string,
+) {
+  if (!projection.changed || !projection.worldId) return;
+  await recordAssetRevision(db, {
+    assetId: projection.worldId,
+    operation: 'location-sync',
+    source: 'system',
+    changedFields: ['document'],
+    documentBefore: projection.before,
+    documentAfter: projection.after,
+    performedBy,
+  });
+  await db.query(
+    `UPDATE library_assets
+     SET dependency_count = (SELECT count(*) FROM library_assets WHERE origin_world_id = $1)
+     WHERE id = $1`,
+    [projection.worldId],
+  );
+}
+
+function childDocumentWithStableEntryId(type: string, id: string, document: Record<string, unknown>) {
+  if (!isWorldCollectionType(type)) return document;
+  const worldEntryId = typeof document.worldEntryId === 'string' && document.worldEntryId.trim()
+    ? document.worldEntryId.trim()
+    : id;
+  return { ...document, worldEntryId };
+}
 
 /** The single create path. Editor saves and Coda operations both land here. */
 export async function insertAsset(
@@ -277,39 +223,54 @@ export async function insertAsset(
   if (!parsed.success) throw new AssetWriteError(400, 'Those record details are not valid Orbis fields.', parsed.error.flatten());
   const asset = parsed.data;
 
-  if (asset.type === 'world' && asset.originWorldId) {
-    throw new AssetWriteError(400, 'A world cannot be created inside another world.');
-  }
-  if (asset.originWorldId && !await canAuthorIntoWorld(pool, asset.originWorldId, identity.userId, identity.isSuperAdmin)) {
-    throw new AssetWriteError(403, 'Only the world owner can add records to this world.');
-  }
+  if (asset.type === 'world' && asset.originWorldId) throw new AssetWriteError(400, 'A world cannot be created inside another world.');
 
-  const document = asset.type === 'world' ? normalizeWorldDocument(asset.document) : asset.document;
-  const id = randomUUID();
-  const inserted = await pool.query(
-    `INSERT INTO library_assets (id,type,name,summary,origin_world_id,creator_user_id,source_type,content_rating,tags,visual_tone,document)
-     VALUES ($1,$2,$3,$4,$5,$6,'user-created',$7,$8,$9,$10::jsonb) RETURNING *`,
-    [id, asset.type, asset.name, asset.summary, asset.originWorldId ?? null, identity.userId, asset.contentRating, asset.tags, asset.visualTone, JSON.stringify(document)],
-  );
-  const row = inserted.rows[0];
-  const revision = await recordAssetRevision(pool, {
-    assetId: row.id, operation: 'create', source, changedFields: ['name', 'summary', 'contentRating', 'tags', 'visualTone', 'document'],
-    documentAfter: document, performedBy: identity.userId,
+  return inTransaction(pool, async (client) => {
+    if (asset.originWorldId) {
+      // Every world/child transaction locks the world first. That gives edits a
+      // stable lock order and prevents child/world deadlocks under concurrent saves.
+      await client.query('SELECT id FROM library_assets WHERE id = $1 AND type = \'world\' FOR UPDATE', [asset.originWorldId]);
+      if (!await canAuthorIntoWorld(client, asset.originWorldId, identity.userId, identity.isSuperAdmin)) {
+        throw new AssetWriteError(403, 'Only the world owner can add records to this world.');
+      }
+    }
+
+    const id = randomUUID();
+    const baseDocument = asset.type === 'world' ? normalizeWorldDocument(asset.document) : asset.document;
+    const document = asset.originWorldId
+      ? childDocumentWithStableEntryId(asset.type, id, baseDocument)
+      : baseDocument;
+    const inserted = await client.query(
+      `INSERT INTO library_assets (id,type,name,summary,origin_world_id,creator_user_id,source_type,content_rating,tags,visual_tone,document)
+       VALUES ($1,$2,$3,$4,$5,$6,'user-created',$7,$8,$9,$10::jsonb) RETURNING *`,
+      [id, asset.type, asset.name, asset.summary, asset.originWorldId ?? null, identity.userId, asset.contentRating, asset.tags, asset.visualTone, JSON.stringify(document)],
+    );
+    let row = inserted.rows[0] as Record<string, unknown>;
+    const revision = await recordAssetRevision(client, {
+      assetId: String(row.id), operation: 'create', source, changedFields: ['name', 'summary', 'contentRating', 'tags', 'visualTone', 'document'],
+      documentAfter: document, performedBy: identity.userId,
+    });
+
+    if (asset.type === 'world') {
+      await syncWorldCollections(client, String(row.id), identity.userId, document, String(row.content_rating ?? asset.contentRating), true);
+      await rebuildWorldProjection(client, String(row.id), { dropUnlinked: true });
+      const fresh = await client.query('SELECT * FROM library_assets WHERE id = $1', [row.id]);
+      row = fresh.rows[0] as Record<string, unknown>;
+    } else if (asset.originWorldId && isWorldCollectionType(asset.type)) {
+      const projection = await mirrorCanonicalChildToWorld(client, row);
+      await recordProjectionRevision(client, projection, identity.userId);
+    }
+
+    return {
+      row,
+      result: {
+        assetId: String(row.id), type: String(row.type), name: String(row.name), revision, operation: 'create',
+        changedFields: ['name', 'summary', 'contentRating', 'tags', 'visualTone', 'document'],
+        contentRating: String(row.content_rating), originWorldId: row.origin_world_id ?? null, created: true,
+        updatedAt: new Date(String(row.updated_at ?? Date.now())).toISOString(),
+      },
+    };
   });
-
-  if (asset.type === 'world') {
-    await syncWorldCollections(pool, row.id, identity.userId, document, String(row.content_rating ?? asset.contentRating));
-  }
-
-  return {
-    row,
-    result: {
-      assetId: String(row.id), type: String(row.type), name: String(row.name), revision, operation: 'create',
-      changedFields: ['name', 'summary', 'contentRating', 'tags', 'visualTone', 'document'],
-      contentRating: String(row.content_rating), originWorldId: row.origin_world_id ?? null, created: true,
-      updatedAt: new Date(row.updated_at ?? Date.now()).toISOString(),
-    },
-  };
 }
 
 /** The single update path. Editor saves and Coda operations both land here. */
@@ -327,78 +288,108 @@ export async function applyAssetUpdate(
     throw new AssetWriteError(400, 'Use an exact Orbis record ID.');
   }
 
-  const current = await pool.query('SELECT * FROM library_assets WHERE id = $1', [assetId]);
-  if (!current.rowCount) throw new AssetWriteError(404, 'Record not found.');
-  const existing = current.rows[0];
-  if (existing.creator_user_id !== identity.userId && !identity.isSuperAdmin) {
-    throw new AssetWriteError(403, 'Only the creator can change this record.');
-  }
-  if (asset.originWorldId !== undefined && asset.originWorldId !== existing.origin_world_id) {
-    if (existing.type === 'world' && asset.originWorldId) {
-      throw new AssetWriteError(400, 'A world cannot be moved inside another world.');
+  return inTransaction(pool, async (client) => {
+    const peek = await client.query('SELECT type, origin_world_id FROM library_assets WHERE id = $1', [assetId]);
+    if (!peek.rowCount) throw new AssetWriteError(404, 'Record not found.');
+    const peekType = String(peek.rows[0].type);
+    const peekOriginWorldId = peek.rows[0].origin_world_id ? String(peek.rows[0].origin_world_id) : '';
+
+    if (peekOriginWorldId && isWorldCollectionType(peekType)) {
+      await client.query('SELECT id FROM library_assets WHERE id = $1 AND type = \'world\' FOR UPDATE', [peekOriginWorldId]);
     }
-    if (asset.originWorldId && !await canAuthorIntoWorld(pool, asset.originWorldId, identity.userId, identity.isSuperAdmin)) {
-      throw new AssetWriteError(403, 'Only the world owner can move records into this world.');
+
+    const current = await client.query('SELECT * FROM library_assets WHERE id = $1 FOR UPDATE', [assetId]);
+    const existing = current.rows[0] as Record<string, unknown>;
+    if (existing.creator_user_id !== identity.userId && !identity.isSuperAdmin) {
+      throw new AssetWriteError(403, 'Only the creator can change this record.');
     }
-  }
 
-  const nextDocument = asset.document ?? (existing.document ?? {}) as Record<string, unknown>;
-  const nextAsset = {
-    ...existing,
-    name: asset.name ?? existing.name,
-    summary: asset.summary ?? existing.summary,
-    origin_world_id: asset.originWorldId === undefined ? existing.origin_world_id : asset.originWorldId,
-    content_rating: asset.contentRating ?? existing.content_rating,
-    tags: asset.tags ?? existing.tags,
-    visual_tone: asset.visualTone ?? existing.visual_tone,
-    document: nextDocument,
-  };
-  if (Object.prototype.hasOwnProperty.call(nextAsset.document, 'name')) nextAsset.document.name = nextAsset.name;
-  if (Object.prototype.hasOwnProperty.call(nextAsset.document, 'title')) nextAsset.document.title = nextAsset.name;
-  const identityBlock = nextAsset.document.identity;
-  if (identityBlock && typeof identityBlock === 'object' && 'name' in (identityBlock as Record<string, unknown>)) (identityBlock as Record<string, unknown>).name = nextAsset.name;
-  if (nextAsset.type === 'world') nextAsset.document = normalizeWorldDocument(nextAsset.document);
+    if (asset.originWorldId !== undefined && asset.originWorldId !== existing.origin_world_id) {
+      if (existing.type === 'world' && asset.originWorldId) throw new AssetWriteError(400, 'A world cannot be moved inside another world.');
+      if (isWorldCollectionType(String(existing.type)) && existing.origin_world_id) {
+        throw new AssetWriteError(409, 'Move world-owned places/species/factions/societies/families/memories from World Forge so their world link stays atomic.');
+      }
+      if (asset.originWorldId && !await canAuthorIntoWorld(client, asset.originWorldId, identity.userId, identity.isSuperAdmin)) {
+        throw new AssetWriteError(403, 'Only the world owner can move records into this world.');
+      }
+    }
 
-  const changedFields = ['name', 'summary', 'originWorldId', 'contentRating', 'tags', 'visualTone', 'document']
-    .filter((field) => JSON.stringify(asset[field as keyof typeof asset] ?? null) !== JSON.stringify(
-      field === 'document' ? (existing.document ?? {}) : field === 'name' ? existing.name
-        : field === 'summary' ? existing.summary : field === 'originWorldId' ? existing.origin_world_id
-          : field === 'contentRating' ? existing.content_rating : field === 'tags' ? existing.tags : existing.visual_tone,
-    ));
+    const existingDocument = isRecord(existing.document) ? existing.document : {};
+    let nextDocument = asset.document !== undefined ? { ...asset.document } : { ...existingDocument };
+    if (existing.origin_world_id && isWorldCollectionType(String(existing.type))) {
+      const stableEntryId = typeof existingDocument.worldEntryId === 'string' && existingDocument.worldEntryId.trim()
+        ? existingDocument.worldEntryId.trim()
+        : assetId;
+      nextDocument = { ...nextDocument, worldEntryId: stableEntryId };
+    }
 
-  if (!changedFields.length) {
-    const revision = await currentAssetRevision(pool, assetId);
+    const nextAsset = {
+      ...existing,
+      name: asset.name ?? existing.name,
+      summary: asset.summary ?? existing.summary,
+      origin_world_id: asset.originWorldId === undefined ? existing.origin_world_id : asset.originWorldId,
+      content_rating: asset.contentRating ?? existing.content_rating,
+      tags: asset.tags ?? existing.tags,
+      visual_tone: asset.visualTone ?? existing.visual_tone,
+      document: nextDocument,
+    };
+    if (Object.prototype.hasOwnProperty.call(nextAsset.document, 'name')) nextAsset.document.name = nextAsset.name;
+    if (Object.prototype.hasOwnProperty.call(nextAsset.document, 'title')) nextAsset.document.title = nextAsset.name;
+    const identityBlock = nextAsset.document.identity;
+    if (identityBlock && typeof identityBlock === 'object' && 'name' in (identityBlock as Record<string, unknown>)) {
+      (identityBlock as Record<string, unknown>).name = nextAsset.name;
+    }
+    if (nextAsset.type === 'world') nextAsset.document = normalizeWorldDocument(nextAsset.document);
+
+    const changedFields: string[] = [];
+    if (asset.name !== undefined && asset.name !== existing.name) changedFields.push('name');
+    if (asset.summary !== undefined && asset.summary !== existing.summary) changedFields.push('summary');
+    if (asset.originWorldId !== undefined && asset.originWorldId !== existing.origin_world_id) changedFields.push('originWorldId');
+    if (asset.contentRating !== undefined && asset.contentRating !== existing.content_rating) changedFields.push('contentRating');
+    if (asset.tags !== undefined && !jsonSemanticallyEqual(asset.tags, existing.tags)) changedFields.push('tags');
+    if (asset.visualTone !== undefined && asset.visualTone !== existing.visual_tone) changedFields.push('visualTone');
+    if (asset.document !== undefined && !jsonSemanticallyEqual(nextAsset.document, existingDocument)) changedFields.push('document');
+
+    if (!changedFields.length) {
+      const revision = await currentAssetRevision(client, assetId);
+      return {
+        row: existing,
+        result: {
+          assetId, type: String(existing.type), name: String(existing.name), revision, operation: 'update' as const, changedFields: [],
+          contentRating: String(existing.content_rating), originWorldId: existing.origin_world_id ?? null, created: false,
+          updatedAt: new Date(String(existing.updated_at ?? Date.now())).toISOString(),
+        },
+      };
+    }
+
+    const update = await client.query(
+      `UPDATE library_assets SET name=$2, summary=$3, origin_world_id=$4, content_rating=$5, tags=$6, visual_tone=$7, document=$8::jsonb, updated_at=now()
+       WHERE id=$1 RETURNING *`,
+      [assetId, nextAsset.name, nextAsset.summary, nextAsset.origin_world_id, nextAsset.content_rating, nextAsset.tags, nextAsset.visual_tone, JSON.stringify(nextAsset.document)],
+    );
+    let row = update.rows[0] as Record<string, unknown>;
+    const revision = await recordAssetRevision(client, {
+      assetId, operation: 'update', source, changedFields,
+      documentBefore: existingDocument, documentAfter: nextAsset.document, performedBy: identity.userId,
+    });
+
+    if (row.type === 'world') {
+      await syncWorldCollections(client, assetId, identity.userId, row.document as Record<string, unknown>, String(row.content_rating ?? 'sfw'), true);
+      await rebuildWorldProjection(client, assetId, { dropUnlinked: true });
+      const fresh = await client.query('SELECT * FROM library_assets WHERE id = $1', [assetId]);
+      row = fresh.rows[0] as Record<string, unknown>;
+    } else if (row.origin_world_id && isWorldCollectionType(String(row.type))) {
+      const projection = await mirrorCanonicalChildToWorld(client, row);
+      await recordProjectionRevision(client, projection, identity.userId);
+    }
+
     return {
-      row: existing,
+      row,
       result: {
-        assetId, type: String(existing.type), name: String(existing.name), revision, operation: 'update', changedFields: [],
-        contentRating: String(existing.content_rating), originWorldId: existing.origin_world_id ?? null, created: false,
-        updatedAt: new Date(existing.updated_at ?? Date.now()).toISOString(),
+        assetId, type: String(row.type), name: String(row.name), revision, operation: 'update', changedFields,
+        contentRating: String(row.content_rating), originWorldId: row.origin_world_id ?? null, created: false,
+        updatedAt: new Date(String(row.updated_at ?? Date.now())).toISOString(),
       },
     };
-  }
-
-  const result = await pool.query(
-    `UPDATE library_assets SET name=$2, summary=$3, origin_world_id=$4, content_rating=$5, tags=$6, visual_tone=$7, document=$8::jsonb, updated_at=now()
-     WHERE id=$1 RETURNING *`,
-    [assetId, nextAsset.name, nextAsset.summary, nextAsset.origin_world_id, nextAsset.content_rating, nextAsset.tags, nextAsset.visual_tone, JSON.stringify(nextAsset.document)],
-  );
-  const row = result.rows[0];
-  const revision = await recordAssetRevision(pool, {
-    assetId, operation: 'update', source, changedFields,
-    documentBefore: existing.document ?? {}, documentAfter: nextAsset.document, performedBy: identity.userId,
   });
-
-  if (row.type === 'world') {
-    await syncWorldCollections(pool, assetId, identity.userId, row.document ?? {}, String(row.content_rating ?? 'sfw'));
-  }
-
-  return {
-    row,
-    result: {
-      assetId, type: String(row.type), name: String(row.name), revision, operation: 'update', changedFields,
-      contentRating: String(row.content_rating), originWorldId: row.origin_world_id ?? null, created: false,
-      updatedAt: new Date(row.updated_at ?? Date.now()).toISOString(),
-    },
-  };
 }
