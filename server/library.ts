@@ -33,6 +33,7 @@ function mapAsset(row: Record<string, unknown>, userId?: string, isSuperAdmin = 
       verificationPath: '/verification',
     };
   }
+  const originalCreatorId = row.original_creator_user_id ?? row.creator_user_id;
   return {
     id: row.id,
     type: row.type,
@@ -55,7 +56,9 @@ function mapAsset(row: Record<string, unknown>, userId?: string, isSuperAdmin = 
       classification: String(row.speculus_classification ?? ''),
     } : undefined,
     canEdit: isSuperAdmin || Boolean(userId && row.creator_user_id === userId),
-    author: row.creator_user_id ? { id: row.creator_user_id, displayName: row.author_name, avatarUrl: row.author_avatar_url ?? undefined } : undefined,
+    isOwner: Boolean(userId && row.creator_user_id === userId),
+    author: originalCreatorId ? { id: originalCreatorId, displayName: row.author_name, avatarUrl: row.author_avatar_url ?? undefined } : undefined,
+    owner: row.creator_user_id ? { id: row.creator_user_id, displayName: row.owner_name, avatarUrl: row.owner_avatar_url ?? undefined } : undefined,
   };
 }
 
@@ -63,12 +66,14 @@ const selectAssets = `
   SELECT a.*, origin.name AS origin_world_name,
     origin.document AS origin_world_document,
     origin.creator_user_id AS origin_world_creator_user_id,
-    u.display_name AS author_name, u.avatar_url AS author_avatar_url,
+    author.display_name AS author_name, author.avatar_url AS author_avatar_url,
+    owner_user.display_name AS owner_name, owner_user.avatar_url AS owner_avatar_url,
     sc.code AS speculus_code, sc.classification AS speculus_classification,
     (a.content_rating = 'adult' AND NOT $1::boolean AND a.creator_user_id IS DISTINCT FROM $2::uuid) AS restricted
   FROM library_assets a
   LEFT JOIN library_assets origin ON origin.id = a.origin_world_id
-  LEFT JOIN users u ON u.id = a.creator_user_id
+  LEFT JOIN users author ON author.id = COALESCE(a.original_creator_user_id, a.creator_user_id)
+  LEFT JOIN users owner_user ON owner_user.id = a.creator_user_id
   LEFT JOIN speculus_catalog_registry sc ON sc.asset_id = a.id`;
 
 const selectAccessRows = `
@@ -200,7 +205,9 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to edit this record.' });
       const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
       const { row, result } = await applyAssetUpdate(pool, { userId: request.session.userId, isSuperAdmin }, request.params.id, request.body, 'editor');
-      const [author, registry] = await Promise.all([
+      const originalCreatorId = row.original_creator_user_id ?? row.creator_user_id;
+      const [author, owner, registry] = await Promise.all([
+        pool.query('SELECT display_name, avatar_url FROM users WHERE id = $1', [originalCreatorId]),
         pool.query('SELECT display_name, avatar_url FROM users WHERE id = $1', [row.creator_user_id]),
         pool.query('SELECT code, classification FROM speculus_catalog_registry WHERE asset_id = $1', [request.params.id]),
       ]);
@@ -210,6 +217,8 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
           restricted: false,
           author_name: author.rows[0]?.display_name,
           author_avatar_url: author.rows[0]?.avatar_url,
+          owner_name: owner.rows[0]?.display_name,
+          owner_avatar_url: owner.rows[0]?.avatar_url,
           speculus_code: registry.rows[0]?.code,
           speculus_classification: registry.rows[0]?.classification,
         }, request.session.userId, isSuperAdmin),
