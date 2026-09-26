@@ -120,7 +120,7 @@ export function AppShell() {
         </header>
         <main className="content"><Outlet /></main>
       </div>
-      <CodaAssistant />
+      {location.pathname !== '/coda' && <CodaAssistant />}
     </div>
   );
 }
