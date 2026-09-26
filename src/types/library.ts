@@ -32,6 +32,7 @@ export interface LibraryAsset {
   sourceType: SourceType;
   contentRating?: ContentRating;
   author?: AssetAuthor;
+  owner?: AssetAuthor;
   tags: string[];
   dependencyCount: number;
   pinned?: boolean;
@@ -45,6 +46,7 @@ export interface LibraryAsset {
     classification: string;
   };
   canEdit?: boolean;
+  isOwner?: boolean;
 }
 
 export interface LibraryAssetCreate {
