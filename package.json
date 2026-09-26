@@ -13,6 +13,7 @@
     "import:bitterroot": "node dist-server/import-bitterroot.js",
     "import:world-backup": "node dist-server/import-world-backup.js",
     "migrate:world-entities": "node migrate-world-entities.mjs",
+    "check:world-integrity": "node check-world-integrity.mjs",
     "start:api": "node dist-server/index.js",
     "preview": "vite preview",
     "test": "vitest run",
