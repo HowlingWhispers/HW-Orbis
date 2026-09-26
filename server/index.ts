@@ -8,6 +8,7 @@ import { ZodError } from 'zod';
 import { AssetWriteError } from './asset-writes.js';
 import { createAuthRouter } from './auth.js';
 import { createCodaAssistantRouter } from './coda-assistant.js';
+import { createCodaDiscordBridgeRouter } from './coda-discord-bridge.js';
 import { processDueCodaScheduledMessages } from './coda-discord.js';
 import { createArchiveTransferRouter } from './archive-transfer.js';
 import { createAdminRouter, requireAdmin } from './admin.js';
@@ -51,6 +52,9 @@ app.use(session({
 }));
 
 app.use('/api/v1/generation', createSpeculusGenerationRouter(config, pool));
+// Machine-to-machine bridge used by Coda Core's Discord slash command. It has its
+// own bearer secret and must be mounted before the browser Origin check below.
+app.use('/api/internal/coda-discord', createCodaDiscordBridgeRouter(config, pool));
 
 app.use((request, response, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return next();
