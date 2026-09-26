@@ -84,11 +84,16 @@ export function normalizeWorldDocument(document: Record<string, unknown>) {
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 export async function syncWorldLocations(
   pool: DatabasePool,
   worldId: string,
   userId: string,
   document: Record<string, unknown>,
+  contentRating = 'sfw',
 ) {
   const rawLocations = document.locations;
   if (!Array.isArray(rawLocations)) return;
@@ -108,39 +113,77 @@ export async function syncWorldLocations(
   const errors: string[] = [];
 
   for (const loc of locations) {
-    let placeId = loc.libraryAssetId;
+    let placeId = loc.libraryAssetId ?? null;
+    let existingPlace: Record<string, unknown> | null = null;
     const placeDocument = {
       kind: loc.kind ?? 'region',
       parentLocationId: loc.parentLocationId ?? null,
       description: loc.description ?? '',
+      worldEntryId: loc.id,
     };
 
     try {
       if (placeId) {
-        const existing = await pool.query('SELECT id FROM library_assets WHERE id = $1 AND type = $2 AND origin_world_id = $3', [placeId, 'place', worldId]);
-        if (!existing.rowCount) {
-          errors.push(`Location "${loc.name}" (${loc.id}) references missing place asset ${placeId}; creating new`);
+        const direct = await pool.query(
+          `SELECT id, document FROM library_assets
+           WHERE id = $1 AND type = 'place' AND origin_world_id = $2
+           LIMIT 1`,
+          [placeId, worldId],
+        );
+        if (direct.rowCount) {
+          existingPlace = direct.rows[0] as Record<string, unknown>;
+        } else {
+          console.warn(`World ${worldId}: location "${loc.name}" (${loc.id}) has stale place link ${placeId}; attempting safe relink.`);
           placeId = null;
         }
       }
 
-      if (!placeId) {
+      if (!existingPlace) {
+        const byEntryId = await pool.query(
+          `SELECT id, document FROM library_assets
+           WHERE type = 'place' AND origin_world_id = $1 AND document->>'worldEntryId' = $2
+           LIMIT 2`,
+          [worldId, loc.id],
+        );
+        if (byEntryId.rowCount === 1) {
+          existingPlace = byEntryId.rows[0] as Record<string, unknown>;
+          placeId = String(existingPlace.id);
+        }
+      }
+
+      if (!existingPlace) {
+        const byName = await pool.query(
+          `SELECT id, document FROM library_assets
+           WHERE type = 'place' AND origin_world_id = $1 AND name = $2
+             AND (document->>'worldEntryId' IS NULL OR document->>'worldEntryId' = $3)
+           ORDER BY id
+           LIMIT 2`,
+          [worldId, loc.name, loc.id],
+        );
+        if (byName.rowCount === 1) {
+          existingPlace = byName.rows[0] as Record<string, unknown>;
+          placeId = String(existingPlace.id);
+          console.log(`World ${worldId}: linked embedded location "${loc.name}" (${loc.id}) to existing place ${placeId}.`);
+        } else if ((byName.rowCount ?? 0) > 1) {
+          console.warn(`World ${worldId}: multiple existing places are named "${loc.name}"; refusing to guess which one matches embedded location ${loc.id}.`);
+        }
+      }
+
+      if (!placeId || !existingPlace) {
         const created = await pool.query(
           `INSERT INTO library_assets (id, type, name, summary, origin_world_id, creator_user_id, source_type, content_rating, tags, visual_tone, document)
-           VALUES ($1, $2, $3, $4, $5, $6, 'user-created', 'sfw', '{}', 'mist', $7::jsonb)
-           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, summary = EXCLUDED.summary, document = EXCLUDED.document, updated_at = now()
+           VALUES ($1, 'place', $2, $3, $4, $5, 'user-created', $6, '{}', 'mist', $7::jsonb)
            RETURNING id`,
-          [randomUUID(), 'place', loc.name, loc.description ?? '', worldId, userId, JSON.stringify(placeDocument)],
+          [randomUUID(), loc.name, loc.description ?? '', worldId, userId, contentRating, JSON.stringify(placeDocument)],
         );
-        placeId = created.rows[0].id;
-        if (loc.libraryAssetId !== placeId) {
-          errors.push(`Location "${loc.name}" (${loc.id}) assigned new place asset ${placeId}`);
-        }
+        placeId = String(created.rows[0].id);
       } else {
+        const mergedDocument = { ...asRecord(existingPlace.document), ...placeDocument };
         await pool.query(
-          `UPDATE library_assets SET name = $1, summary = $2, document = $3::jsonb, updated_at = now()
-           WHERE id = $4`,
-          [loc.name, loc.description ?? '', JSON.stringify(placeDocument), placeId],
+          `UPDATE library_assets
+           SET name = $1, summary = $2, content_rating = $3, document = $4::jsonb, updated_at = now()
+           WHERE id = $5`,
+          [loc.name, loc.description ?? '', contentRating, JSON.stringify(mergedDocument), placeId],
         );
       }
 
@@ -148,14 +191,14 @@ export async function syncWorldLocations(
         await pool.query(
           `UPDATE library_assets SET document = jsonb_set(document, '{locations}', (
             SELECT jsonb_agg(
-              CASE WHEN item->>'id' = $2 THEN jsonb_set(item, '{libraryAssetId}', to_jsonb($3::text)) ELSE item END
+              CASE WHEN item->>'id' = $2 THEN jsonb_set(item, '{libraryAssetId}', to_jsonb($3::text), true) ELSE item END
             ) FROM jsonb_array_elements(document->'locations') AS item
           ) WHERE id = $1`,
           [worldId, loc.id, placeId],
         );
       }
 
-      seenPlaceIds.add(placeId!);
+      seenPlaceIds.add(placeId);
     } catch (err) {
       errors.push(`Location "${loc.name}" (${loc.id}): ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -185,7 +228,7 @@ async function syncWorldCollections(
   document: Record<string, unknown>,
   contentRating: string,
 ) {
-  await syncWorldLocations(pool, worldId, userId, document);
+  await syncWorldLocations(pool, worldId, userId, document, contentRating);
   await syncWorldEmbeddedEntities(pool, worldId, userId, document, contentRating);
 }
 
