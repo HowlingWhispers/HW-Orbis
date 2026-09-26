@@ -15,6 +15,7 @@ import { createAdminRouter, requireAdmin } from './admin.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { createLibraryRouter } from './library.js';
+import { createOwnershipTransferRouter } from './ownership-transfer.js';
 import { createProviderSettingsRouter } from './provider-settings.js';
 import { createSaveArchiveRouter } from './save-archive.js';
 import { createSimulationSettingsRouter } from './simulation-settings.js';
@@ -140,6 +141,7 @@ app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStor
 app.use('/api/v1/library', createSaveArchiveRouter(pool));
 app.use('/api/v1/library', createWorldDeleteRouter(pool));
 app.use('/api/v1/library', createWorldBrainRouter(pool));
+app.use('/api/v1/library', createOwnershipTransferRouter(pool));
 app.use('/api/v1/library', createArchiveTransferRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createLibraryRouter(config, pool, settingsStore));
 
