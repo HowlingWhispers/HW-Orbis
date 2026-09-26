@@ -55,14 +55,17 @@ function normalizeEscapedLineBreaks(value: string) {
 function stripLeadingMetaNote(value: string) {
   const match = value.match(/^\(([^)\n]{1,240})\)\s*/);
   if (!match) return value;
-  const note = match[1];
+  const note = match[1] ?? '';
   const looksLikePlanning = /\b(?:shift from|tone|style|delivery|reaction|response|mood)\b/i.test(note)
     || (note.includes(',') && /\b(?:immediate|playful|serious|excited|warm|cheeky|dramatic|curious|mock[- ]offended)\b/i.test(note));
   return looksLikePlanning ? value.slice(match[0].length) : value;
 }
 
 export function sanitizeDiscordCodaReply(raw: string) {
-  let text = normalizeEscapedLineBreaks(raw).replace(/\r\n?/g, '\n').trim();
+  let text = normalizeEscapedLineBreaks(raw)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+$/gm, '')
+    .trim();
 
   // Remove accidental model-side planning notes such as
   // "(immediate, playful, sudden shift from mock-offended to excited)" while
