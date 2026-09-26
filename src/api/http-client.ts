@@ -1,4 +1,4 @@
-import type { LibraryApi, DeleteImpact } from './contracts';
+import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget } from './contracts';
 import { LibraryApiError } from './contracts';
 import type { AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
 
@@ -12,7 +12,10 @@ export class HttpLibraryApi implements LibraryApi {
         headers: { Accept: 'application/json' },
         credentials: 'include',
       });
-      if (!response.ok) throw new LibraryApiError(`Library request failed with status ${response.status}.`, response.status);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        throw new LibraryApiError(data.error ?? `Library request failed with status ${response.status}.`, response.status);
+      }
       return await response.json() as T;
     } catch (error) {
       if (error instanceof LibraryApiError || (error instanceof DOMException && error.name === 'AbortError')) throw error;
@@ -70,6 +73,23 @@ export class HttpLibraryApi implements LibraryApi {
     if (response.ok) return;
     const data = await response.json().catch(() => ({})) as { error?: string };
     throw new LibraryApiError(data.error ?? `Library request failed with status ${response.status}.`, response.status);
+  }
+
+  async searchOwnershipTransferTargets(id: string, search: string) {
+    const params = new URLSearchParams({ search });
+    const response = await this.request<{ items: OwnershipTransferTarget[] }>(`/v1/library/assets/${encodeURIComponent(id)}/transfer-targets?${params}`);
+    return response.items;
+  }
+
+  async transferWorldOwnership(id: string, input: { targetUserId: string; confirmName: string }) {
+    const response = await fetch(`${this.baseUrl}/v1/library/assets/${encodeURIComponent(id)}/transfer`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const data = await response.json().catch(() => ({})) as OwnershipTransferResult & { error?: string };
+    if (!response.ok) throw new LibraryApiError(data.error ?? `Library request failed with status ${response.status}.`, response.status);
+    return data;
   }
 
   async simulateAsset(id: string) {
