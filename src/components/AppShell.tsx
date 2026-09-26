@@ -1,4 +1,4 @@
-import { LogIn, Menu, Search, Settings, SlidersHorizontal, X, MessageSquare } from 'lucide-react';
+import { LogIn, Menu, Search, Settings, SlidersHorizontal, X, MessageSquare, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { libraryNavigation } from '../app/library-nav';
@@ -73,6 +73,9 @@ export function AppShell() {
           <NavLink className={({ isActive }) => `library-nav__item ${isActive ? 'is-active' : ''}`} to="/" end>
             <BookGlyph /><span><strong>{t('Orbis home')}</strong><small>{t('Your archive at a glance')}</small></span>
           </NavLink>
+          {user && <NavLink className={({ isActive }) => `library-nav__item ${isActive ? 'is-active' : ''}`} to="/coda">
+            <Sparkles size={18} strokeWidth={1.7} /><span><strong>Coda Workspace</strong><small>Give Coda a world and room to work</small></span>
+          </NavLink>}
           <div className="library-nav__label">{t('Collections')}</div>
           {libraryNavigation.map(({ type, label, icon: Icon }) => (
             <NavLink key={type} className={({ isActive }) => `library-nav__item ${isActive ? 'is-active' : ''}`} to={`/library/${type}`}>
