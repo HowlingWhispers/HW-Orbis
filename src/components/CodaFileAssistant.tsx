@@ -4,6 +4,19 @@ import { Link } from 'react-router-dom';
 import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaHistoryTurn } from '../api/coda-assistant';
 import type { LibraryAsset } from '../types/library';
 
+const worldSectionKeys: Array<{ label: string; keys: string[] }> = [
+  { label: 'Lore', keys: ['lore'] },
+  { label: 'Places', keys: ['locations'] },
+  { label: 'Species & Factions', keys: ['species', 'factions'] },
+  { label: 'Peoples & Societies', keys: ['societies'] },
+  { label: 'Family Trees', keys: ['families'] },
+  { label: 'Memory & Timeline', keys: ['memories'] },
+  { label: 'Rules', keys: ['rules'] },
+  { label: 'Time & Weather', keys: ['timeWeather'] },
+  { label: 'World Brain', keys: ['brain', 'worldBrain'] },
+  { label: 'Identity', keys: ['identity'] },
+];
+
 function historyText(result: CodaAssistantResponse) {
   return JSON.stringify({
     summary: result.summary ?? '',
@@ -11,6 +24,30 @@ function historyText(result: CodaAssistantResponse) {
     warnings: result.warnings ?? [],
     recordPatch: result.recordPatch ?? null,
   }).slice(0, 60_000);
+}
+
+function currentWorldForgeSection() {
+  const active = document.querySelector<HTMLButtonElement>('.forge-tabs button.is-active');
+  return active?.textContent?.trim() ?? '';
+}
+
+function patchHasKey(patch: unknown, key: string) {
+  return Boolean(patch) && typeof patch === 'object' && !Array.isArray(patch)
+    && Object.prototype.hasOwnProperty.call(patch, key);
+}
+
+function targetWorldForgeSection(patch: unknown, currentSection: string) {
+  const current = worldSectionKeys.find((section) => section.label === currentSection);
+  if (current?.keys.some((key) => patchHasKey(patch, key))) return current.label;
+  return worldSectionKeys.find((section) => section.keys.some((key) => patchHasKey(patch, key)))?.label ?? '';
+}
+
+function focusWorldForgeSection(label: string) {
+  if (!label) return;
+  window.requestAnimationFrame(() => {
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('.forge-tabs button')];
+    buttons.find((button) => button.textContent?.trim() === label)?.click();
+  });
 }
 
 export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
@@ -21,6 +58,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
   const [error, setError] = useState('');
   const [settingsPath, setSettingsPath] = useState('');
   const [applied, setApplied] = useState(false);
+  const [appliedSection, setAppliedSection] = useState('');
 
   const outsideScope = useMemo(
     () => (result?.proposals?.length ?? 0) + (result?.operations?.length ?? 0) > 0,
@@ -30,17 +68,19 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
   const run = async () => {
     const input = text.trim();
     if (!input || working) return;
+    const activeSection = asset.type === 'world' ? currentWorldForgeSection() : '';
     setWorking(true);
     setError('');
     setSettingsPath('');
     setApplied(false);
+    setAppliedSection('');
     try {
       const next = await askCoda({
         mode: 'sort',
-        text: `${input}\n\nFILE-FOCUSED DRAFT MODE:\n- Work only on the currently open ${asset.type} file named ${asset.name}.\n- Put changes for this file in recordPatch.\n- Do not create, update, save, or propose another record.\n- Do not change ownership, privacy, permissions, credentials, content rating, IDs, or other protected metadata.\n- This is an unsaved draft. The human will review it and press Save in Orbis.`,
+        text: `${input}\n\nFILE-FOCUSED DRAFT MODE:\n- Work only on the currently open ${asset.type} file named ${asset.name}.\n- Put changes for this file in recordPatch.\n- Do not create, update, save, or propose another record.\n- Do not change ownership, privacy, permissions, credentials, content rating, IDs, or other protected metadata.\n- This is an unsaved draft. The human will review it and press Save in Orbis.${activeSection ? `\n- The currently visible World Forge section is ${activeSection}. When the user asks to work on that section, put the draft in the matching existing top-level field and do not repeat unrelated Identity data.` : ''}`,
         assetId: asset.id,
         includeRecordContext: true,
-        pageHint: `File editor · type=${asset.type} · name=${asset.name} · scope=current_file_only`,
+        pageHint: `File editor · type=${asset.type} · name=${asset.name} · section=${activeSection || 'n/a'} · current_file_only`.slice(0, 120),
         history,
       });
       setResult(next);
@@ -64,9 +104,13 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
 
   const applyDraft = () => {
     if (!result?.recordPatch || result.record?.id !== asset.id) return;
+    const activeSection = asset.type === 'world' ? currentWorldForgeSection() : '';
+    const targetSection = asset.type === 'world' ? targetWorldForgeSection(result.recordPatch, activeSection) : '';
     window.dispatchEvent(new CustomEvent('orbis:coda-apply-draft', {
-      detail: { assetId: asset.id, patch: result.recordPatch },
+      detail: { assetId: asset.id, patch: result.recordPatch, preferredSection: targetSection },
     }));
+    focusWorldForgeSection(targetSection);
+    setAppliedSection(targetSection);
     setApplied(true);
   };
 
@@ -77,6 +121,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
     setError('');
     setSettingsPath('');
     setApplied(false);
+    setAppliedSection('');
   };
 
   return <aside className="coda-file-assistant" aria-label="Coda file assistant">
@@ -107,7 +152,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
         <details><summary>Preview JSON patch</summary><pre>{JSON.stringify(result.recordPatch, null, 2)}</pre></details>
         <button type="button" className="button button--primary" onClick={applyDraft}>Load draft into open file</button>
       </section> : result ? <div className="coda-file-notice"><BookOpen size={15} /><span>Coda did not return an editable patch for this file. Give her another instruction and keep it focused on the open record.</span></div> : null}
-      {applied && <div className="coda-file-notice is-success"><div><strong>Draft loaded locally.</strong><span>Nothing has been saved yet. Review the editor and press Save yourself.</span></div></div>}
+      {applied && <div className="coda-file-notice is-success"><div><strong>Draft loaded locally{appliedSection ? ` into ${appliedSection}` : ''}.</strong><span>Nothing has been saved yet. Review the editor and press Save yourself.</span></div></div>}
     </div>
 
     <div className="coda-file-composer">
