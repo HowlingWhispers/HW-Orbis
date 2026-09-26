@@ -1,4 +1,4 @@
-import { ArrowLeft, CircleAlert } from 'lucide-react';
+import { ArrowLeft, CircleAlert, Sparkles } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
@@ -30,7 +30,10 @@ export function AssetEditorView() {
   const editor = asset.type === 'world' ? <WorldForgeEditor asset={asset} /> : <GenericAssetEditor asset={asset} />;
 
   return <div className={`page editor-page ${codaMode ? 'editor-page--coda' : ''}`}>
-    <Link className="back-link" to={`/asset/${asset.id}`}><ArrowLeft size={16} /> Back to record</Link>
+    <div className="editor-page__nav">
+      <Link className="back-link" to={`/asset/${asset.id}`}><ArrowLeft size={16} /> Back to record</Link>
+      {asset.type === 'world' && !codaMode && <Link className="button button--secondary" to={`/asset/${asset.id}/edit?coda=1`}><Sparkles size={16} /> Edit with Coda</Link>}
+    </div>
     {codaMode
       ? <div className="coda-file-layout"><CodaFileAssistant asset={asset} /><div className="coda-file-layout__editor">{editor}</div></div>
       : editor}
