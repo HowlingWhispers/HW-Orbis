@@ -1,4 +1,4 @@
-import { ChevronDown, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, FileJson, Plus, Search, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
@@ -83,7 +83,11 @@ export function CollectionView({ all = false }: { all?: boolean }) {
         <div className="collection-header__icon">{Icon ? <Icon /> : <span className="all-shelves-icon">✦</span>}</div>
         <div className="collection-header__copy"><span className="eyebrow">{all ? (de ? 'Alle Sammlungen' : 'All collections') : (de ? 'Orbis-Sammlung' : 'Orbis collection')}</span><h1>{title}</h1><p>{description}</p></div>
         <div className="collection-header__actions">
-          {canCreateWorld && <button className="button button--primary" type="button" onClick={() => navigate('/worlds/new')}><Plus size={17} /> {de ? 'Welt erstellen' : 'Create World'}</button>}
+          {canCreateWorld && <>
+            <button className="button button--primary" type="button" onClick={() => navigate('/worlds/new')}><Plus size={17} /> {de ? 'Welt erstellen' : 'Create World'}</button>
+            <button className="button button--secondary" type="button" onClick={() => navigate('/worlds/new#coda')}><Sparkles size={17} /> {de ? 'Mit Coda erstellen' : 'Create with Coda'}</button>
+            <button className="button button--secondary" type="button" onClick={() => navigate('/worlds/new?import=1#import-json')}><FileJson size={17} /> {de ? 'JSON importieren' : 'Import JSON'}</button>
+          </>}
           <span className="collection-header__count">{data?.total ?? '...'} <small>{de ? 'Datensätze' : 'records'}</small></span>
         </div>
       </header>
