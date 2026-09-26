@@ -14,6 +14,7 @@ const envSchema = z.object({
   DISCORD_GUILD_ID: z.string().regex(/^$|^\d{17,20}$/).default(''),
   CODA_DISCORD_BOT_TOKEN: z.string().default(''),
   CODA_DISCORD_CHANNEL_IDS: z.string().default(''),
+  CODA_INTERNAL_BRIDGE_SECRET: z.string().default(''),
   DISCORD_ADULT_ROLE_IDS: z.string().default(''),
   DISCORD_CREATOR_ROLE_IDS: z.string().default(''),
   DISCORD_ADMIN_ROLE_IDS: z.string().default(''),
