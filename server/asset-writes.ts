@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { DatabasePool } from './db.js';
+import { syncWorldEmbeddedEntities } from './world-entity-sync.js';
 
 export const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 export type AssetType = (typeof assetTypes)[number];
@@ -177,6 +178,17 @@ export async function syncWorldLocations(
   }
 }
 
+async function syncWorldCollections(
+  pool: DatabasePool,
+  worldId: string,
+  userId: string,
+  document: Record<string, unknown>,
+  contentRating: string,
+) {
+  await syncWorldLocations(pool, worldId, userId, document);
+  await syncWorldEmbeddedEntities(pool, worldId, userId, document, contentRating);
+}
+
 export async function currentAssetRevision(pool: DatabasePool, assetId: string) {
   const result = await pool.query('SELECT max(revision) AS revision FROM library_asset_revisions WHERE asset_id = $1', [assetId]);
   return Number(result.rows[0]?.revision ?? 0);
@@ -242,7 +254,9 @@ export async function insertAsset(
     documentAfter: document, performedBy: identity.userId,
   });
 
-  if (asset.type === 'world') await syncWorldLocations(pool, row.id, identity.userId, document);
+  if (asset.type === 'world') {
+    await syncWorldCollections(pool, row.id, identity.userId, document, String(row.content_rating ?? asset.contentRating));
+  }
 
   return {
     row,
@@ -332,7 +346,9 @@ export async function applyAssetUpdate(
     documentBefore: existing.document ?? {}, documentAfter: nextAsset.document, performedBy: identity.userId,
   });
 
-  if (row.type === 'world') await syncWorldLocations(pool, assetId, identity.userId, row.document ?? {});
+  if (row.type === 'world') {
+    await syncWorldCollections(pool, assetId, identity.userId, row.document ?? {}, String(row.content_rating ?? 'sfw'));
+  }
 
   return {
     row,
