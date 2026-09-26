@@ -10,6 +10,7 @@ import {
   syncWorldEmbeddedEntities,
   WorldEntitySyncError,
 } from './world-entity-sync.js';
+import { removeCanonicalChildrenMissingFromWorld, WorldChildRemovalError } from './world-child-removal.js';
 
 export const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 export type AssetType = (typeof assetTypes)[number];
@@ -295,10 +296,6 @@ export async function applyAssetUpdate(
   }
 
   return inTransaction(pool, async (client) => {
-    // Query the normal row shape here rather than a special projection. Besides
-    // making the preflight reusable by small test executors, this leaves one query
-    // contract for callers while we still acquire the authoritative FOR UPDATE lock
-    // below after locking the origin world first.
     const peek = await client.query('SELECT * FROM library_assets WHERE id = $1', [assetId]);
     if (!peek.rowCount || !peek.rows[0]) throw new AssetWriteError(404, 'Record not found.');
     const peekType = String(peek.rows[0].type);
@@ -371,6 +368,17 @@ export async function applyAssetUpdate(
           updatedAt: new Date(String(existing.updated_at ?? Date.now())).toISOString(),
         },
       };
+    }
+
+    if (existing.type === 'world' && asset.document !== undefined) {
+      try {
+        await removeCanonicalChildrenMissingFromWorld(client, assetId, existingDocument, nextAsset.document);
+      } catch (error) {
+        if (error instanceof WorldChildRemovalError) {
+          throw new AssetWriteError(409, 'Orbis refused to remove a linked world record because doing so would leave ambiguous or dangling canon. Nothing was saved.', error.issues);
+        }
+        throw error;
+      }
     }
 
     const update = await client.query(
