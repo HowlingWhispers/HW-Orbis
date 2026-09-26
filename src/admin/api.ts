@@ -1,3 +1,7 @@
+import { CODA_MESSAGE_MAX_LENGTH } from './codaMessage';
+
+export { CODA_MESSAGE_MAX_LENGTH };
+
 export interface AdminSettings {
   guildId: string;
   adultRoleIds: string[];
@@ -21,7 +25,9 @@ export interface AdminCodaChannel {
   name: string;
   type: number;
   parentId: string | null;
+  parentName: string | null;
   position: number;
+  allowlisted: boolean;
 }
 
 export interface AdminCodaChannelState {
@@ -86,7 +92,11 @@ export interface AdminCodaScheduled {
 export interface AdminCodaStatus {
   configured: boolean;
   outboundEnabled: boolean;
+  splitLongMessages: boolean;
+  maxMessageLength: number;
+  maxComposedLength: number;
   allowedChannelCount: number;
+  postableChannelCount: number;
   queuedScheduled: number;
   lastMessageAt: string | null;
   bot: { id: string; username: string; globalName: string | null } | null;
@@ -120,12 +130,12 @@ export const adminApi = {
   codaChannels: () => request<AdminCodaChannelState>('/coda/channels'),
   codaMessages: (limit = 50) => request<{ items: AdminCodaMessage[] }>('/coda/messages?limit=' + encodeURIComponent(String(limit))),
   sendCodaMessage: (input: { channelId: string; content: string; replyTo?: string }) =>
-    request<{ message: AdminCodaMessage }>('/coda/messages', { method: 'POST', body: JSON.stringify(input) }),
+    request<{ message: AdminCodaMessage; messages: AdminCodaMessage[]; partCount: number }>('/coda/messages', { method: 'POST', body: JSON.stringify(input) }),
   editCodaMessage: (id: string, content: string) => request<{ ok: boolean }>('/coda/messages/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ content }) }),
   deleteCodaMessage: (id: string) => request<{ ok: boolean }>('/coda/messages/' + encodeURIComponent(id), { method: 'DELETE' }),
   codaMembers: (query: string) => request<{ items: AdminCodaMember[] }>('/coda/members?query=' + encodeURIComponent(query)),
   sendCodaDm: (input: { recipient: string; content: string }) =>
-    request<{ message: AdminCodaMessage }>('/coda/dms', { method: 'POST', body: JSON.stringify(input) }),
+    request<{ message: AdminCodaMessage; messages: AdminCodaMessage[]; partCount: number }>('/coda/dms', { method: 'POST', body: JSON.stringify(input) }),
   codaTemplates: () => request<{ items: AdminCodaTemplate[] }>('/coda/templates'),
   createCodaTemplate: (input: { name: string; content: string }) =>
     request<{ item: AdminCodaTemplate }>('/coda/templates', { method: 'POST', body: JSON.stringify(input) }),
@@ -135,7 +145,11 @@ export const adminApi = {
     request<{ item: AdminCodaScheduled }>('/coda/scheduled', { method: 'POST', body: JSON.stringify(input) }),
   cancelCodaScheduled: (id: string) => request<{ ok: boolean }>('/coda/scheduled/' + encodeURIComponent(id), { method: 'DELETE' }),
   codaStatus: () => request<AdminCodaStatus>('/coda/status'),
-  setCodaOutbound: (outboundEnabled: boolean) => request<{ outboundEnabled: boolean; updatedAt: string; updatedByUserId: string | null }>('/coda/control', { method: 'PUT', body: JSON.stringify({ outboundEnabled }) }),
+  setCodaOutbound: (outboundEnabled: boolean, splitLongMessages?: boolean) =>
+    request<{ outboundEnabled: boolean; splitLongMessages: boolean; updatedAt: string; updatedByUserId: string | null }>('/coda/control', {
+      method: 'PUT',
+      body: JSON.stringify(splitLongMessages === undefined ? { outboundEnabled } : { outboundEnabled, splitLongMessages }),
+    }),
   updateSettings: (settings: Pick<AdminSettings, 'guildId' | 'adultRoleIds' | 'creatorRoleIds' | 'adminRoleIds' | 'inviteUrl'>) =>
     request<{ settings: AdminSettings }>('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
 };

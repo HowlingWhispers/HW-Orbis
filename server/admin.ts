@@ -46,7 +46,7 @@ export function createAdminRouter(config: AppConfig, pool: DatabasePool, setting
           creatorPolicyConfigured: settings.effectiveCreatorRoleIds.length > 0,
           adminPolicyConfigured: settings.adminRoleIds.length > 0 || settings.bootstrapAdminRoleIds.length > 0,
           inviteUrlConfigured: Boolean(settings.inviteUrl),
-          codaDiscordConfigured: Boolean(config.CODA_DISCORD_BOT_TOKEN && config.codaDiscordChannelIds.length > 0 && settings.guildId),
+          codaDiscordConfigured: Boolean(config.CODA_DISCORD_BOT_TOKEN && settings.guildId),
         },
         secrets: {
           databaseUrl: 'configured',
@@ -223,7 +223,7 @@ export function createAdminRouter(config: AppConfig, pool: DatabasePool, setting
   router.put('/coda/control', async (request, response, next) => {
     try {
       const body = codaControlSchema.parse(request.body);
-      response.json(await setCodaControlState(pool, request.session.userId!, body.outboundEnabled));
+      response.json(await setCodaControlState(pool, request.session.userId!, body.outboundEnabled, body.splitLongMessages));
     } catch (error) { next(error); }
   });
 

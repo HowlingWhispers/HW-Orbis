@@ -3,9 +3,42 @@ import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 
 const DISCORD_API = 'https://discord.com/api/v10';
+// Discord allows 2000 characters for a normal guild and 4000 once the guild is
+// boosted (Nitro or a boost). This deployment targets a boosted guild.
+export const CODA_DISCORD_MAX_MESSAGE_LENGTH = 4000;
+// Longest text Orbis will accept for one composed message. Anything longer than a
+// single Discord message is split into parts when the console switch is enabled.
+export const CODA_DISCORD_MAX_COMPOSED_LENGTH = 12000;
 const snowflake = z.string().regex(/^\d{17,20}$/, 'Use an exact Discord ID.');
 const auditId = z.string().regex(/^\d+$/, 'Use a valid Coda history ID.');
-const messageContent = z.string().max(2000, 'Discord messages are limited to 2000 characters.').refine((value) => value.trim().length > 0, 'Message content is required.');
+const messageContent = z.string().max(CODA_DISCORD_MAX_COMPOSED_LENGTH, `Messages are limited to ${CODA_DISCORD_MAX_COMPOSED_LENGTH} characters.`).refine((value) => value.trim().length > 0, 'Message content is required.');
+
+export function splitCodaMessage(content: string, limit = CODA_DISCORD_MAX_MESSAGE_LENGTH): string[] {
+  const trimmed = content.trim();
+  if (!trimmed) return [];
+  if (trimmed.length <= limit) return [trimmed];
+
+  const parts: string[] = [];
+  let rest = trimmed;
+  while (rest.length > limit) {
+    const window = rest.slice(0, limit);
+    const breakAt = Math.max(window.lastIndexOf('\n\n'), window.lastIndexOf('\n'), window.lastIndexOf(' '));
+    const size = breakAt > Math.floor(limit / 2) ? breakAt : limit;
+    parts.push(rest.slice(0, size).trimEnd());
+    rest = rest.slice(size).trimStart();
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
+function resolveMessageParts(content: string, splitLongMessages: boolean) {
+  const parts = splitCodaMessage(content);
+  if (parts.length <= 1) return parts;
+  if (!splitLongMessages) {
+    throw new CodaDiscordError(400, `That message is ${content.trim().length} characters. Discord allows ${CODA_DISCORD_MAX_MESSAGE_LENGTH} per message, and long-message splitting is switched off in the Coda status panel.`);
+  }
+  return parts;
+}
 
 export const codaDiscordMessageSchema = z.object({
   channelId: snowflake,
@@ -31,8 +64,11 @@ export const codaScheduleSchema = z.object({
   sendAt: z.string().datetime(),
 });
 
-export const codaControlSchema = z.object({ outboundEnabled: z.boolean() });
-export const codaMessageEditSchema = z.object({ content: messageContent });
+export const codaControlSchema = z.object({
+  outboundEnabled: z.boolean(),
+  splitLongMessages: z.boolean().optional(),
+});
+export const codaMessageEditSchema = z.object({ content: z.string().max(CODA_DISCORD_MAX_MESSAGE_LENGTH, `Discord allows ${CODA_DISCORD_MAX_MESSAGE_LENGTH} characters per message, and editing replaces one existing message.`).refine((value) => value.trim().length > 0, 'Message content is required.') });
 
 export type CodaDiscordMessageInput = z.output<typeof codaDiscordMessageSchema>;
 export type CodaDirectMessageInput = z.output<typeof codaDirectMessageSchema>;
@@ -69,7 +105,9 @@ export interface CodaDiscordChannel {
   name: string;
   type: number;
   parentId: string | null;
+  parentName: string | null;
   position: number;
+  allowlisted: boolean;
 }
 
 export interface CodaDiscordMember {
@@ -81,6 +119,7 @@ export interface CodaDiscordMember {
 
 export interface CodaDiscordMessageRecord {
   id: string;
+  auditId: string | null;
   guildId: string;
   channelId: string;
   discordMessageId: string | null;
@@ -135,7 +174,9 @@ type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<
 function codaConfiguration(config: AppConfig, guildId: string) {
   return {
     botConfigured: Boolean(config.CODA_DISCORD_BOT_TOKEN && guildId),
-    channelConfigured: Boolean(config.CODA_DISCORD_BOT_TOKEN && guildId && config.codaDiscordChannelIds.length > 0),
+    // Coda may post in any text-capable channel the bot can see. The configured
+    // IDs stay as a server-side pin list so the control room can highlight them.
+    channelConfigured: Boolean(config.CODA_DISCORD_BOT_TOKEN && guildId),
     allowedChannelIds: new Set(config.codaDiscordChannelIds),
   };
 }
@@ -161,31 +202,45 @@ function discordErrorMessage(response: Response, fallback: string) {
 }
 
 export async function getCodaControlState(pool: DatabasePool) {
-  const result = await pool.query('SELECT outbound_enabled, updated_at, updated_by_user_id::text FROM coda_control_state WHERE singleton = true');
+  const result = await pool.query('SELECT outbound_enabled, split_long_messages, updated_at, updated_by_user_id::text FROM coda_control_state WHERE singleton = true');
   const row = result.rows[0];
   return {
     outboundEnabled: row?.outbound_enabled !== false,
+    splitLongMessages: row?.split_long_messages !== false,
     updatedAt: row?.updated_at ? new Date(row.updated_at).toISOString() : null,
     updatedByUserId: row?.updated_by_user_id ?? null,
   };
 }
 
-export async function setCodaControlState(pool: DatabasePool, userId: string, outboundEnabled: boolean) {
+export async function setCodaControlState(pool: DatabasePool, userId: string, outboundEnabled: boolean, splitLongMessages?: boolean) {
   const result = await pool.query(
-    `INSERT INTO coda_control_state (singleton, outbound_enabled, updated_by_user_id, updated_at)
-     VALUES (true, $1, $2, now())
+    `INSERT INTO coda_control_state (singleton, outbound_enabled, split_long_messages, updated_by_user_id, updated_at)
+     VALUES (true, $1, COALESCE($3, true), $2, now())
      ON CONFLICT (singleton) DO UPDATE
-       SET outbound_enabled = excluded.outbound_enabled, updated_by_user_id = excluded.updated_by_user_id, updated_at = now()
-     RETURNING outbound_enabled, updated_at, updated_by_user_id::text`,
-    [outboundEnabled, userId],
+       SET outbound_enabled = excluded.outbound_enabled,
+           split_long_messages = COALESCE($3, coda_control_state.split_long_messages),
+           updated_by_user_id = excluded.updated_by_user_id, updated_at = now()
+     RETURNING outbound_enabled, split_long_messages, updated_at, updated_by_user_id::text`,
+    [outboundEnabled, userId, splitLongMessages ?? null],
   );
   const row = result.rows[0];
-  return { outboundEnabled: row.outbound_enabled, updatedAt: new Date(row.updated_at).toISOString(), updatedByUserId: row.updated_by_user_id };
+  return {
+    outboundEnabled: row.outbound_enabled,
+    splitLongMessages: row.split_long_messages !== false,
+    updatedAt: new Date(row.updated_at).toISOString(),
+    updatedByUserId: row.updated_by_user_id,
+  };
 }
 
-async function assertOutboundEnabled(pool: DatabasePool) {
+async function requireOutboundEnabled(pool: DatabasePool) {
   const control = await getCodaControlState(pool);
   if (!control.outboundEnabled) throw new CodaDiscordError(423, 'Coda is in the kennel. Outbound Discord messages are disabled.');
+  return control;
+}
+
+// Uncategorized channels sort after named Discord categories.
+function groupRank(parentName: string | null) {
+  return parentName ? 0 : 1;
 }
 
 export async function listCodaDiscordChannels(config: AppConfig, guildId: string, fetchImpl: FetchLike = fetch) {
@@ -195,27 +250,36 @@ export async function listCodaDiscordChannels(config: AppConfig, guildId: string
       configured: false,
       guildId,
       items: [] as CodaDiscordChannel[],
-      reason: 'Set CODA_DISCORD_BOT_TOKEN and CODA_DISCORD_CHANNEL_IDS on the Orbis server.',
+      reason: 'Set CODA_DISCORD_BOT_TOKEN and DISCORD_GUILD_ID on the Orbis server.',
     };
   }
 
   const response = await discordRequest(fetchImpl, config.CODA_DISCORD_BOT_TOKEN, '/guilds/' + guildId + '/channels');
-  if (!response.ok) throw new CodaDiscordError(502, discordErrorMessage(response, 'Coda could not read the configured Discord channels.'));
+  if (!response.ok) throw new CodaDiscordError(502, discordErrorMessage(response, 'Coda could not read the Discord channels.'));
 
   const payload = await response.json();
   if (!Array.isArray(payload)) throw new CodaDiscordError(502, 'Discord returned an invalid channel list.');
 
-  const items = payload
-    .filter((value): value is DiscordGuildChannel => Boolean(value && typeof value === 'object' && typeof value.id === 'string' && typeof value.name === 'string' && typeof value.type === 'number'))
-    .filter((channel) => state.allowedChannelIds.has(channel.id) && (channel.type === 0 || channel.type === 5))
+  const channels = payload.filter(
+    (value): value is DiscordGuildChannel => Boolean(value && typeof value === 'object' && typeof value.id === 'string' && typeof value.name === 'string' && typeof value.type === 'number'),
+  );
+  // Category names let the control room group every channel Coda can post in.
+  const categoryNames = new Map(channels.filter((channel) => channel.type === 4).map((channel) => [channel.id, channel.name]));
+
+  const items = channels
+    .filter((channel) => channel.type === 0 || channel.type === 5)
     .map((channel) => ({
       id: channel.id,
       name: channel.name,
       type: channel.type,
       parentId: channel.parent_id ?? null,
+      parentName: channel.parent_id ? categoryNames.get(channel.parent_id) ?? null : null,
       position: channel.position ?? 0,
+      allowlisted: state.allowedChannelIds.has(channel.id),
     }))
-    .sort((left, right) => left.position - right.position || left.name.localeCompare(right.name));
+    .sort((left, right) => groupRank(left.parentName) - groupRank(right.parentName)
+      || (left.parentName ?? '').localeCompare(right.parentName ?? '')
+      || left.position - right.position || left.name.localeCompare(right.name));
 
   return { configured: true, guildId, items };
 }
@@ -334,34 +398,43 @@ export async function sendCodaDiscordMessage(
   fetchImpl: FetchLike = fetch,
 ) {
   const input = codaDiscordMessageSchema.parse(rawInput);
-  await assertOutboundEnabled(pool);
+  const control = await requireOutboundEnabled(pool);
   const state = codaConfiguration(config, guildId);
   if (!state.channelConfigured) throw new CodaDiscordError(409, 'Coda Discord channel sending is not configured on the Orbis server.');
-  if (!state.allowedChannelIds.has(input.channelId)) throw new CodaDiscordError(403, 'That Discord channel is not on Coda\'s server allowlist.');
+  if (!snowflake.safeParse(input.channelId).success) throw new CodaDiscordError(400, 'Use an exact Discord channel ID.');
 
+  // Coda may post in any text-capable channel the bot can see in the server.
   const channelState = await listCodaDiscordChannels(config, guildId, fetchImpl);
-  if (!channelState.items.some((item) => item.id === input.channelId)) throw new CodaDiscordError(403, 'Coda cannot post to that Discord channel.');
+  if (!channelState.items.some((item) => item.id === input.channelId)) throw new CodaDiscordError(403, 'Coda cannot post to that Discord channel. Pick a text or announcement channel from the list.');
 
   const replyToMessageId = parseReplyMessageId(input.replyTo, guildId, input.channelId);
+  const records: CodaDiscordMessageRecord[] = [];
+  let parts: string[] = [];
   try {
-    const discordMessageId = await postDiscordMessage(fetchImpl, config.CODA_DISCORD_BOT_TOKEN, input.channelId, {
-      content: input.content,
-      allowed_mentions: { parse: ['users'], replied_user: true },
-      ...(replyToMessageId ? { message_reference: { message_id: replyToMessageId, channel_id: input.channelId, guild_id: guildId, fail_if_not_exists: true } } : {}),
-    });
-    const audit = await writeMessageAudit(pool, { sentByUserId, guildId, channelId: input.channelId, discordMessageId, destinationType: 'channel', content: input.content, replyToMessageId, status: 'sent' });
-    return {
-      message: {
+    parts = resolveMessageParts(input.content, control.splitLongMessages);
+    for (const [index, part] of parts.entries()) {
+      const discordMessageId = await postDiscordMessage(fetchImpl, config.CODA_DISCORD_BOT_TOKEN, input.channelId, {
+        content: part,
+        allowed_mentions: { parse: ['users'], replied_user: true },
+        ...(index === 0 && replyToMessageId ? { message_reference: { message_id: replyToMessageId, channel_id: input.channelId, guild_id: guildId, fail_if_not_exists: true } } : {}),
+      });
+      const audit = await writeMessageAudit(pool, { sentByUserId, guildId, channelId: input.channelId, discordMessageId, destinationType: 'channel', content: part, replyToMessageId: index === 0 ? replyToMessageId : undefined, status: 'sent' });
+      records.push({
         id: audit?.id ?? discordMessageId, auditId: audit?.id ?? null, guildId, channelId: input.channelId, discordMessageId,
-        destinationType: 'channel' as const, recipientUserId: null, recipientDisplayName: null, content: input.content,
-        replyToMessageId: replyToMessageId ?? null, status: 'sent' as const, errorMessage: null, sentByUserId,
+        destinationType: 'channel' as const, recipientUserId: null, recipientDisplayName: null, content: part,
+        replyToMessageId: index === 0 ? replyToMessageId ?? null : null, status: 'sent' as const, errorMessage: null, sentByUserId,
         sentByName: null, editedAt: null, deletedAt: null,
         createdAt: audit ? new Date(audit.created_at).toISOString() : new Date().toISOString(),
-      },
-    };
+      });
+    }
+    return { message: records[0], messages: records, partCount: records.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Discord rejected the message.';
-    await writeMessageAudit(pool, { sentByUserId, guildId, channelId: input.channelId, destinationType: 'channel', content: input.content, replyToMessageId, status: 'failed', errorMessage: message });
+    await writeMessageAudit(pool, {
+      sentByUserId, guildId, channelId: input.channelId, destinationType: 'channel', content: input.content,
+      replyToMessageId, status: 'failed',
+      errorMessage: records.length ? `${message} (${records.length} of ${parts.length} part(s) had already been posted.)` : message,
+    });
     throw error;
   }
 }
@@ -375,7 +448,7 @@ export async function sendCodaDirectMessage(
   fetchImpl: FetchLike = fetch,
 ) {
   const input = codaDirectMessageSchema.parse(rawInput);
-  await assertOutboundEnabled(pool);
+  const control = await requireOutboundEnabled(pool);
   const state = codaConfiguration(config, guildId);
   if (!state.botConfigured) throw new CodaDiscordError(409, 'Coda Discord access is not configured on the Orbis server.');
 
@@ -397,28 +470,33 @@ export async function sendCodaDirectMessage(
   const dmChannel = await dmResponse.json().catch(() => undefined) as DiscordDmChannel | undefined;
   if (!dmResponse.ok || !dmChannel?.id) throw new CodaDiscordError(502, discordErrorMessage(dmResponse, 'Coda could not open a private message with that user.'));
 
+  const records: CodaDiscordMessageRecord[] = [];
+  let parts: string[] = [];
   try {
-    const discordMessageId = await postDiscordMessage(fetchImpl, config.CODA_DISCORD_BOT_TOKEN, dmChannel.id, {
-      content: input.content,
-      allowed_mentions: { parse: ['users'] },
-    });
-    const audit = await writeMessageAudit(pool, {
-      sentByUserId, guildId, channelId: dmChannel.id, discordMessageId, destinationType: 'dm',
-      recipientUserId, recipientDisplayName, content: input.content, status: 'sent',
-    });
-    return {
-      message: {
+    parts = resolveMessageParts(input.content, control.splitLongMessages);
+    for (const part of parts) {
+      const discordMessageId = await postDiscordMessage(fetchImpl, config.CODA_DISCORD_BOT_TOKEN, dmChannel.id, {
+        content: part,
+        allowed_mentions: { parse: ['users'] },
+      });
+      const audit = await writeMessageAudit(pool, {
+        sentByUserId, guildId, channelId: dmChannel.id, discordMessageId, destinationType: 'dm',
+        recipientUserId, recipientDisplayName, content: part, status: 'sent',
+      });
+      records.push({
         id: audit?.id ?? discordMessageId, auditId: audit?.id ?? null, guildId, channelId: dmChannel.id, discordMessageId,
-        destinationType: 'dm' as const, recipientUserId, recipientDisplayName: recipientDisplayName ?? null, content: input.content,
+        destinationType: 'dm' as const, recipientUserId, recipientDisplayName: recipientDisplayName ?? null, content: part,
         replyToMessageId: null, status: 'sent' as const, errorMessage: null, sentByUserId, sentByName: null,
         editedAt: null, deletedAt: null, createdAt: audit ? new Date(audit.created_at).toISOString() : new Date().toISOString(),
-      },
-    };
+      });
+    }
+    return { message: records[0], messages: records, partCount: records.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Discord rejected the private message.';
     await writeMessageAudit(pool, {
       sentByUserId, guildId, channelId: dmChannel.id, destinationType: 'dm', recipientUserId,
-      recipientDisplayName, content: input.content, status: 'failed', errorMessage: message,
+      recipientDisplayName, content: input.content, status: 'failed',
+      errorMessage: records.length ? `${message} (${records.length} of ${parts.length} part(s) had already been delivered.)` : message,
     });
     throw error;
   }
@@ -437,7 +515,7 @@ export async function listCodaDiscordMessageHistory(pool: DatabasePool, limit = 
   );
 
   return result.rows.map((row) => ({
-    id: row.id, guildId: row.guild_id, channelId: row.channel_id, discordMessageId: row.discord_message_id,
+    id: row.id, auditId: row.id, guildId: row.guild_id, channelId: row.channel_id, discordMessageId: row.discord_message_id,
     destinationType: row.destination_type ?? 'channel', recipientUserId: row.recipient_user_id ?? null,
     recipientDisplayName: row.recipient_display_name ?? null, content: row.content, replyToMessageId: row.reply_to_message_id,
     status: row.status, errorMessage: row.error_message, sentByUserId: row.sent_by_user_id, sentByName: row.sent_by_name,
@@ -459,7 +537,7 @@ async function historyRow(pool: DatabasePool, id: string) {
 }
 
 export async function editCodaDiscordMessage(config: AppConfig, pool: DatabasePool, id: string, content: string, fetchImpl: FetchLike = fetch) {
-  await assertOutboundEnabled(pool);
+  await requireOutboundEnabled(pool);
   const row = await historyRow(pool, id);
   if (!row.discord_message_id || row.deleted_at) throw new CodaDiscordError(409, 'That Coda message cannot be edited.');
   const parsed = codaMessageEditSchema.parse({ content });
@@ -473,7 +551,7 @@ export async function editCodaDiscordMessage(config: AppConfig, pool: DatabasePo
 }
 
 export async function deleteCodaDiscordMessage(config: AppConfig, pool: DatabasePool, id: string, fetchImpl: FetchLike = fetch) {
-  await assertOutboundEnabled(pool);
+  await requireOutboundEnabled(pool);
   const row = await historyRow(pool, id);
   if (!row.discord_message_id || row.deleted_at) throw new CodaDiscordError(409, 'That Coda message cannot be deleted.');
   const response = await discordRequest(fetchImpl, config.CODA_DISCORD_BOT_TOKEN, '/channels/' + row.channel_id + '/messages/' + row.discord_message_id, { method: 'DELETE' });
@@ -518,8 +596,8 @@ export async function deleteCodaTemplate(pool: DatabasePool, id: string) {
 
 export async function createCodaScheduledMessage(config: AppConfig, pool: DatabasePool, userId: string, raw: unknown) {
   const input = codaScheduleSchema.parse(raw);
-  if (input.destinationType === 'channel' && !config.codaDiscordChannelIds.includes(input.targetId)) {
-    throw new CodaDiscordError(403, 'That Discord channel is not on Coda\'s server allowlist.');
+  if (input.destinationType === 'channel' && !snowflake.safeParse(input.targetId).success) {
+    throw new CodaDiscordError(400, 'Use an exact Discord channel ID from the channel list.');
   }
   if (new Date(input.sendAt).getTime() <= Date.now()) throw new CodaDiscordError(400, 'Choose a future time for the scheduled message.');
   const result = await pool.query(
@@ -587,6 +665,7 @@ export async function processDueCodaScheduledMessages(config: AppConfig, pool: D
       const result = item.destination_type === 'channel'
         ? await sendCodaDiscordMessage(config, pool, guildId, item.created_by_user_id, { channelId: item.target_id, content: item.content, replyTo: item.reply_to ?? '' }, fetchImpl)
         : await sendCodaDirectMessage(config, pool, guildId, item.created_by_user_id, { recipient: item.target_id, content: item.content }, fetchImpl);
+      if (!result.message) throw new CodaDiscordError(500, 'Coda produced no message for that scheduled delivery.');
       await pool.query(
         `UPDATE coda_scheduled_messages SET status = 'sent', sent_discord_message_id = $2, sent_message_audit_id = $3, last_error = NULL, updated_at = now() WHERE id = $1`,
         [item.id, result.message.discordMessageId, result.message.auditId],
@@ -609,7 +688,11 @@ export async function getCodaDiscordStatus(config: AppConfig, pool: DatabasePool
   const base = {
     configured: Boolean(config.CODA_DISCORD_BOT_TOKEN && guildId),
     outboundEnabled: control.outboundEnabled,
+    splitLongMessages: control.splitLongMessages,
+    maxMessageLength: CODA_DISCORD_MAX_MESSAGE_LENGTH,
+    maxComposedLength: CODA_DISCORD_MAX_COMPOSED_LENGTH,
     allowedChannelCount: config.codaDiscordChannelIds.length,
+    postableChannelCount: 0,
     queuedScheduled: Number(queued.rows[0]?.count ?? 0),
     lastMessageAt: recent.rows[0]?.created_at ? new Date(recent.rows[0].created_at).toISOString() : null,
     bot: null as null | { id: string; username: string; globalName: string | null },
@@ -617,9 +700,10 @@ export async function getCodaDiscordStatus(config: AppConfig, pool: DatabasePool
   };
   if (!base.configured) return base;
 
-  const [userResponse, guildResponse] = await Promise.all([
+  const [userResponse, guildResponse, channelResponse] = await Promise.all([
     discordRequest(fetchImpl, config.CODA_DISCORD_BOT_TOKEN, '/users/@me'),
     discordRequest(fetchImpl, config.CODA_DISCORD_BOT_TOKEN, '/guilds/' + guildId),
+    discordRequest(fetchImpl, config.CODA_DISCORD_BOT_TOKEN, '/guilds/' + guildId + '/channels'),
   ]);
   if (!userResponse.ok) throw new CodaDiscordError(502, discordErrorMessage(userResponse, 'Coda could not authenticate with Discord.'));
   const user = await userResponse.json() as DiscordUser;
@@ -627,6 +711,12 @@ export async function getCodaDiscordStatus(config: AppConfig, pool: DatabasePool
   if (guildResponse.ok) {
     const guild = await guildResponse.json() as DiscordGuild;
     if (guild.id && guild.name) base.guild = { id: guild.id, name: guild.name };
+  }
+  if (channelResponse.ok) {
+    const payload = await channelResponse.json().catch(() => []) as unknown;
+    if (Array.isArray(payload)) {
+      base.postableChannelCount = payload.filter((channel) => (channel as DiscordGuildChannel)?.type === 0 || (channel as DiscordGuildChannel)?.type === 5).length;
+    }
   }
   return base;
 }
