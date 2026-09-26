@@ -6,6 +6,7 @@ import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import type { SettingsStore } from './settings.js';
 import { canDirectViewAssetRow, canDiscoverAssetRow } from './world-access.js';
+import { hydrateWorldDocument } from './world-projection-read.js';
 
 const sourceTypes = ['curated', 'user-created', 'imported-v2', 'copied', 'public-curated', 'legacy-import'] as const;
 
@@ -162,9 +163,13 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       const identity = requestIdentity(request);
       const result = await pool.query(`${selectAssets} WHERE a.id = $3`, [canViewAdult(request), identity.userId ?? null, request.params.id]);
       if (!result.rowCount) return response.status(404).json({ error: 'Record not found.' });
-      if (!canDirectViewAssetRow(result.rows[0], identity.userId, identity.canSeePrivateWorlds)) return response.status(404).json({ error: 'Record not found.' });
-      if (result.rows[0].restricted) return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
-      response.json(mapAsset(result.rows[0], identity.userId, identity.isSuperAdmin));
+      const row = result.rows[0] as Record<string, unknown>;
+      if (!canDirectViewAssetRow(row, identity.userId, identity.canSeePrivateWorlds)) return response.status(404).json({ error: 'Record not found.' });
+      if (row.restricted) return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
+      if (row.type === 'world') {
+        row.document = await hydrateWorldDocument(pool, String(row.id), row.document);
+      }
+      response.json(mapAsset(row, identity.userId, identity.isSuperAdmin));
     } catch (error) {
       next(error);
     }
