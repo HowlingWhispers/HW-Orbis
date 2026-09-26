@@ -1,4 +1,5 @@
 export type CodaMode = 'guide' | 'sort' | 'inspect';
+export type CodaHistoryTurn = { role: 'user' | 'assistant'; content: string };
 
 export interface CodaProposal {
   type: 'world' | 'character' | 'place' | 'item' | 'faction' | 'species' | 'society' | 'family' | 'memory';
@@ -28,7 +29,7 @@ export class CodaAssistantError extends Error {
   }
 }
 
-export async function askCoda(input: { mode: CodaMode; text: string; assetId?: string; includeRecordContext?: boolean; pageHint?: string }) {
+export async function askCoda(input: { mode: CodaMode; text: string; assetId?: string; includeRecordContext?: boolean; pageHint?: string; history?: CodaHistoryTurn[] }) {
   const response = await fetch('/api/coda-assistant', {
     method: 'POST',
     credentials: 'include',

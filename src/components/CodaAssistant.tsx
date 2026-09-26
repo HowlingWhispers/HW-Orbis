@@ -1,7 +1,7 @@
 import { BookOpen, Search, Send, Sparkles, WandSparkles, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaMode, type CodaProposal } from '../api/coda-assistant';
+import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaHistoryTurn, type CodaMode, type CodaProposal } from '../api/coda-assistant';
 import { libraryApi } from '../api/client';
 import type { ContentRating } from '../types/library';
 import { useAuth } from '../auth/AuthContext';
@@ -30,20 +30,35 @@ function pageHint(pathname: string) {
   return 'Orbis';
 }
 
+function proposalKey(proposal: CodaProposal, index: number) {
+  return `${index}:${proposal.type}:${proposal.name.toLocaleLowerCase()}`;
+}
+
+function assistantHistoryText(result: CodaAssistantResponse) {
+  if (result.mode !== 'sort') return (result.text ?? '').slice(0, 60_000);
+  return JSON.stringify({
+    summary: result.summary ?? '',
+    proposals: result.proposals ?? [],
+    questions: result.questions ?? [],
+    warnings: result.warnings ?? [],
+    recordPatch: result.recordPatch ?? null,
+  }).slice(0, 60_000);
+}
+
 function StringList({ title, values, tone }: { title: string; values?: string[]; tone?: 'warning' }) {
   if (!values?.length) return null;
   return <section className={`coda-result-list ${tone === 'warning' ? 'is-warning' : ''}`}><strong>{title}</strong><ul>{values.map((value, index) => <li key={`${index}-${value}`}>{value}</li>)}</ul></section>;
 }
 
-function ProposalCard({ proposal, index, canCreate, onCreate }: {
+function ProposalCard({ proposal, index, canCreate, createdId, onCreate }: {
   proposal: CodaProposal;
   index: number;
   canCreate: boolean;
-  onCreate: (proposal: CodaProposal, rating: ContentRating) => Promise<string>;
+  createdId?: string;
+  onCreate: (proposal: CodaProposal, rating: ContentRating, index: number) => Promise<string>;
 }) {
   const [rating, setRating] = useState<ContentRating>('sfw');
   const [creating, setCreating] = useState(false);
-  const [createdId, setCreatedId] = useState('');
   const [createError, setCreateError] = useState('');
 
   const create = async () => {
@@ -51,7 +66,7 @@ function ProposalCard({ proposal, index, canCreate, onCreate }: {
     setCreating(true);
     setCreateError('');
     try {
-      setCreatedId(await onCreate(proposal, rating));
+      await onCreate(proposal, rating, index);
     } catch (reason) {
       setCreateError(reason instanceof Error ? reason.message : 'Coda could not create that record.');
     } finally {
@@ -73,26 +88,35 @@ function ProposalCard({ proposal, index, canCreate, onCreate }: {
   </article>;
 }
 
-function SortResult({ result, canApply, canCreate, onApply, onCreate }: {
+function SortResult({ result, canApply, canCreate, createdIds, bulkCreating, bulkMessage, onApply, onCreate, onCreateAll }: {
   result: CodaAssistantResponse;
   canApply: boolean;
   canCreate: (proposal: CodaProposal) => boolean;
+  createdIds: Record<string, string>;
+  bulkCreating: boolean;
+  bulkMessage: string;
   onApply: () => void;
-  onCreate: (proposal: CodaProposal, rating: ContentRating) => Promise<string>;
+  onCreate: (proposal: CodaProposal, rating: ContentRating, index: number) => Promise<string>;
+  onCreateAll: (rating: ContentRating) => Promise<void>;
 }) {
+  const [bulkRating, setBulkRating] = useState<ContentRating>('sfw');
+  const proposals = result.proposals ?? [];
+  const canBulkCreate = proposals.length > 0 && proposals.some(canCreate);
+
   return <div className="coda-result">
     {result.summary && <p className="coda-result__summary">{result.summary}</p>}
-    {result.proposals?.length ? <section className="coda-proposals">
-      <strong>Proposed records</strong>
-      {result.proposals.map((proposal, index) => <ProposalCard proposal={proposal} index={index} canCreate={canCreate(proposal)} onCreate={onCreate} key={`${proposal.type}-${proposal.name}-${index}`} />)}
+    {proposals.length ? <section className="coda-proposals">
+      <div className="coda-proposals__heading"><strong>Proposed records</strong>{canBulkCreate && <div className="coda-finalize"><select aria-label="Create all content rating" value={bulkRating} onChange={(event) => setBulkRating(event.target.value as ContentRating)} disabled={bulkCreating}><option value="sfw">All SFW</option><option value="adult">All Adult</option></select><button type="button" className="button button--primary" disabled={bulkCreating} onClick={() => void onCreateAll(bulkRating)}>{bulkCreating ? 'Creating...' : 'Create all'}</button></div>}</div>
+      {bulkMessage && <p className="coda-bulk-message" role="status">{bulkMessage}</p>}
+      {proposals.map((proposal, index) => <ProposalCard proposal={proposal} index={index} canCreate={canCreate(proposal)} createdId={createdIds[proposalKey(proposal, index)]} onCreate={onCreate} key={`${proposal.type}-${proposal.name}-${index}`} />)}
     </section> : null}
     <StringList title="Needs your answer" values={result.questions} />
     <StringList title="Coda noticed" values={result.warnings} tone="warning" />
     {result.text && <pre className="coda-raw-draft">{result.text}</pre>}
     {result.recordPatch && <section className="coda-draft-ready">
-      <div><strong>Current-record draft ready</strong><small>Nothing has been saved. Existing authored values are protected when the draft is applied.</small></div>
+      <div><strong>Current-record draft ready</strong><small>This fills the editor without overwriting authored values. Review it, then use the normal Save button.</small></div>
       <details className="coda-field-preview"><summary>Preview draft patch</summary><pre>{JSON.stringify(result.recordPatch, null, 2)}</pre></details>
-      {canApply && <button type="button" className="button button--primary" onClick={onApply}>Apply draft locally</button>}
+      {canApply && <button type="button" className="button button--primary" onClick={onApply}>Apply draft to editor</button>}
     </section>}
   </div>;
 }
@@ -110,6 +134,10 @@ export function CodaAssistant() {
   const [working, setWorking] = useState(false);
   const [applied, setApplied] = useState(false);
   const [createdWorldTarget, setCreatedWorldTarget] = useState<{ id: string; name: string } | null>(null);
+  const [history, setHistory] = useState<CodaHistoryTurn[]>([]);
+  const [createdProposalIds, setCreatedProposalIds] = useState<Record<string, string>>({});
+  const [bulkCreating, setBulkCreating] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState('');
 
   const assetId = useMemo(() => currentAssetId(location.pathname), [location.pathname]);
   const inEditor = Boolean(assetId && location.pathname === `/asset/${assetId}/edit`);
@@ -122,20 +150,27 @@ export function CodaAssistant() {
     setSettingsPath('');
     setApplied(false);
     setCreatedWorldTarget(null);
+    setHistory([]);
+    setCreatedProposalIds({});
+    setBulkMessage('');
   }, [assetId]);
 
   const run = async () => {
-    if (!text.trim() || working) return;
+    const input = text.trim();
+    if (!input || working) return;
     setWorking(true);
     setError('');
     setSettingsPath('');
     setApplied(false);
+    setCreatedProposalIds({});
     setCreatedWorldTarget(null);
+    setBulkMessage('');
     try {
-      const next = await askCoda({ mode, text: text.trim(), pageHint: pageHint(location.pathname), ...(assetId ? { assetId, includeRecordContext: includeContext } : {}) });
+      const next = await askCoda({ mode, text: input, history, pageHint: pageHint(location.pathname), ...(assetId ? { assetId, includeRecordContext: includeContext } : {}) });
       setResult(next);
+      setHistory((current) => [...current, { role: 'user', content: input }, { role: 'assistant', content: assistantHistoryText(next) }].slice(-8));
+      setText('');
     } catch (reason) {
-      setResult(null);
       if (reason instanceof CodaAssistantError) {
         setError(reason.message);
         setSettingsPath(reason.settingsPath ?? '');
@@ -155,51 +190,111 @@ export function CodaAssistant() {
     setApplied(true);
   };
 
-  const createProposal = async (proposal: CodaProposal, rating: ContentRating) => {
+  const createRecord = async (proposal: CodaProposal, rating: ContentRating, originWorldId: string | null) => {
     const fields = proposal.fields ?? {};
     const fieldSummary = typeof fields.summary === 'string'
       ? fields.summary
       : typeof fields.description === 'string'
         ? fields.description
         : proposal.reason ?? '';
-
-    if (proposal.type === 'world') {
-      if (!user?.permissions.canCreate) throw new Error('Creator access is required to create a world.');
-      const created = await libraryApi.createAsset({
-        type: 'world',
-        name: proposal.name,
-        summary: fieldSummary.slice(0, 2000),
-        originWorldId: null,
-        contentRating: rating,
-        tags: [],
-        visualTone: 'moon',
-        document: fields,
-      });
-      setCreatedWorldTarget({ id: created.id, name: proposal.name });
-      return created.id;
-    }
-
-    const existingWorldId = result?.record?.canAddToWorld === true ? result.record.originWorldId : undefined;
-    const worldId = existingWorldId ?? createdWorldTarget?.id;
-    if (!worldId) throw new Error('Open a world you own, or create the proposed world first.');
-    const created = await libraryApi.createAsset({
+    return libraryApi.createAsset({
       type: proposal.type,
       name: proposal.name,
       summary: fieldSummary.slice(0, 2000),
-      originWorldId: worldId,
+      originWorldId: proposal.type === 'world' ? null : originWorldId,
       contentRating: rating,
       tags: [],
       visualTone: 'moon',
       document: fields,
     });
+  };
+
+  const createProposal = async (proposal: CodaProposal, rating: ContentRating, index: number) => {
+    if (!user?.permissions.canCreate) throw new Error('Creator access is required to create Coda proposals.');
+    const key = proposalKey(proposal, index);
+    const existing = createdProposalIds[key];
+    if (existing) return existing;
+
+    let originWorldId = result?.record?.canAddToWorld === true ? result.record.originWorldId ?? null : createdWorldTarget?.id ?? null;
+    if (proposal.type !== 'world' && !originWorldId) {
+      const worlds = (result?.proposals ?? []).map((candidate, candidateIndex) => ({ proposal: candidate, index: candidateIndex })).filter((candidate) => candidate.proposal.type === 'world');
+      if (worlds.length === 1) {
+        const worldKey = proposalKey(worlds[0].proposal, worlds[0].index);
+        originWorldId = createdProposalIds[worldKey] ?? null;
+        if (!originWorldId) {
+          const world = await createRecord(worlds[0].proposal, rating, null);
+          originWorldId = world.id;
+          setCreatedProposalIds((current) => ({ ...current, [worldKey]: world.id }));
+          setCreatedWorldTarget({ id: world.id, name: worlds[0].proposal.name });
+        }
+      }
+    }
+
+    const created = await createRecord(proposal, rating, originWorldId);
+    setCreatedProposalIds((current) => ({ ...current, [key]: created.id }));
+    if (proposal.type === 'world') setCreatedWorldTarget({ id: created.id, name: proposal.name });
     return created.id;
   };
 
-  const canCreateProposal = (proposal: CodaProposal) => {
-    if (!user?.permissions.canCreate) return false;
-    if (proposal.type === 'world') return true;
-    return Boolean((result?.record?.canAddToWorld && result.record.originWorldId) || createdWorldTarget?.id);
+  const createAllProposals = async (rating: ContentRating) => {
+    if (!user?.permissions.canCreate || !result?.proposals?.length || bulkCreating) return;
+    setBulkCreating(true);
+    setBulkMessage('');
+    setError('');
+
+    const proposals = result.proposals.map((proposal, index) => ({ proposal, index, key: proposalKey(proposal, index) }));
+    const createdNow: Record<string, string> = { ...createdProposalIds };
+    const worldByName = new Map<string, string>();
+    let createdCount = 0;
+    let failedCount = 0;
+
+    try {
+      for (const entry of proposals.filter((entry) => entry.proposal.type === 'world')) {
+        if (createdNow[entry.key]) {
+          worldByName.set(entry.proposal.name.toLocaleLowerCase(), createdNow[entry.key]);
+          continue;
+        }
+        try {
+          const created = await createRecord(entry.proposal, rating, null);
+          createdNow[entry.key] = created.id;
+          worldByName.set(entry.proposal.name.toLocaleLowerCase(), created.id);
+          createdCount += 1;
+        } catch {
+          failedCount += 1;
+        }
+      }
+
+      const contextWorldId = result.record?.canAddToWorld === true ? result.record.originWorldId : undefined;
+      const onlyCreatedWorldId = worldByName.size === 1 ? [...worldByName.values()][0] : undefined;
+
+      for (const entry of proposals.filter((entry) => entry.proposal.type !== 'world')) {
+        if (createdNow[entry.key]) continue;
+        const fields = entry.proposal.fields ?? {};
+        const requestedWorldName = ['parentWorldName', 'worldName', 'originWorldName']
+          .map((field) => typeof fields[field] === 'string' ? String(fields[field]).trim().toLocaleLowerCase() : '')
+          .find(Boolean);
+        const originWorldId = contextWorldId ?? (requestedWorldName ? worldByName.get(requestedWorldName) : undefined) ?? onlyCreatedWorldId ?? null;
+        try {
+          const created = await createRecord(entry.proposal, rating, originWorldId);
+          createdNow[entry.key] = created.id;
+          createdCount += 1;
+        } catch {
+          failedCount += 1;
+        }
+      }
+
+      setCreatedProposalIds(createdNow);
+      if (!contextWorldId && worldByName.size === 1) {
+        const [name, id] = [...worldByName.entries()][0];
+        setCreatedWorldTarget({ id, name: proposals.find((entry) => entry.proposal.type === 'world' && entry.proposal.name.toLocaleLowerCase() === name)?.proposal.name ?? name });
+      }
+      setBulkMessage(failedCount ? `Created ${createdCount} record(s); ${failedCount} failed. Individual cards remain available for retry.` : `Created ${createdCount} record(s). Coda's batch is finished.`);
+    } finally {
+      setBulkCreating(false);
+    }
   };
+
+  const canCreateProposal = () => Boolean(user?.permissions.canCreate);
 
   return <>
     {open && <aside className="coda-assistant" aria-label="Coda Assistant">
@@ -210,7 +305,7 @@ export function CodaAssistant() {
       </header>
 
       <nav className="coda-mode-tabs" aria-label="Coda modes">
-        {modes.map(({ id, label, icon: Icon }) => <button key={id} type="button" className={mode === id ? 'is-active' : ''} onClick={() => { setMode(id); setResult(null); setError(''); setApplied(false); }}>
+        {modes.map(({ id, label, icon: Icon }) => <button key={id} type="button" className={mode === id ? 'is-active' : ''} onClick={() => { setMode(id); setResult(null); setError(''); setApplied(false); setHistory([]); setCreatedProposalIds({}); setBulkMessage(''); }}>
           <Icon size={15} /><span>{label}</span>
         </button>)}
       </nav>
@@ -218,7 +313,8 @@ export function CodaAssistant() {
       <div className="coda-assistant__body">
         <p className="coda-mode-hint">{active.hint}</p>
         {!user ? <div className="coda-notice"><strong>Coda needs an Orbis account.</strong><span>Sign in with Discord first, then she can use your configured AI provider.</span></div> : <>
-          <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={active.placeholder} rows={mode === 'sort' ? 9 : 6} />
+          {history.length > 0 && <div className="coda-thread-status"><span>Coda remembers this thread · {Math.floor(history.length / 2)} exchange{history.length === 2 ? '' : 's'}</span><button type="button" onClick={() => { setHistory([]); setResult(null); setText(''); }}>Clear thread</button></div>}
+          <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={history.length ? (result?.questions?.length ? 'Answer Coda here. She will remember the earlier question and your original material.' : 'Give Coda the next instruction in this thread...') : active.placeholder} rows={mode === 'sort' ? 9 : 6} />
           {assetId && <label className="coda-context-toggle">
             <input type="checkbox" checked={includeContext} onChange={(event) => setIncludeContext(event.target.checked)} />
             <span><strong>Include current record</strong><small>Off by default. Only this record is sent to your configured provider.</small></span>
@@ -233,16 +329,20 @@ export function CodaAssistant() {
               result={result}
               canApply={Boolean(inEditor && result.record?.id === assetId)}
               canCreate={canCreateProposal}
+              createdIds={createdProposalIds}
+              bulkCreating={bulkCreating}
+              bulkMessage={bulkMessage}
               onApply={applyDraft}
               onCreate={createProposal}
+              onCreateAll={createAllProposals}
             />
           : <div className="coda-result coda-result--text"><p>{result.text}</p></div>)}
-        {createdWorldTarget && mode === 'sort' && <div className="coda-notice is-success"><strong>{createdWorldTarget.name} created privately.</strong><span>Other proposed records can now be created inside that world.</span></div>}
+        {createdWorldTarget && mode === 'sort' && <div className="coda-notice is-success"><strong>{createdWorldTarget.name} created privately.</strong><span>Related proposals can be created inside that world; standalone proposals remain supported too.</span></div>}
         {applied && <div className="coda-notice is-success"><strong>Draft placed in the editor.</strong><span>Review the filled fields and use the normal Save button when you are satisfied.</span></div>}
       </div>
 
       <footer className="coda-assistant__footer">
-        <span>Coda proposes. You decide. Requests go only to your configured provider and are not saved by Coda.</span>
+        <span>Coda keeps this assistant thread in your browser while it is open. Create/Save actions still require your explicit click.</span>
         {result?.model && <small>{result.model}</small>}
       </footer>
     </aside>}
