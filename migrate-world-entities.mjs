@@ -30,6 +30,7 @@ async function main() {
     const worldId = String(world.id);
     const name = String(world.name ?? worldId);
     const userId = String(world.creator_user_id ?? '');
+    const contentRating = String(world.content_rating ?? 'sfw');
     const document = world.document && typeof world.document === 'object' && !Array.isArray(world.document)
       ? world.document
       : {};
@@ -41,13 +42,13 @@ async function main() {
     }
 
     try {
-      await syncWorldLocations(pool, worldId, userId, document);
+      await syncWorldLocations(pool, worldId, userId, document, contentRating);
       const result = await syncWorldEmbeddedEntities(
         pool,
         worldId,
         userId,
         document,
-        String(world.content_rating ?? 'sfw'),
+        contentRating,
       );
       console.log(`${name}: created ${result.created}, updated ${result.updated}, linked ${result.linked}, warnings ${result.errors.length}.`);
       if (result.errors.length) failures += 1;
