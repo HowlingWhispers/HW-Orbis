@@ -5,6 +5,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import session from 'express-session';
 import helmet from 'helmet';
 import { ZodError } from 'zod';
+import { AssetWriteError } from './asset-writes.js';
 import { createAuthRouter } from './auth.js';
 import { createCodaAssistantRouter } from './coda-assistant.js';
 import { processDueCodaScheduledMessages } from './coda-discord.js';
@@ -147,6 +148,9 @@ if (config.isProduction) {
 
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   if (error instanceof ZodError) return response.status(400).json({ error: 'Invalid request.', details: error.issues });
+  if (error instanceof AssetWriteError) {
+    return response.status(error.status).json({ error: error.message, ...(error.details ? { details: error.details } : {}) });
+  }
   if (error && typeof error === 'object' && 'type' in error && error.type === 'entity.too.large') {
     return response.status(413).json({ error: 'That request is too large. Split the paste into smaller sections and try again.' });
   }

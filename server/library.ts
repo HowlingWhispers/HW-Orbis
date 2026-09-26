@@ -1,37 +1,13 @@
-import { randomUUID } from 'node:crypto';
 import { Router, type Request } from 'express';
 import { z } from 'zod';
+import { applyAssetUpdate, assetTypes, createAssetSchema, insertAsset, updateAssetSchema } from './asset-writes.js';
 import { ensureSuperAdminAccess, refreshSessionAccess, requireCreator, SUPER_ADMIN_DISCORD_ID } from './auth.js';
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import type { SettingsStore } from './settings.js';
 import { canDirectViewAssetRow, canDiscoverAssetRow } from './world-access.js';
 
-const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const sourceTypes = ['curated', 'user-created', 'imported-v2', 'copied', 'public-curated', 'legacy-import'] as const;
-const tones = ['moon', 'forest', 'ember', 'mist', 'violet', 'river'] as const;
-const documentSchema = z.record(z.string(), z.unknown()).refine((value) => JSON.stringify(value).length <= 128_000, 'Record content is too large.');
-
-const locationSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string().trim().min(1).max(120),
-  kind: z.string().trim().max(60).optional(),
-  description: z.string().trim().max(5000).optional(),
-  parentLocationId: z.string().uuid().nullable().optional(),
-  libraryAssetId: z.string().uuid().nullable().optional(),
-}).passthrough();
-
-const createAssetSchema = z.object({
-  type: z.enum(assetTypes),
-  name: z.string().trim().min(1).max(120),
-  summary: z.string().trim().max(2000).default(''),
-  originWorldId: z.string().uuid().nullable().optional(),
-  contentRating: z.enum(['sfw', 'adult']).default('sfw'),
-  tags: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
-  visualTone: z.enum(tones).default('moon'),
-  document: documentSchema.default({}),
-});
-const updateAssetSchema = createAssetSchema.omit({ type: true }).partial().extend({ document: documentSchema.optional() });
 
 function canViewAdult(request: Request) {
   return request.session.access?.canViewAdult === true;
@@ -108,109 +84,6 @@ function requestIdentity(request: Request) {
     isSuperAdmin,
     canSeePrivateWorlds: isSuperAdmin,
   };
-}
-
-async function canAuthorIntoWorld(pool: DatabasePool, worldId: string, userId: string, isSuperAdmin: boolean) {
-  const result = await pool.query(
-    'SELECT id, type, creator_user_id FROM library_assets WHERE id = $1',
-    [worldId],
-  );
-  if (!result.rowCount || result.rows[0].type !== 'world') return false;
-  return isSuperAdmin || result.rows[0].creator_user_id === userId;
-}
-
-async function syncWorldLocations(
-  pool: DatabasePool,
-  worldId: string,
-  userId: string,
-  document: Record<string, unknown>,
-) {
-  const rawLocations = document.locations;
-  if (!Array.isArray(rawLocations)) return;
-
-  const locations = rawLocations
-    .map((loc, idx) => {
-      const parsed = locationSchema.safeParse(loc);
-      if (!parsed.success) {
-        console.warn(`World ${worldId}: location at index ${idx} failed validation`, parsed.error.flatten());
-        return null;
-      }
-      return parsed.data;
-    })
-    .filter((loc): loc is z.infer<typeof locationSchema> => loc !== null);
-
-  const seenPlaceIds = new Set<string>();
-  const errors: string[] = [];
-
-  for (const loc of locations) {
-    let placeId = loc.libraryAssetId;
-    const placeDocument = {
-      kind: loc.kind ?? 'region',
-      parentLocationId: loc.parentLocationId ?? null,
-      description: loc.description ?? '',
-    };
-
-    try {
-      if (placeId) {
-        const existing = await pool.query('SELECT id FROM library_assets WHERE id = $1 AND type = $2 AND origin_world_id = $3', [placeId, 'place', worldId]);
-        if (!existing.rowCount) {
-          errors.push(`Location "${loc.name}" (${loc.id}) references missing place asset ${placeId}; creating new`);
-          placeId = null;
-        }
-      }
-
-      if (!placeId) {
-        const created = await pool.query(
-          `INSERT INTO library_assets (id, type, name, summary, origin_world_id, creator_user_id, source_type, content_rating, tags, visual_tone, document)
-           VALUES ($1, $2, $3, $4, $5, $6, 'user-created', 'sfw', '{}', 'mist', $7::jsonb)
-           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, summary = EXCLUDED.summary, document = EXCLUDED.document, updated_at = now()
-           RETURNING id`,
-          [randomUUID(), 'place', loc.name, loc.description ?? '', worldId, userId, JSON.stringify(placeDocument)],
-        );
-        placeId = created.rows[0].id;
-        if (loc.libraryAssetId !== placeId) {
-          errors.push(`Location "${loc.name}" (${loc.id}) assigned new place asset ${placeId}`);
-        }
-      } else {
-        await pool.query(
-          `UPDATE library_assets SET name = $1, summary = $2, document = $3::jsonb, updated_at = now()
-           WHERE id = $4`,
-          [loc.name, loc.description ?? '', JSON.stringify(placeDocument), placeId],
-        );
-      }
-
-      if (loc.libraryAssetId !== placeId) {
-        await pool.query(
-          `UPDATE library_assets SET document = jsonb_set(document, '{locations}', (
-            SELECT jsonb_agg(
-              CASE WHEN item->>'id' = $2 THEN jsonb_set(item, '{libraryAssetId}', to_jsonb($3::text)) ELSE item END
-            ) FROM jsonb_array_elements(document->'locations') AS item
-          ) WHERE id = $1`,
-          [worldId, loc.id, placeId],
-        );
-      }
-
-      seenPlaceIds.add(placeId!);
-    } catch (err) {
-      errors.push(`Location "${loc.name}" (${loc.id}): ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  const existingPlaces = await pool.query('SELECT id FROM library_assets WHERE origin_world_id = $1 AND type = $2', [worldId, 'place']);
-  for (const row of existingPlaces.rows) {
-    if (!seenPlaceIds.has(row.id)) {
-      console.warn(`World ${worldId}: place asset ${row.id} exists but no embedded location references it; retaining (not auto-deleted)`);
-    }
-  }
-
-  await pool.query(
-    `UPDATE library_assets SET dependency_count = (SELECT count(*) FROM library_assets WHERE origin_world_id = $1) WHERE id = $1`,
-    [worldId],
-  );
-
-  if (errors.length) {
-    console.warn(`World ${worldId} location sync warnings:`, errors);
-  }
 }
 
 export function createLibraryRouter(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
@@ -299,44 +172,19 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
 
   router.post('/assets', requireCreator(config, pool, settingsStore), async (request, response, next) => {
     try {
-      const asset = createAssetSchema.parse(request.body);
       const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
-      if (asset.type === 'world' && asset.originWorldId) {
-        return response.status(400).json({ error: 'A world cannot be created inside another world.' });
-      }
-      if (asset.originWorldId && !await canAuthorIntoWorld(pool, asset.originWorldId, request.session.userId!, isSuperAdmin)) {
-        return response.status(403).json({ error: 'Only the world owner can add records to this world.' });
-      }
-      const document = asset.type === 'world' ? (() => {
-        const rawSettings = asset.document.worldSettings;
-        const settings = rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
-          ? rawSettings as Record<string, unknown>
-          : {};
-        const visibility = settings.visibility === 'public' || settings.visibility === 'unlisted' || settings.visibility === 'private'
-          ? settings.visibility
-          : 'private';
-        return {
-          ...asset.document,
-          worldSettings: {
-            ...settings,
-            visibility,
-            showInLibrary: visibility === 'public' ? settings.showInLibrary === true : false,
-            allowForking: settings.allowForking === true,
-          },
-        };
-      })() : asset.document;
-      const result = await pool.query(
-        `INSERT INTO library_assets (id,type,name,summary,origin_world_id,creator_user_id,source_type,content_rating,tags,visual_tone,document)
-         VALUES ($1,$2,$3,$4,$5,$6,'user-created',$7,$8,$9,$10::jsonb) RETURNING *`,
-        [randomUUID(), asset.type, asset.name, asset.summary, asset.originWorldId ?? null, request.session.userId, asset.contentRating, asset.tags, asset.visualTone, JSON.stringify(document)],
-      );
-      const registry = await pool.query('SELECT code, classification FROM speculus_catalog_registry WHERE asset_id = $1', [result.rows[0].id]);
-      response.status(201).json(mapAsset({
-        ...result.rows[0],
-        restricted: false,
-        speculus_code: registry.rows[0]?.code,
-        speculus_classification: registry.rows[0]?.classification,
-      }, request.session.userId));
+      const { row, result } = await insertAsset(pool, { userId: request.session.userId!, isSuperAdmin }, request.body, 'editor');
+      const registry = await pool.query('SELECT code, classification FROM speculus_catalog_registry WHERE asset_id = $1', [row.id]);
+      response.status(201).json({
+        ...mapAsset({
+          ...row,
+          restricted: false,
+          speculus_code: registry.rows[0]?.code,
+          speculus_classification: registry.rows[0]?.classification,
+        }, request.session.userId),
+        revision: result.revision,
+        changedFields: result.changedFields,
+      });
     } catch (error) {
       next(error);
     }
@@ -345,54 +193,24 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
   router.patch('/assets/:id', async (request, response, next) => {
     try {
       if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to edit this record.' });
-      const asset = updateAssetSchema.parse(request.body);
-      const current = await pool.query('SELECT * FROM library_assets WHERE id = $1', [request.params.id]);
-      if (!current.rowCount) return response.status(404).json({ error: 'Record not found.' });
       const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
-      if (current.rows[0].creator_user_id !== request.session.userId && !isSuperAdmin) return response.status(403).json({ error: 'Only the creator can change this record.' });
-      if (asset.originWorldId !== undefined && asset.originWorldId !== current.rows[0].origin_world_id) {
-        if (current.rows[0].type === 'world' && asset.originWorldId) {
-          return response.status(400).json({ error: 'A world cannot be moved inside another world.' });
-        }
-        if (asset.originWorldId && !await canAuthorIntoWorld(pool, asset.originWorldId, request.session.userId!, isSuperAdmin)) {
-          return response.status(403).json({ error: 'Only the world owner can move records into this world.' });
-        }
-      }
-      const nextAsset = { ...current.rows[0], ...{
-        name: asset.name ?? current.rows[0].name,
-        summary: asset.summary ?? current.rows[0].summary,
-        origin_world_id: asset.originWorldId === undefined ? current.rows[0].origin_world_id : asset.originWorldId,
-        content_rating: asset.contentRating ?? current.rows[0].content_rating,
-        tags: asset.tags ?? current.rows[0].tags,
-        visual_tone: asset.visualTone ?? current.rows[0].visual_tone,
-        document: asset.document ?? current.rows[0].document ?? {},
-      }};
-      if (Object.prototype.hasOwnProperty.call(nextAsset.document, 'name')) nextAsset.document.name = nextAsset.name;
-      if (Object.prototype.hasOwnProperty.call(nextAsset.document, 'title')) nextAsset.document.title = nextAsset.name;
-      const identity = nextAsset.document.identity;
-      if (identity && typeof identity === 'object' && 'name' in (identity as Record<string, unknown>)) (identity as Record<string, unknown>).name = nextAsset.name;
-      const result = await pool.query(
-        `UPDATE library_assets SET name=$2, summary=$3, origin_world_id=$4, content_rating=$5, tags=$6, visual_tone=$7, document=$8::jsonb, updated_at=now()
-         WHERE id=$1 RETURNING *`,
-        [request.params.id, nextAsset.name, nextAsset.summary, nextAsset.origin_world_id, nextAsset.content_rating, nextAsset.tags, nextAsset.visual_tone, JSON.stringify(nextAsset.document)],
-      );
-
-      if (result.rows[0].type === 'world') {
-        await syncWorldLocations(pool, request.params.id, request.session.userId!, result.rows[0].document ?? {});
-      }
-
+      const { row, result } = await applyAssetUpdate(pool, { userId: request.session.userId, isSuperAdmin }, request.params.id, request.body, 'editor');
       const [author, registry] = await Promise.all([
-        pool.query('SELECT display_name, avatar_url FROM users WHERE id = $1', [current.rows[0].creator_user_id]),
+        pool.query('SELECT display_name, avatar_url FROM users WHERE id = $1', [row.creator_user_id]),
         pool.query('SELECT code, classification FROM speculus_catalog_registry WHERE asset_id = $1', [request.params.id]),
       ]);
-      response.json(mapAsset({
-        ...result.rows[0],
-        restricted: false,
-        author_name: author.rows[0]?.display_name,
-        author_avatar_url: author.rows[0]?.avatar_url,
-        speculus_code: registry.rows[0]?.code,
-        speculus_classification: registry.rows[0]?.classification,
-      }, request.session.userId, isSuperAdmin));
+      response.json({
+        ...mapAsset({
+          ...row,
+          restricted: false,
+          author_name: author.rows[0]?.display_name,
+          author_avatar_url: author.rows[0]?.avatar_url,
+          speculus_code: registry.rows[0]?.code,
+          speculus_classification: registry.rows[0]?.classification,
+        }, request.session.userId, isSuperAdmin),
+        revision: result.revision,
+        changedFields: result.changedFields,
+      });
     } catch (error) {
       next(error);
     }

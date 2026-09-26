@@ -47,12 +47,14 @@ describe('Coda Assistant sandbox boundaries', () => {
     );
 
     expect(prompt).toContain('Treat numeric age according to the fictional species');
-    expect(prompt).toContain('explicitly says a species or character is adult');
-    expect(prompt).toContain('Do not invent a different minimum age');
+    expect(prompt).toContain('sexual content may never involve anyone under 18');
+    expect(prompt).toContain('No fictional species maturity, world rule or in-fiction age makes it acceptable');
     expect(prompt).toContain('Do not invent a new faction, institution, legal code, rule system');
     expect(prompt).toContain('Do not rewrite world rules merely to "support"');
     expect(prompt).toContain('Do not add unrelated sexual, reproductive, consent');
     expect(prompt).toContain('Foxes in this species are adults in that age range.');
+    expect(prompt).toContain('You have no database access');
+    expect(prompt).toContain('Never state that something was created, saved, updated');
   });
 
   it('preserves parent, physical sub-race and spiritual-path distinctions in the sort contract', () => {
