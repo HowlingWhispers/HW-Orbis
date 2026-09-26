@@ -70,16 +70,14 @@ export type AssetWriteResult = {
 
 type WriteIdentity = { userId: string; isSuperAdmin: boolean };
 
-type MaybeTransactionalPool = DatabasePool & { connect?: () => Promise<DatabaseClient> };
-
 async function inTransaction<T>(pool: DatabasePool, work: (client: DatabaseExecutor) => Promise<T>) {
   // Production pg.Pool always exposes connect(). Tests intentionally use tiny
   // query-only executors; keep those unit tests useful without weakening the real
   // production transaction path.
-  const connect = (pool as MaybeTransactionalPool).connect;
-  if (typeof connect !== 'function') return work(pool);
+  const maybePool = pool as unknown as { connect?: () => Promise<DatabaseClient> };
+  if (typeof maybePool.connect !== 'function') return work(pool);
 
-  const client = await connect.call(pool);
+  const client = await maybePool.connect();
   try {
     await client.query('BEGIN');
     const result = await work(client);
@@ -274,7 +272,7 @@ export async function insertAsset(
       result: {
         assetId: String(row.id), type: String(row.type), name: String(row.name), revision, operation: 'create',
         changedFields: ['name', 'summary', 'contentRating', 'tags', 'visualTone', 'document'],
-        contentRating: String(row.content_rating), originWorldId: row.origin_world_id ?? null, created: true,
+        contentRating: String(row.content_rating), originWorldId: row.origin_world_id ? String(row.origin_world_id) : null, created: true,
         updatedAt: new Date(String(row.updated_at ?? Date.now())).toISOString(),
       },
     };
@@ -352,7 +350,7 @@ export async function applyAssetUpdate(
     if (identityBlock && typeof identityBlock === 'object' && 'name' in (identityBlock as Record<string, unknown>)) {
       (identityBlock as Record<string, unknown>).name = nextAsset.name;
     }
-    if (nextAsset.type === 'world') nextAsset.document = normalizeWorldDocument(nextAsset.document);
+    if (existing.type === 'world') nextAsset.document = normalizeWorldDocument(nextAsset.document);
 
     const changedFields: string[] = [];
     if (asset.name !== undefined && asset.name !== existing.name) changedFields.push('name');
@@ -369,7 +367,7 @@ export async function applyAssetUpdate(
         row: existing,
         result: {
           assetId, type: String(existing.type), name: String(existing.name), revision, operation: 'update' as const, changedFields: [],
-          contentRating: String(existing.content_rating), originWorldId: existing.origin_world_id ?? null, created: false,
+          contentRating: String(existing.content_rating), originWorldId: existing.origin_world_id ? String(existing.origin_world_id) : null, created: false,
           updatedAt: new Date(String(existing.updated_at ?? Date.now())).toISOString(),
         },
       };
@@ -400,7 +398,7 @@ export async function applyAssetUpdate(
       row,
       result: {
         assetId, type: String(row.type), name: String(row.name), revision, operation: 'update', changedFields,
-        contentRating: String(row.content_rating), originWorldId: row.origin_world_id ?? null, created: false,
+        contentRating: String(row.content_rating), originWorldId: row.origin_world_id ? String(row.origin_world_id) : null, created: false,
         updatedAt: new Date(String(row.updated_at ?? Date.now())).toISOString(),
       },
     };
