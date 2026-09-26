@@ -1,8 +1,9 @@
-import { Activity, BookOpen, Clock, Database, History, KeyRound, MessageCircle, MessageSquareText, Pencil, Power, RefreshCw, Save, Scissors, Search, Send, ServerCog, Settings2, ShieldCheck, Trash2, User, UsersRound, Wifi } from 'lucide-react';
+import { Activity, BookOpen, Clock, Database, History, KeyRound, MessageCircle, MessageSquareText, Pencil, Power, RefreshCw, Save, Scissors, ScrollText, Search, Send, ServerCog, Settings2, ShieldCheck, Trash2, User, UsersRound, Wifi } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   adminApi, type AdminAuditEntry, type AdminCodaChannel, type AdminCodaMember, type AdminCodaMessage,
-  type AdminCodaScheduled, type AdminCodaStatus, type AdminCodaTemplate, type AdminOverview, type AdminSettings,
+  type AdminCodaLog, type AdminCodaLogUser, type AdminCodaScheduled, type AdminCodaStatus, type AdminCodaTemplate, type AdminOverview,
+  type AdminSettings,
 } from '../admin/api';
 import { CODA_COMPOSED_MAX_LENGTH, CODA_MESSAGE_MAX_LENGTH, codaMessagePartCount } from '../admin/codaMessage';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
@@ -103,7 +104,7 @@ function Capability({ title, ids, extra = [], note }: { title: string; ids: stri
 }
 
 function CodaDiscordPanel() {
-  type CodaSubTab = 'channels' | 'dm' | 'templates' | 'schedule' | 'history' | 'status';
+  type CodaSubTab = 'channels' | 'dm' | 'templates' | 'schedule' | 'history' | 'logs' | 'status';
   const [subTab, setSubTab] = useState<CodaSubTab>('channels');
   const [channels, setChannels] = useState<AdminCodaChannel[]>([]);
   const [history, setHistory] = useState<AdminCodaMessage[]>([]);
@@ -259,6 +260,7 @@ function CodaDiscordPanel() {
     { id: 'templates', label: 'Templates', icon: <BookOpen size={15} /> },
     { id: 'schedule', label: 'Schedule', icon: <Clock size={15} /> },
     { id: 'history', label: 'History', icon: <History size={15} /> },
+    { id: 'logs', label: 'Coda logs', icon: <ScrollText size={15} /> },
     { id: 'status', label: 'Status', icon: <Wifi size={15} /> },
   ];
 
@@ -333,6 +335,8 @@ function CodaDiscordPanel() {
       <div className="coda-message-history">{history.length === 0 && <p className="admin-empty">No Coda messages have been sent from Orbis yet.</p>}{history.map((item) => <article key={item.id} className={item.status === 'failed' ? 'is-failed' : item.deletedAt ? 'is-deleted' : ''}><header><strong>{item.destinationType === 'dm' ? 'DM → ' + (item.recipientDisplayName ?? item.recipientUserId ?? 'unknown') : '#' + (channelNames.get(item.channelId) ?? item.channelId)}</strong><span>{item.deletedAt ? 'deleted' : item.status}</span></header><p>{item.content}</p><small>{item.sentByName ?? 'Unknown administrator'} · {new Date(item.createdAt).toLocaleString()}{item.editedAt ? ' · edited' : ''}</small>{item.errorMessage && <em>{item.errorMessage}</em>}{item.status === 'sent' && !item.deletedAt && <div className="coda-history-actions"><button className="button button--ghost" disabled={working} onClick={() => void editHistory(item)}><Pencil size={14} /> Edit</button><button className="button button--ghost" disabled={working} onClick={() => void deleteHistory(item)}><Trash2 size={14} /> Delete</button></div>}</article>)}</div>
     </section>}
 
+    {!loading && subTab === 'logs' && <CodaLogsPanel />}
+
     {!loading && subTab === 'status' && <section className="admin-section">
       <div className="admin-section__title"><Wifi /><div><h2>Coda status & safety</h2><p>Live Discord identity, queue health and the emergency outbound switch.</p></div></div>
       {status && <div className="coda-status-grid">
@@ -347,6 +351,61 @@ function CodaDiscordPanel() {
       <div className={'coda-kill-switch ' + (status?.outboundEnabled ? 'is-live' : 'is-stopped')}><div><Power /><span><strong>{status?.outboundEnabled ? 'Outbound messaging enabled' : 'Coda is in the kennel'}</strong><small>This switch blocks channel posts, DMs, edits/deletes and pauses scheduled deliveries.</small></span></div><button className={'button ' + (status?.outboundEnabled ? 'button--ghost' : 'button--primary')} disabled={working || !status} onClick={async () => { if (!status) return; if (status.outboundEnabled && !window.confirm('Put Coda in the kennel and stop all outbound Discord actions?')) return; setWorking(true); try { const result = await adminApi.setCodaOutbound(!status.outboundEnabled); setStatus({ ...status, outboundEnabled: result.outboundEnabled }); setNotice(result.outboundEnabled ? 'Coda is back out of the kennel.' : 'Coda is safely in the kennel.'); } catch (controlError) { setError(controlError instanceof Error ? controlError.message : 'Coda control could not be changed.'); } finally { setWorking(false); } }}>{status?.outboundEnabled ? 'PUT CODA IN HER KENNEL' : 'Release Coda'}</button></div>
     </section>}
   </div>;
+}
+
+function CodaLogsPanel() {
+  const [items, setItems] = useState<AdminCodaLog[]>([]);
+  const [users, setUsers] = useState<AdminCodaLogUser[]>([]);
+  const [userId, setUserId] = useState('');
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const data = await adminApi.codaLogs(userId || undefined, 150);
+      setItems(data.items); setUsers(data.users);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Coda logs could not be loaded.');
+    } finally { setLoading(false); }
+  }, [userId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  return <section className="admin-section">
+    <div className="admin-section__title"><ScrollText /><div><h2>Coda debugging log</h2><p>Every Coda request and runtime execution, stored per Orbis user. Use it to see what Coda was asked, what the runtime refused, and what the database actually wrote.</p></div></div>
+    <div className="coda-console__actions">
+      <label className="admin-field"><span><strong>Filter by user</strong></span><select value={userId} onChange={(event) => setUserId(event.target.value)}>
+        <option value="">All users</option>
+        {users.map((entry) => <option key={entry.userId} value={entry.userId}>{entry.displayName} · {entry.entries} entries{entry.lastSeen ? ' · last ' + new Date(entry.lastSeen).toLocaleString() : ''}</option>)}
+      </select></label>
+      <button type="button" className="button button--ghost" onClick={() => void load()} disabled={loading}><RefreshCw size={16} /> Refresh</button>
+    </div>
+    {error && <div className="policy-notice coda-console-error">{error}</div>}
+    {loading && <div className="coda-console-status">Reading the Coda log...</div>}
+    {!loading && items.length === 0 && <p className="admin-empty">No Coda requests have been logged yet.</p>}
+    <div className="coda-message-history">
+      {items.map((item) => <article key={item.id} className={item.status === 'ok' || item.status === 'recovered' ? '' : item.status === 'partial' ? 'is-deleted' : 'is-failed'}>
+        <header><strong>{item.userDisplayName ?? 'Unknown user'}</strong><span>{item.status}</span></header>
+        <p>{item.mode ?? item.channel}{item.model ? ' · ' + item.model : ''}{item.intent ? ' · intent ' + item.intent : ''}{item.assetName ? ' · ' + item.assetName : ''}</p>
+        <small>
+          {new Date(item.createdAt).toLocaleString()} · {item.channel}
+          {item.durationMs !== null ? ' · ' + item.durationMs + 'ms' : ''}
+          {item.inputChars !== null ? ' · ' + item.inputChars + ' chars' : ''}
+          {' · ops ' + item.operationCount + ' · saved ' + item.savedCount + ' · failed ' + item.failedCount}
+        </small>
+        {item.message && <em>{item.message}</em>}
+        <div className="coda-history-actions">
+          <button className="button button--ghost" onClick={() => setOpenId(openId === item.id ? null : item.id)}>{openId === item.id ? 'Hide detail' : 'Inspect'}</button>
+        </div>
+        {openId === item.id && <div className="coda-field-preview">
+          <small>request {item.requestId}</small>
+          <pre>{JSON.stringify({ operations: item.operations, writeResults: item.writeResults, recordPatch: item.recordPatch }, null, 2)}</pre>
+        </div>}
+      </article>)}
+    </div>
+  </section>;
 }
 
 function ChannelSelect({ channels, value, onChange }: { channels: AdminCodaChannel[]; value: string; onChange: (value: string) => void }) {
