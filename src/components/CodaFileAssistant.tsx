@@ -4,17 +4,27 @@ import { Link } from 'react-router-dom';
 import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaHistoryTurn } from '../api/coda-assistant';
 import type { LibraryAsset } from '../types/library';
 
-const worldSectionKeys: Array<{ label: string; keys: string[] }> = [
-  { label: 'Identity', keys: ['identity'] },
-  { label: 'Lore', keys: ['lore'] },
-  { label: 'Places', keys: ['locations'] },
-  { label: 'Species & Factions', keys: ['species', 'factions'] },
-  { label: 'Peoples & Societies', keys: ['societies'] },
-  { label: 'Family Trees', keys: ['families'] },
-  { label: 'Memory & Timeline', keys: ['memories'] },
-  { label: 'Rules', keys: ['rules'] },
-  { label: 'Time & Weather', keys: ['timeWeather'] },
-  { label: 'World Brain', keys: ['brain', 'worldBrain'] },
+type WorldTarget = {
+  value: string;
+  label: string;
+  sectionLabel: string;
+  keys: string[];
+  singleCollectionKey?: string;
+  singular?: string;
+};
+
+const worldTargets: WorldTarget[] = [
+  { value: 'identity', label: 'Identity', sectionLabel: 'Identity', keys: ['identity'] },
+  { value: 'lore', label: 'Lore', sectionLabel: 'Lore', keys: ['lore'] },
+  { value: 'place', label: 'Add one place', sectionLabel: 'Places', keys: ['locations'], singleCollectionKey: 'locations', singular: 'place' },
+  { value: 'species', label: 'Add one species', sectionLabel: 'Species & Factions', keys: ['species'], singleCollectionKey: 'species', singular: 'species' },
+  { value: 'faction', label: 'Add one faction', sectionLabel: 'Species & Factions', keys: ['factions'], singleCollectionKey: 'factions', singular: 'faction' },
+  { value: 'society', label: 'Add one society', sectionLabel: 'Peoples & Societies', keys: ['societies'], singleCollectionKey: 'societies', singular: 'society' },
+  { value: 'family', label: 'Add one family', sectionLabel: 'Family Trees', keys: ['families'], singleCollectionKey: 'families', singular: 'family' },
+  { value: 'memory', label: 'Add one memory/event', sectionLabel: 'Memory & Timeline', keys: ['memories'], singleCollectionKey: 'memories', singular: 'memory or event' },
+  { value: 'rules', label: 'Rules', sectionLabel: 'Rules', keys: ['rules'] },
+  { value: 'time', label: 'Time & Weather', sectionLabel: 'Time & Weather', keys: ['timeWeather'] },
+  { value: 'brain', label: 'World Brain', sectionLabel: 'World Brain', keys: ['brain', 'worldBrain'] },
 ];
 
 function historyText(result: CodaAssistantResponse) {
@@ -23,34 +33,64 @@ function historyText(result: CodaAssistantResponse) {
     questions: result.questions ?? [],
     warnings: result.warnings ?? [],
     recordPatch: result.recordPatch ?? null,
-  }).slice(0, 60_000);
+  }).slice(0, 12_000);
 }
 
-function currentWorldForgeSection() {
-  const active = document.querySelector<HTMLButtonElement>('.forge-tabs button.is-active');
-  return active?.textContent?.trim() ?? '';
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function patchHasKey(patch: unknown, key: string) {
-  return Boolean(patch) && typeof patch === 'object' && !Array.isArray(patch)
-    && Object.prototype.hasOwnProperty.call(patch, key);
+function compactCollectionIndex(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 200).map((item) => {
+    if (!isRecord(item)) return item;
+    const compact: Record<string, unknown> = {};
+    for (const key of ['id', 'name', 'title', 'kind', 'type', 'classification', 'parentSpeciesName', 'parentLocationId', 'parentSocietyId']) {
+      const child = item[key];
+      if (typeof child === 'string' || typeof child === 'number' || typeof child === 'boolean') compact[key] = child;
+    }
+    return Object.keys(compact).length ? compact : { name: '(unnamed entry)' };
+  });
 }
 
-function targetWorldForgeSection(patch: unknown, currentSection: string) {
-  const current = worldSectionKeys.find((section) => section.label === currentSection);
-  if (current?.keys.some((key) => patchHasKey(patch, key))) return current.label;
-  return worldSectionKeys.find((section) => section.keys.some((key) => patchHasKey(patch, key)))?.label ?? '';
+function compactWorldTargetContext(asset: LibraryAsset, target: WorldTarget) {
+  const document = asset.document ?? {};
+  const context: Record<string, unknown> = {
+    world: asset.name,
+    identity: isRecord(document.identity) ? document.identity : {},
+  };
+
+  for (const key of target.keys) {
+    if (target.singleCollectionKey === key) {
+      const collection = document[key];
+      context[key] = {
+        existingCount: Array.isArray(collection) ? collection.length : 0,
+        existingIndex: compactCollectionIndex(collection),
+      };
+    } else if (Object.prototype.hasOwnProperty.call(document, key)) {
+      context[key] = document[key];
+    }
+  }
+
+  const serialized = JSON.stringify(context);
+  return serialized.length > 12_000
+    ? `${serialized.slice(0, 12_000)}\n[compact target context truncated]`
+    : serialized;
 }
 
-function scopeWorldPatch(patch: unknown, sectionLabel: string) {
-  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return null;
-  const section = worldSectionKeys.find((entry) => entry.label === sectionLabel);
-  if (!section) return patch;
-  const source = patch as Record<string, unknown>;
+function scopeWorldPatch(patch: unknown, target: WorldTarget) {
+  if (!isRecord(patch)) return null;
+
+  if (target.singleCollectionKey) {
+    const incoming = patch[target.singleCollectionKey];
+    if (!Array.isArray(incoming) || incoming.length === 0) return null;
+    return { [target.singleCollectionKey]: [incoming[0]] };
+  }
+
   const scoped = Object.fromEntries(
-    section.keys
-      .filter((key) => Object.prototype.hasOwnProperty.call(source, key))
-      .map((key) => [key, source[key]]),
+    target.keys
+      .filter((key) => Object.prototype.hasOwnProperty.call(patch, key))
+      .map((key) => [key, patch[key]]),
   );
   return Object.keys(scoped).length > 0 ? scoped : null;
 }
@@ -72,7 +112,11 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
   const [settingsPath, setSettingsPath] = useState('');
   const [applied, setApplied] = useState(false);
   const [appliedSection, setAppliedSection] = useState('');
-  const [worldTarget, setWorldTarget] = useState('auto');
+  const [worldTarget, setWorldTarget] = useState('identity');
+
+  const selectedWorldTarget = asset.type === 'world'
+    ? worldTargets.find((target) => target.value === worldTarget) ?? worldTargets[0]
+    : undefined;
 
   const outsideScope = useMemo(
     () => (result?.proposals?.length ?? 0) + (result?.operations?.length ?? 0) > 0,
@@ -82,14 +126,13 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
   const run = async () => {
     const input = text.trim();
     if (!input || working) return;
-    const openSection = asset.type === 'world' ? currentWorldForgeSection() : '';
-    const requestedSection = asset.type === 'world'
-      ? (worldTarget === 'auto' ? openSection : worldTarget)
+    const target = selectedWorldTarget;
+    const targetInstruction = target
+      ? target.singleCollectionKey
+        ? `\n- TARGET: ${target.label}. Draft exactly ONE new ${target.singular}.\n- recordPatch must contain ONLY the top-level key ${target.singleCollectionKey}, with exactly one new object inside its array.\n- Never echo, rewrite, or return the whole existing ${target.singleCollectionKey} collection. Existing entries are supplied only as a compact index so you can avoid duplicates.\n- If the user describes several entries, draft only the first/next one now. They can ask for the next entry in another turn.`
+        : `\n- TARGET WORLD FORGE SECTION: ${target.label}. Put recordPatch changes ONLY under these existing top-level key(s): ${target.keys.join(', ')}. Do not include any other World Forge section.`
       : '';
-    const requestedDefinition = worldSectionKeys.find((section) => section.label === requestedSection);
-    const targetInstruction = requestedDefinition
-      ? `\n- TARGET WORLD FORGE SECTION: ${requestedDefinition.label}. Put recordPatch changes ONLY under these existing top-level key(s): ${requestedDefinition.keys.join(', ')}. Do not include Identity or any other section unless Identity itself is the selected target.`
-      : '';
+    const compactContext = target ? compactWorldTargetContext(asset, target) : '';
 
     setWorking(true);
     setError('');
@@ -99,10 +142,10 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
     try {
       const next = await askCoda({
         mode: 'sort',
-        text: `${input}\n\nFILE-FOCUSED DRAFT MODE:\n- Work only on the currently open ${asset.type} file named ${asset.name}.\n- Put changes for this file in recordPatch.\n- Do not create, update, save, or propose another record.\n- Do not change ownership, privacy, permissions, credentials, content rating, IDs, or other protected metadata.\n- This is an unsaved draft. The human will review it and press Save in Orbis.${targetInstruction}`,
+        text: `${input}\n\nFILE-FOCUSED DRAFT MODE:\n- Work only on the currently open ${asset.type} file named ${asset.name}.\n- Put changes for this file in recordPatch.\n- Do not create, update, save, or propose another record.\n- Do not change ownership, privacy, permissions, credentials, content rating, IDs, or other protected metadata.\n- This is an unsaved draft. The human will review it and press Save in Orbis.${targetInstruction}${compactContext ? `\n\nCOMPACT TARGET CONTEXT (reference only; do not copy it wholesale into the patch):\n${compactContext}` : ''}`,
         assetId: asset.id,
-        includeRecordContext: true,
-        pageHint: `File editor · type=${asset.type} · name=${asset.name} · section=${requestedSection || 'n/a'} · current_file_only`.slice(0, 120),
+        includeRecordContext: asset.type !== 'world',
+        pageHint: `File editor · type=${asset.type} · name=${asset.name} · target=${target?.label ?? 'current file'} · current_file_only`.slice(0, 120),
         history,
       });
       setResult(next);
@@ -110,7 +153,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
         ...current,
         { role: 'user' as const, content: input },
         { role: 'assistant' as const, content: historyText(next) },
-      ].slice(-8));
+      ].slice(-6));
       setText('');
     } catch (reason) {
       if (reason instanceof CodaAssistantError) {
@@ -126,26 +169,22 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
 
   const applyDraft = () => {
     if (!result?.recordPatch || result.record?.id !== asset.id) return;
-    const openSection = asset.type === 'world' ? currentWorldForgeSection() : '';
-    const explicitSection = asset.type === 'world' && worldTarget !== 'auto' ? worldTarget : '';
-    const targetSection = asset.type === 'world'
-      ? (explicitSection || targetWorldForgeSection(result.recordPatch, openSection))
-      : '';
-    const patch = explicitSection ? scopeWorldPatch(result.recordPatch, explicitSection) : result.recordPatch;
+    const target = selectedWorldTarget;
+    const patch = target ? scopeWorldPatch(result.recordPatch, target) : result.recordPatch;
 
     if (!patch) {
-      setError(`Coda did not return a ${explicitSection} patch. Nothing was loaded. Ask her to draft that section again.`);
+      setError(`Coda did not return a valid ${target?.label ?? 'current-file'} patch. Nothing was loaded.`);
       setApplied(false);
       setAppliedSection('');
       return;
     }
 
     window.dispatchEvent(new CustomEvent('orbis:coda-apply-draft', {
-      detail: { assetId: asset.id, patch, preferredSection: targetSection },
+      detail: { assetId: asset.id, patch, preferredSection: target?.sectionLabel ?? '' },
     }));
-    focusWorldForgeSection(targetSection);
+    if (target) focusWorldForgeSection(target.sectionLabel);
     setError('');
-    setAppliedSection(targetSection);
+    setAppliedSection(target?.sectionLabel ?? '');
     setApplied(true);
   };
 
@@ -171,17 +210,24 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
         <div><dt>Type</dt><dd>{asset.type}</dd></div>
         <div><dt>Record ID</dt><dd>{asset.id}</dd></div>
         <div><dt>World</dt><dd>{asset.type === 'world' ? asset.name : asset.originWorldName ?? asset.originWorldId ?? 'Standalone'}</dd></div>
-        <div><dt>Scope</dt><dd>current_file_only</dd></div>
+        <div><dt>Scope</dt><dd>{asset.type === 'world' ? selectedWorldTarget?.label ?? 'World section' : 'current_file_only'}</dd></div>
       </dl>
       {asset.type === 'world' && <label className="forge-field coda-file-target">
-        <span>Coda target section</span>
-        <select value={worldTarget} disabled={working} onChange={(event) => { setWorldTarget(event.target.value); setApplied(false); setAppliedSection(''); setError(''); }}>
-          <option value="auto">Follow the open World Forge tab</option>
-          {worldSectionKeys.map((section) => <option key={section.label} value={section.label}>{section.label}</option>)}
+        <span>Coda target</span>
+        <select value={worldTarget} disabled={working} onChange={(event) => {
+          setWorldTarget(event.target.value);
+          setResult(null);
+          setApplied(false);
+          setAppliedSection('');
+          setError('');
+        }}>
+          {worldTargets.map((target) => <option key={target.value} value={target.value}>{target.label}</option>)}
         </select>
-        <small>Pick exactly where Coda may place her next draft. An explicit choice is enforced when the draft is loaded.</small>
+        <small>Collections are handled one entry at a time so Coda does not spend tokens rewriting an entire list.</small>
       </label>}
-      <p>The open file is sent to your configured NovelAI provider so Coda can draft against its real structure. Coda cannot save this panel's draft.</p>
+      <p>{asset.type === 'world'
+        ? 'Coda receives the selected section plus a compact index of existing entries, not the entire world document. Nothing is saved until you press Save in Orbis.'
+        : 'The open file is sent to your configured NovelAI provider so Coda can draft against its real structure. Coda cannot save this panel\'s draft.'}</p>
     </section>
 
     <div className="coda-file-transcript" aria-live="polite">
@@ -193,7 +239,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
       {result?.recordPatch ? <section className="coda-file-draft">
         <div><strong>Unsaved draft ready</strong><small>Review the patch, load it into the editor, then use Orbis Save when you are satisfied.</small></div>
         <details><summary>Preview JSON patch</summary><pre>{JSON.stringify(result.recordPatch, null, 2)}</pre></details>
-        <button type="button" className="button button--primary" onClick={applyDraft}>Load draft into {asset.type === 'world' && worldTarget !== 'auto' ? worldTarget : 'open file'}</button>
+        <button type="button" className="button button--primary" onClick={applyDraft}>Load draft into {selectedWorldTarget?.label ?? 'open file'}</button>
       </section> : result ? <div className="coda-file-notice"><BookOpen size={15} /><span>Coda did not return an editable patch for this file. Give her another instruction and keep it focused on the open record.</span></div> : null}
       {applied && <div className="coda-file-notice is-success"><div><strong>Draft loaded locally{appliedSection ? ` into ${appliedSection}` : ''}.</strong><span>Nothing has been saved yet. Review the editor and press Save yourself.</span></div></div>}
     </div>
