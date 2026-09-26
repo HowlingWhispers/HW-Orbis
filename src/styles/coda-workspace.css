@@ -1,0 +1,163 @@
+.coda-workspace-page { max-width: 1500px; margin: 0 auto; }
+.coda-workspace-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(26, 53, 86, .5), rgba(8, 23, 42, .38));
+}
+.coda-workspace-hero__mark {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(143, 173, 215, .28);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(119, 172, 226, .3), rgba(24, 54, 89, .2) 58%, rgba(8, 19, 37, .7));
+  color: var(--moon);
+}
+.coda-workspace-hero h1 { margin: 2px 0 4px; font-family: var(--serif); font-size: clamp(30px, 4vw, 44px); }
+.coda-workspace-hero p { max-width: 820px; margin: 0; color: var(--muted); line-height: 1.55; }
+
+.coda-workspace-layout { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.coda-workspace-sidebar { display: grid; gap: 12px; position: sticky; top: 82px; max-height: calc(100vh - 100px); overflow-y: auto; padding-right: 2px; }
+.coda-workspace-panel,
+.coda-workbench {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(8, 22, 40, .62);
+  box-shadow: inset 0 1px rgba(255,255,255,.02);
+}
+.coda-workspace-panel { padding: 13px; }
+.coda-workspace-panel__heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.coda-workspace-panel__heading > div { display: flex; align-items: center; gap: 8px; }
+.coda-workspace-panel__heading > div > span {
+  width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%;
+  background: rgba(217, 170, 112, .12); color: var(--amber-bright); font-size: 10px; font-weight: 800;
+}
+.coda-workspace-panel__heading strong { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.coda-workspace-panel__heading small,
+.coda-workspace-panel__heading > svg,
+.coda-workspace-panel__heading a { color: var(--faint); font-size: 10px; }
+
+.coda-world-search { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--faint); background: rgba(3, 12, 25, .42); }
+.coda-world-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: 12px 'Nunito Sans'; }
+.coda-world-list { display: grid; gap: 7px; margin-top: 9px; max-height: 310px; overflow-y: auto; }
+.coda-world-choice { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; align-items: start; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.018); cursor: pointer; }
+.coda-world-choice:hover { border-color: var(--line-strong); }
+.coda-world-choice.is-selected { border-color: rgba(217, 170, 112, .36); background: rgba(217, 170, 112, .07); }
+.coda-world-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.coda-world-choice__check { width: 18px; height: 18px; display: grid; place-items: center; margin-top: 1px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--amber-bright); }
+.coda-world-choice.is-selected .coda-world-choice__check { border-color: rgba(217, 170, 112, .55); background: rgba(217, 170, 112, .12); }
+.coda-world-choice > span:last-child { min-width: 0; display: grid; gap: 2px; }
+.coda-world-choice strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.coda-world-choice small { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--faint); font-size: 10px; line-height: 1.35; }
+
+.coda-workspace-toggle { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(143, 173, 215, .09); cursor: pointer; }
+.coda-workspace-toggle:first-of-type { border-top: 0; }
+.coda-workspace-toggle input { margin-top: 3px; accent-color: var(--amber); }
+.coda-workspace-toggle span { display: grid; gap: 2px; }
+.coda-workspace-toggle strong { font-size: 11px; }
+.coda-workspace-toggle small { color: var(--faint); font-size: 10px; line-height: 1.35; }
+.coda-workspace-world-summary h3 { margin: 3px 0 4px; font-family: var(--serif); font-size: 24px; }
+.coda-workspace-world-summary p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.coda-workspace-counts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.coda-workspace-counts span { display: inline-flex; gap: 4px; align-items: center; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--faint); font-size: 9px; text-transform: uppercase; }
+.coda-workspace-counts b { color: var(--moon); }
+.coda-workspace-muted,
+.coda-workspace-error { margin: 9px 0 0; color: var(--faint); font-size: 11px; }
+.coda-workspace-error { color: #dca8a8; }
+
+.coda-workbench { min-height: calc(100vh - 135px); display: flex; flex-direction: column; overflow: hidden; }
+.coda-workbench-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding: 12px; border-bottom: 1px solid var(--line); }
+.coda-workbench-tabs button { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.02); color: var(--muted); font: 700 12px 'Nunito Sans'; cursor: pointer; }
+.coda-workbench-tabs button:hover { color: var(--text); border-color: var(--line-strong); }
+.coda-workbench-tabs button.is-active { color: var(--amber-bright); border-color: rgba(217, 170, 112, .36); background: rgba(217, 170, 112, .08); }
+.coda-workbench-heading { display: flex; justify-content: space-between; gap: 16px; align-items: start; padding: 16px 18px 12px; }
+.coda-workbench-heading h2 { margin: 2px 0 3px; font-family: var(--serif); font-size: 28px; }
+.coda-workbench-heading p { margin: 0; color: var(--muted); font-size: 12px; }
+.coda-workbench-output { flex: 1 1 auto; min-height: 260px; max-height: calc(100vh - 520px); overflow-y: auto; padding: 4px 18px 18px; }
+.coda-workspace-callout { display: flex; align-items: flex-start; gap: 11px; padding: 13px; border: 1px solid rgba(143, 173, 215, .18); border-radius: 9px; background: rgba(41, 71, 107, .12); color: var(--moon); }
+.coda-workspace-callout div { display: grid; gap: 3px; }
+.coda-workspace-callout strong { color: var(--text); font-size: 12px; }
+.coda-workspace-callout p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.coda-workspace-callout.is-error { border-color: rgba(203, 105, 105, .3); background: rgba(125, 43, 43, .12); }
+.coda-workspace-summary { margin: 0 0 12px; color: var(--text); font-size: 14px; line-height: 1.6; }
+.coda-workspace-text { white-space: pre-wrap; color: var(--text); font-size: 13px; line-height: 1.65; }
+.coda-workspace-result-list { margin-top: 14px; }
+.coda-workspace-result-list > strong { color: var(--amber-bright); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.coda-workspace-result-list ul { margin: 6px 0 0; padding-left: 19px; }
+.coda-workspace-result-list li { margin: 4px 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.coda-workspace-result-list.is-warning li { color: #d9b9a4; }
+.coda-workspace-patch { display: grid; gap: 9px; margin-top: 14px; padding: 12px; border: 1px solid rgba(217, 170, 112, .24); border-radius: 9px; background: rgba(112, 74, 34, .1); }
+.coda-workspace-patch > div { display: grid; gap: 2px; }
+.coda-workspace-patch strong { color: var(--amber-bright); font-size: 12px; }
+.coda-workspace-patch small { color: var(--faint); font-size: 10px; }
+.coda-workspace-patch summary,
+.coda-workspace-proposal summary { color: var(--moon); font-size: 10px; font-weight: 700; cursor: pointer; }
+.coda-workspace-patch pre,
+.coda-workspace-proposal pre { max-height: 240px; overflow: auto; margin: 7px 0 0; padding: 9px; border-radius: 7px; background: rgba(3, 12, 25, .5); color: var(--muted); font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.coda-workspace-proposals { display: grid; gap: 8px; margin-top: 14px; }
+.coda-workspace-proposals__heading { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.coda-workspace-proposals__heading strong { color: var(--amber-bright); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.coda-workspace-proposals__heading small { color: var(--faint); font-size: 10px; }
+.coda-workspace-proposal { padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(11, 27, 49, .58); }
+.coda-workspace-proposal.is-world { border-color: rgba(217, 170, 112, .22); }
+.coda-workspace-proposal header { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.coda-workspace-proposal header > span { padding: 2px 6px; border-radius: 5px; background: rgba(109, 153, 208, .12); color: var(--moon); font-size: 9px; text-transform: uppercase; }
+.coda-workspace-proposal header strong { font-size: 12px; }
+.coda-workspace-proposal > p { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.coda-workspace-proposal details { margin-top: 8px; }
+.coda-workspace-proposal__actions { display: flex; justify-content: flex-end; gap: 8px; align-items: center; margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(143, 173, 215, .11); }
+.coda-workspace-proposal__actions select { height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: rgba(4, 13, 27, .62); color: var(--text); font: 11px 'Nunito Sans'; }
+.coda-workspace-proposal__note { margin-top: 9px; padding: 8px 9px; border-radius: 7px; background: rgba(217, 170, 112, .07); color: var(--muted); font-size: 10px; line-height: 1.4; }
+
+.coda-workbench-composer { flex: 0 0 auto; padding: 14px 18px 17px; border-top: 1px solid var(--line); background: rgba(4, 14, 28, .28); }
+.coda-workbench-memory { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: var(--muted); font-size: 10px; }
+.coda-workbench-memory small { color: var(--faint); }
+.coda-workbench-composer textarea { width: 100%; min-height: 210px; max-height: 42vh; padding: 13px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 10px; outline: none; background: rgba(3, 12, 25, .56); color: var(--text); font: 13px/1.55 'Nunito Sans'; }
+.coda-workbench-composer textarea:focus { border-color: rgba(143, 173, 215, .5); box-shadow: 0 0 0 3px rgba(103, 148, 204, .08); }
+.coda-workbench-composer textarea:disabled { opacity: .5; }
+.coda-workbench-composer__footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 9px; }
+.coda-workbench-composer__footer > span { color: var(--faint); font-size: 10px; }
+
+.coda-workspace-empty { min-height: 50vh; display: grid; place-items: center; align-content: center; gap: 7px; text-align: center; color: var(--moon); }
+.coda-workspace-empty h1 { margin: 0; color: var(--text); font-family: var(--serif); font-size: 38px; }
+.coda-workspace-empty p { max-width: 620px; margin: 0; color: var(--muted); line-height: 1.55; }
+
+:root[data-theme='light'] .coda-workspace-panel,
+:root[data-theme='light'] .coda-workbench { background: rgba(250, 246, 239, .84); }
+:root[data-theme='light'] .coda-world-search,
+:root[data-theme='light'] .coda-workbench-composer textarea,
+:root[data-theme='light'] .coda-workspace-proposal__actions select { background: rgba(255, 252, 247, .84); }
+:root[data-theme='light'] .coda-workspace-proposal { background: rgba(255, 252, 247, .7); }
+:root[data-theme='light'] .coda-workspace-patch pre,
+:root[data-theme='light'] .coda-workspace-proposal pre { background: rgba(106, 82, 54, .06); }
+
+@media (max-width: 980px) {
+  .coda-workspace-layout { grid-template-columns: 1fr; }
+  .coda-workspace-sidebar { position: static; max-height: none; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .coda-workspace-world-summary { grid-column: 1 / -1; }
+  .coda-workbench { min-height: 760px; }
+  .coda-workbench-output { max-height: none; }
+}
+
+@media (max-width: 650px) {
+  .coda-workspace-hero { align-items: flex-start; padding: 16px; }
+  .coda-workspace-sidebar { grid-template-columns: 1fr; }
+  .coda-workspace-world-summary { grid-column: auto; }
+  .coda-workbench-tabs { gap: 5px; padding: 9px; }
+  .coda-workbench-heading { display: grid; padding: 14px; }
+  .coda-workbench-output { padding: 2px 14px 14px; }
+  .coda-workbench-composer { padding: 12px 14px 14px; }
+  .coda-workbench-composer textarea { min-height: 180px; }
+  .coda-workbench-memory,
+  .coda-workbench-composer__footer,
+  .coda-workspace-proposals__heading { align-items: flex-start; flex-direction: column; }
+  .coda-workspace-proposal__actions { align-items: stretch; flex-direction: column; }
+}
