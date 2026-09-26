@@ -52,6 +52,7 @@ export class FixtureLibraryApi implements LibraryApi {
       visualTone: asset.visualTone ?? 'moon' as const,
       document: asset.document ?? {},
       canEdit: true,
+      isOwner: true,
     };
     fixtures.unshift(created);
     return created;
@@ -88,6 +89,15 @@ export class FixtureLibraryApi implements LibraryApi {
     }
     const finalIndex = fixtures.findIndex((item) => item.id === id);
     fixtures.splice(finalIndex, 1);
+  }
+
+  async searchOwnershipTransferTargets(_id: string, _search: string) {
+    await pause();
+    return [];
+  }
+
+  async transferWorldOwnership(_id: string, _input: { targetUserId: string; confirmName: string }) {
+    throw new Error('Ownership transfer requires the live Orbis API.');
   }
 
   async simulateAsset(_id: string): Promise<{ launchUrl: string; expiresAt: number }> {
