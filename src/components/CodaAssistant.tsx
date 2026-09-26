@@ -168,7 +168,7 @@ export function CodaAssistant() {
     try {
       const next = await askCoda({ mode, text: input, history, pageHint: pageHint(location.pathname), ...(assetId ? { assetId, includeRecordContext: includeContext } : {}) });
       setResult(next);
-      setHistory((current) => [...current, { role: 'user', content: input }, { role: 'assistant', content: assistantHistoryText(next) }].slice(-8));
+      setHistory((current): CodaHistoryTurn[] => [...current, { role: 'user' as const, content: input }, { role: 'assistant' as const, content: assistantHistoryText(next) }].slice(-8));
       setText('');
     } catch (reason) {
       if (reason instanceof CodaAssistantError) {
