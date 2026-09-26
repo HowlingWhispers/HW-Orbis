@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import { ensureSuperAdminAccess, refreshSessionAccess } from './auth.js';
+import { listCodaLogs, listCodaLogUsers } from './coda-log.js';
 import { adminSettingsSchema, SettingsLockoutError, type SettingsStore } from './settings.js';
 import {
   CodaDiscordError, cancelCodaScheduledMessage, codaControlSchema, codaDirectMessageSchema, codaDiscordMessageSchema,
@@ -206,6 +207,17 @@ export function createAdminRouter(config: AppConfig, pool: DatabasePool, setting
     try { response.json(await cancelCodaScheduledMessage(pool, String(request.params.id))); }
     catch (error) {
       if (error instanceof CodaDiscordError) return response.status(error.httpStatus).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.get('/coda/logs', async (request, response, next) => {
+    try {
+      const userId = typeof request.query.userId === 'string' && request.query.userId ? request.query.userId : undefined;
+      const limit = typeof request.query.limit === 'string' ? Number(request.query.limit) : 100;
+      const [items, users] = await Promise.all([listCodaLogs(pool, { ...(userId ? { userId } : {}), limit }), listCodaLogUsers(pool)]);
+      response.json({ items, users });
+    } catch (error) {
       next(error);
     }
   });

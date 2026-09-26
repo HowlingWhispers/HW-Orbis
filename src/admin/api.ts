@@ -89,6 +89,39 @@ export interface AdminCodaScheduled {
   updatedAt: string;
 }
 
+export interface AdminCodaLogUser {
+  userId: string;
+  displayName: string;
+  entries: number;
+  lastSeen: string | null;
+}
+
+export interface AdminCodaLog {
+  id: number;
+  userId: string;
+  userDisplayName: string | null;
+  requestId: string;
+  channel: 'assistant' | 'execute';
+  mode: string | null;
+  model: string | null;
+  pageHint: string | null;
+  assetId: string | null;
+  assetName: string | null;
+  intent: string | null;
+  applyOperations: boolean;
+  operationCount: number;
+  savedCount: number;
+  failedCount: number;
+  status: 'ok' | 'partial' | 'failed' | 'refused' | 'recovered';
+  durationMs: number | null;
+  inputChars: number | null;
+  operations: unknown;
+  writeResults: unknown;
+  recordPatch: unknown;
+  message: string | null;
+  createdAt: string;
+}
+
 export interface AdminCodaStatus {
   configured: boolean;
   outboundEnabled: boolean;
@@ -144,6 +177,8 @@ export const adminApi = {
   scheduleCodaMessage: (input: { destinationType: 'channel' | 'dm'; targetId: string; content: string; replyTo?: string; sendAt: string }) =>
     request<{ item: AdminCodaScheduled }>('/coda/scheduled', { method: 'POST', body: JSON.stringify(input) }),
   cancelCodaScheduled: (id: string) => request<{ ok: boolean }>('/coda/scheduled/' + encodeURIComponent(id), { method: 'DELETE' }),
+  codaLogs: (userId?: string, limit = 100) =>
+    request<{ items: AdminCodaLog[]; users: AdminCodaLogUser[] }>('/coda/logs?limit=' + encodeURIComponent(String(limit)) + (userId ? '&userId=' + encodeURIComponent(userId) : '')),
   codaStatus: () => request<AdminCodaStatus>('/coda/status'),
   setCodaOutbound: (outboundEnabled: boolean, splitLongMessages?: boolean) =>
     request<{ outboundEnabled: boolean; splitLongMessages: boolean; updatedAt: string; updatedByUserId: string | null }>('/coda/control', {
