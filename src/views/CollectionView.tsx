@@ -13,6 +13,7 @@ import { useSEO } from '../hooks/useSEO';
 
 const germanCollection: Record<string, { label: string; description: string }> = {
   world: { label: 'Welten', description: 'Vollständig erstellte Realitäten und ihr Kanon.' },
+  persona: { label: 'Personas', description: 'Wiederverwendbare Spieleridentitäten für Welten und Simulationen.' },
   character: { label: 'Charaktere', description: 'Die Personen und Persönlichkeiten, die in ihnen leben.' },
   place: { label: 'Orte', description: 'Regionen, Wege, Zufluchtsorte und Räume.' },
   item: { label: 'Gegenstände', description: 'Objekte, Werkzeuge, Artefakte und Besitztümer.' },
@@ -54,6 +55,7 @@ export function CollectionView({ all = false }: { all?: boolean }) {
     : localizedNavigation?.description ?? navigation?.description;
   const canonicalPath = all ? '/all' : `/library/${type}`;
   const canCreateWorld = selectedType === 'world' && Boolean(user);
+  const canCreatePersona = selectedType === 'persona' && Boolean(user);
 
   useSEO({
     title: de
@@ -87,6 +89,10 @@ export function CollectionView({ all = false }: { all?: boolean }) {
             <button className="button button--primary" type="button" onClick={() => navigate('/worlds/new')}><Plus size={17} /> {de ? 'Welt erstellen' : 'Create World'}</button>
             <button className="button button--secondary" type="button" onClick={() => navigate('/worlds/new#coda')}><Sparkles size={17} /> {de ? 'Mit Coda erstellen' : 'Create with Coda'}</button>
             <button className="button button--secondary" type="button" onClick={() => navigate('/worlds/new?import=1#import-json')}><FileJson size={17} /> {de ? 'JSON importieren' : 'Import JSON'}</button>
+          </>}
+          {canCreatePersona && <>
+            <button className="button button--primary" type="button" onClick={() => navigate('/personas/new')}><Plus size={17} /> {de ? 'Persona erstellen' : 'Create Persona'}</button>
+            <button className="button button--secondary" type="button" onClick={() => navigate('/personas/new')}><Sparkles size={17} /> {de ? 'Mit Coda erstellen' : 'Create with Coda'}</button>
           </>}
           <span className="collection-header__count">{data?.total ?? '...'} <small>{de ? 'Datensätze' : 'records'}</small></span>
         </div>
