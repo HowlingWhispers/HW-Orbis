@@ -1,5 +1,6 @@
 export const assetTypes = [
   'world',
+  'persona',
   'character',
   'place',
   'item',
