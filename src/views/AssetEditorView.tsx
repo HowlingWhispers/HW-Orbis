@@ -5,6 +5,7 @@ import { libraryApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { CodaFileAssistant } from '../components/CodaFileAssistant';
 import { GenericAssetEditor } from '../components/GenericAssetEditor';
+import { PersonaEditor } from '../components/PersonaEditor';
 import { ErrorState, LoadingState } from '../components/StatePanel';
 import { WorldForgeEditor } from '../components/WorldForgeEditor';
 import { useLibraryData } from '../hooks/useLibraryData';
@@ -27,12 +28,17 @@ export function AssetEditorView() {
   if (!user) return <div className="page editor-denied"><CircleAlert /><h1>Sign in to edit</h1><p>Discord ownership protects every Orbis record.</p></div>;
   if (!asset.canEdit) return <div className="page editor-denied"><CircleAlert /><h1>Record protected</h1><p>Only {asset.author?.displayName ?? 'the original creator'} can change this record.</p><Link className="button button--secondary" to={`/asset/${asset.id}`}>Return to record</Link></div>;
 
-  const editor = asset.type === 'world' ? <WorldForgeEditor asset={asset} /> : <GenericAssetEditor asset={asset} />;
+  const editor = asset.type === 'world'
+    ? <WorldForgeEditor asset={asset} />
+    : asset.type === 'persona'
+      ? <PersonaEditor asset={asset} />
+      : <GenericAssetEditor asset={asset} />;
+  const supportsCodaFileMode = asset.type === 'world' || asset.type === 'persona';
 
   return <div className={`page editor-page ${codaMode ? 'editor-page--coda' : ''}`}>
     <div className="editor-page__nav">
       <Link className="back-link" to={`/asset/${asset.id}`}><ArrowLeft size={16} /> Back to record</Link>
-      {asset.type === 'world' && !codaMode && <Link className="button button--secondary" to={`/asset/${asset.id}/edit?coda=1`}><Sparkles size={16} /> Edit with Coda</Link>}
+      {supportsCodaFileMode && !codaMode && <Link className="button button--secondary" to={`/asset/${asset.id}/edit?coda=1`}><Sparkles size={16} /> Edit with Coda</Link>}
     </div>
     {codaMode
       ? <div className="coda-file-layout"><CodaFileAssistant asset={asset} /><div className="coda-file-layout__editor">{editor}</div></div>

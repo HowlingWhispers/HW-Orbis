@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
-const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
+const assetTypes = ['world', 'persona', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const sourceTypes = ['curated', 'user-created', 'imported-v2', 'copied', 'public-curated', 'legacy-import'] as const;
 const tones = ['moon', 'forest', 'ember', 'mist', 'violet', 'river'] as const;
 const statuses = ['active', 'archived', 'retired', 'sealed'] as const;
@@ -9,6 +9,7 @@ const statuses = ['active', 'archived', 'retired', 'sealed'] as const;
 const toneSet = new Set<string>(tones);
 const defaultToneByType: Record<(typeof assetTypes)[number], (typeof tones)[number]> = {
   world: 'moon',
+  persona: 'violet',
   character: 'violet',
   place: 'mist',
   item: 'moon',

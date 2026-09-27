@@ -30,6 +30,14 @@ describe('Coda Assistant sandbox boundaries', () => {
     expect(prompt).toContain('enslaved');
   });
 
+  it('lets the active provider govern content policy instead of adding a Coda morality layer', () => {
+    const prompt = buildCodaPrompt('guide', 'Inspect this deliberately extreme fictional stress-test input.');
+    expect(prompt).toContain('active AI provider governs generation/content-policy decisions');
+    expect(prompt).toContain('does not add a second moral/content-review layer');
+    expect(prompt).toContain('Do not add unsolicited moral warnings, lectures, scolding');
+    expect(prompt).toContain('process it normally unless an Orbis software, security, permission, privacy, rating');
+  });
+
   it('uses species adulthood canon and avoids inventing extra systems', () => {
     const prompt = buildCodaPrompt(
       'sort',
@@ -55,6 +63,17 @@ describe('Coda Assistant sandbox boundaries', () => {
     expect(prompt).toContain('Foxes in this species are adults in that age range.');
     expect(prompt).toContain('You have no database access');
     expect(prompt).toContain('Never state that something was created, saved, updated');
+  });
+
+  it('treats Persona as a first-class reusable asset while protecting sharing controls', () => {
+    const prompt = buildCodaPrompt('sort', 'Create a Persona named Eirvargr.', undefined, 'Personas');
+    expect(prompt).toContain('world|persona|character');
+    expect(prompt).toContain('For a Persona, keep authored identity/personality/appearance/background/speech/preferences/skills separate from runtime state');
+    expect(sanitizeCodaPatch({
+      personality: 'Stubborn but loyal.',
+      personaSettings: { visibility: 'public', allowUse: true },
+      nested: { allowForking: true, useful: 'keep' },
+    })).toEqual({ personality: 'Stubborn but loyal.', nested: { useful: 'keep' } });
   });
 
   it('preserves parent, physical sub-race and spiritual-path distinctions in the sort contract', () => {
@@ -113,6 +132,7 @@ describe('Coda Assistant sandbox boundaries', () => {
     expect(sanitizeCodaPatch({
       identity: { name: 'Test World', description: 'A place.' },
       worldSettings: { visibility: 'public' },
+      personaSettings: { visibility: 'public', allowUse: true },
       contentRating: 'adult',
       token: 'secret',
       nested: {
