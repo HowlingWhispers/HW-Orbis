@@ -90,18 +90,63 @@ function extractNovelAiText(value: unknown) {
   return typeof message.content === 'string' ? message.content.trim() : '';
 }
 
+/**
+ * Returns the first complete JSON object in `text`, tracking string state and escapes
+ * so a brace inside a string value cannot end the object early.
+ *
+ * A provider frequently answers with a correct object followed by extra material (a
+ * second object, a trailing note, a closing fence). Slicing from the first `{` to the
+ * last `}` spans both documents, which fails to parse and discards a usable draft.
+ */
+function firstJsonObject(text: string): string | undefined {
+  const start = text.indexOf('{');
+  if (start < 0) return undefined;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) { escaped = false; continue; }
+      if (char === '\\') { escaped = true; continue; }
+      if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') { inString = true; continue; }
+    if (char === '{') { depth += 1; continue; }
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+  }
+  return undefined;
+}
+
 function parseJsonObject(text: string): Record<string, unknown> | undefined {
   const withoutFence = text
     .replace(/^\s*```(?:json)?\s*/i, '')
     .replace(/\s*```\s*$/i, '')
     .trim();
+  const balanced = firstJsonObject(withoutFence);
+  if (balanced) {
+    try {
+      return asRecord(JSON.parse(balanced));
+    } catch {
+      // Fall through to the widest slice, which still recovers a truncated reply.
+    }
+  }
   const start = withoutFence.indexOf('{');
   const end = withoutFence.lastIndexOf('}');
   if (start < 0 || end <= start) return undefined;
   try {
     const value = JSON.parse(withoutFence.slice(start, end + 1));
     return asRecord(value);
-  } catch {
+  } catch (error) {
+    // Only the syntax detail is logged, never the provider's content.
+    console.warn('[coda-assistant] structured output was not parseable JSON', JSON.stringify({
+      reason: error instanceof Error ? error.message : String(error),
+      chars: withoutFence.length,
+    }));
     return undefined;
   }
 }
@@ -124,9 +169,26 @@ export function sanitizeCodaPatch(value: unknown): unknown {
 
 export function parseCodaSortResponse(text: string) {
   const parsed = parseJsonObject(text);
-  if (!parsed) return undefined;
+  if (!parsed) {
+    console.warn('[coda-assistant] structured output was not a JSON object', JSON.stringify({
+      chars: text.length,
+      head: text.slice(0, 200),
+    }));
+    return undefined;
+  }
   const structured = sortResponseSchema.safeParse(parsed);
-  if (!structured.success) return undefined;
+  if (!structured.success) {
+    // The reason a provider reply was refused belongs in the server log. Without it a
+    // schema mismatch is indistinguishable from a provider failure in the UI.
+    console.warn('[coda-assistant] structured output failed schema validation', JSON.stringify({
+      issues: structured.error.issues.slice(0, 8).map((issue) => ({
+        path: issue.path.join('.') || '(root)',
+        code: issue.code,
+        message: issue.message,
+      })),
+    }));
+    return undefined;
+  }
   return {
     ...structured.data,
     proposals: structured.data.proposals.map((proposal) => ({
