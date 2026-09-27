@@ -41,12 +41,13 @@ function testApp(access: 'none' | 'ordinary' | 'admin', store = new MemorySettin
     next();
   });
   const pool = { query: async () => ({ rows: [{ '?column?': 1 }], rowCount: 1 }) } as unknown as DatabasePool;
-  app.use('/api/admin', requireAdmin(config, store), createAdminRouter(config, pool, store));
+  const viewPreferences = { get: async () => ({ hidePrivateUserWorlds: true }), set: async () => ({ hidePrivateUserWorlds: true }) };
+  app.use('/api/admin', requireAdmin(config, store), createAdminRouter(config, pool, store, viewPreferences));
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (error instanceof ZodError) return res.status(400).json({ error: 'Invalid request.' });
     return res.status(500).json({ error: 'Unexpected error.' });
   });
-  return { app, store };
+  return { app, store, viewPreferences };
 }
 
 describe('Orbis administration API', () => {

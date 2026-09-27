@@ -18,3 +18,14 @@ This checklist connects the Orbis build in `/var/www/hw/orbis-next` to the Specu
 - [ ] Verify the owner can edit their own Orbis record even when `canCreate` is false. This is the production check for the recurring lost-edit-permission regression.
 - [ ] Verify a different user still receives `403` when attempting to edit that record.
 - [ ] Verify creator and adult Discord roles still control new-record creation and access to other users' adult records.
+- [ ] Apply `server/migrations/022_asset_images.sql` to the Orbis PostgreSQL database.
+- [ ] Create the local image media root (`ORBIS_MEDIA_ROOT`, default `/srv/howling-whispers/orbis-media`) outside the repository and confirm it is writable by the `orbis.service` user. Confirm the media root is never served by the reverse proxy or by `express.static`.
+- [ ] Confirm a local upload over 1 MB is refused with a clear 413, and that a non-image upload is refused regardless of its `Content-Type` or filename.
+- [ ] Confirm cover and gallery artwork stays private: an image on a private or adult record must not load for another user without access.
+- [ ] In the control room Overview panel, confirm **Hide private user worlds** is on by default, that another member's private world is absent from the Worlds list, and that turning it off reveals it. Confirm the preference survives a reload and that a direct link to that world still opens.
+
+## World-child link maintenance
+
+`npm run link:world-children` repairs canonical children that exist in a world but are missing from that world's projection. It is **additive only**: it adds the missing `libraryAssetId` / `worldEntryId` links and never rewrites, renames, re-describes or removes authored content, and never deletes a child. `DATABASE_URL` is mandatory and **dry run is the default**; pass `--apply` only after reviewing the exact plan and taking a fresh backup. Re-running it after a successful apply is a no-op.
+
+Use it after any import path that creates `origin_world_id` children without mirroring them, and verify with `npm run check:world-integrity`, which should report `Embedded projections` equal to `Canonical child rows` with zero errors and zero warnings.

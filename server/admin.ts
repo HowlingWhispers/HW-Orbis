@@ -1,6 +1,8 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { ZodError, z } from 'zod';
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
+import type { AdminViewPreferenceStore } from './admin-view-preferences.js';
 import { ensureSuperAdminAccess, refreshSessionAccess } from './auth.js';
 import { listCodaLogs, listCodaLogUsers } from './coda-log.js';
 import { adminSettingsSchema, SettingsLockoutError, type SettingsStore } from './settings.js';
@@ -12,6 +14,15 @@ import {
   setCodaControlState,
 } from './coda-discord.js';
 import './types.js';
+
+/**
+ * A view preference can only be turned on or off. The safe default (hide other
+ * users' private worlds) is applied server-side when no row exists, so an
+ * absent or malformed value can never silently widen the filter.
+ */
+const adminViewPreferenceSchema = z.object({
+  hidePrivateUserWorlds: z.boolean().optional(),
+}).strict();
 
 export function requireAdmin(config: AppConfig, poolOrSettingsStore: DatabasePool | SettingsStore, maybeSettingsStore?: SettingsStore) {
   const pool = maybeSettingsStore ? poolOrSettingsStore as DatabasePool : undefined;
@@ -30,7 +41,12 @@ export function requireAdmin(config: AppConfig, poolOrSettingsStore: DatabasePoo
   };
 }
 
-export function createAdminRouter(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
+export function createAdminRouter(
+  config: AppConfig,
+  pool: DatabasePool,
+  settingsStore: SettingsStore,
+  adminViewPreferences: AdminViewPreferenceStore,
+) {
   const router = Router();
 
   router.get('/overview', async (_request, response, next) => {
@@ -94,6 +110,27 @@ export function createAdminRouter(config: AppConfig, pool: DatabasePool, setting
       const requested = typeof request.query.limit === 'string' ? Number(request.query.limit) : 30;
       response.json({ items: await settingsStore.getAudit(Number.isFinite(requested) ? requested : 30) });
     } catch (error) { next(error); }
+  });
+
+  /**
+   * Super-admin recovery view preferences. These filter what one administrator
+   * sees while browsing Orbis. They never change owner visibility, privacy,
+   * permissions, publication state or world data.
+   */
+  router.get('/view-preferences', async (request, response, next) => {
+    try {
+      response.json({ preferences: await adminViewPreferences.get(request.session.userId!) });
+    } catch (error) { next(error); }
+  });
+
+  router.put('/view-preferences', async (request, response, next) => {
+    try {
+      const body = adminViewPreferenceSchema.parse(request.body ?? {});
+      response.json({ preferences: await adminViewPreferences.set(request.session.userId!, body) });
+    } catch (error) {
+      if (error instanceof ZodError) return response.status(400).json({ error: 'That view preference is not a valid Orbis setting.', details: error.flatten() });
+      next(error);
+    }
   });
 
   router.get('/coda/channels', async (_request, response, next) => {

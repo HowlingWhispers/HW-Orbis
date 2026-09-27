@@ -26,6 +26,26 @@ Discord authentication uses same-origin routes under `/api/auth`. `GET /api/auth
 
 Every asset has a `contentRating` of `sfw` or `adult`. When the current session cannot view adult content, list and overview responses retain a neutral card but replace all sensitive fields and set `restricted: true` with `verificationPath: /verification`. Direct detail requests return `403`.
 
+## Cover and gallery images
+
+Every asset type supports one cover image and an ordered gallery.
+
+| Method | Path | Access |
+| --- | --- | --- |
+| `GET` | `/v1/library/assets/:id/images` | Anyone who can open the record |
+| `GET` | `/v1/library/media/:imageId` | Anyone who can open the owning record, and who passes adult gating |
+| `POST` | `/v1/library/assets/:id/images` | Record owner or super administrator |
+| `PATCH` | `/v1/library/assets/:id/images/:imageId` | Record owner or super administrator |
+| `DELETE` | `/v1/library/assets/:id/images/:imageId` | Record owner or super administrator |
+
+`POST` accepts either a raw image body with the metadata in the query string (`kind`, `caption`, `altText`, `focalX`, `focalY`, `fileName`), or a JSON body of `{ "storageKind": "external", "url", ... }` for an HTTPS image URL.
+
+Binary image data never enters PostgreSQL. Local uploads are written to the Orbis media root (`ORBIS_MEDIA_ROOT`, default `/srv/howling-whispers/orbis-media`, outside the repository) and the database stores only the relative path plus display metadata. Files are therefore never served as public static content: `/v1/library/media/:imageId` re-checks the owning record's visibility and adult rating on every request and responds with `Cache-Control: private` and `X-Content-Type-Options: nosniff`.
+
+Local images are hard-capped at 1 MB each. The format is detected from the uploaded bytes, not from the request's `Content-Type` or filename; only JPEG, PNG, WebP and GIF are accepted. A record has at most one cover, enforced by a partial unique index; promoting a gallery image demotes the previous cover into the gallery instead of deleting it. Files whose rows are gone are removed by a daily sweep.
+
+Card cover artwork is a fixed 16:9 frame filled with `object-fit: cover` and the image's `focalX`/`focalY` focal point, so artwork is cropped and never stretched. 1600x900 and 1280x720 are the preferred cover sizes. Gallery images keep their own aspect ratio.
+
 ## Initial write endpoints
 
 | Method | Path | Access |

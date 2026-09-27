@@ -48,6 +48,18 @@ The System panel reports only `Configured` or `Missing`.
 
 `DISCORD_BOOTSTRAP_ADMIN_ROLE_IDS` is always unioned with the effective editable administrator roles. It is never editable through Orbis. Keep at least one tightly controlled Discord recovery role in this value. The environment `DISCORD_GUILD_ID` also remains the recovery guild, so a mistaken editable guild ID cannot remove the bootstrap route.
 
+## Private-world recovery filter
+
+The Overview panel carries a **Hide private user worlds** toggle for the signed-in super administrator. It defaults to **on**, so private worlds owned by other members stay out of the admin's normal Worlds and library views, while the admin's own private worlds are always shown.
+
+- Stored per administrator in `admin_view_preferences`, so the choice survives a new browser or a later visit.
+- Read with `GET /api/admin/view-preferences` and changed with `PUT /api/admin/view-preferences` and `{ "hidePrivateUserWorlds": boolean }`.
+- When off, other members' private worlds reappear in lists, counts and search for recovery and debugging.
+- This is a **discovery filter only**. It never changes owner visibility, privacy, permissions, publication state or world data, and `GET /v1/library/assets/:id` is unaffected, so a private world still opens normally from a direct link.
+
+`server/migrations/022_asset_images.sql` creates the table. Absent a row, the safe default applies.
+
+
 The API rejects all settings updates until both the recovery guild and at least one bootstrap recovery role are configured on the server. This protects new installations from saving an immediate or delayed total lockout.
 
 ## Discord role names

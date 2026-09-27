@@ -11,6 +11,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { I18nProvider } from './i18n/I18nContext';
 import { ThemeProvider } from './theme/ThemeContext';
 import './styles/global.css';
+import './styles/asset-images.css';
 import './styles/i18n.css';
 import './styles/project-etas.css';
 import './styles/project-pages.css';

@@ -1,9 +1,9 @@
-import { Activity, BookOpen, Clock, Database, History, KeyRound, MessageCircle, MessageSquareText, Pencil, Power, RefreshCw, Save, Scissors, ScrollText, Search, Send, ServerCog, Settings2, ShieldCheck, Trash2, User, UsersRound, Wifi } from 'lucide-react';
+import { Activity, BookOpen, Clock, Database, Eye, EyeOff, History, KeyRound, MessageCircle, MessageSquareText, Pencil, Power, RefreshCw, Save, Scissors, ScrollText, Search, Send, ServerCog, Settings2, ShieldCheck, Trash2, User, UsersRound, Wifi } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   adminApi, type AdminAuditEntry, type AdminCodaChannel, type AdminCodaMember, type AdminCodaMessage,
   type AdminCodaLog, type AdminCodaLogUser, type AdminCodaScheduled, type AdminCodaStatus, type AdminCodaTemplate, type AdminOverview,
-  type AdminSettings,
+  type AdminSettings, type AdminViewPreferences,
 } from '../admin/api';
 import { CODA_COMPOSED_MAX_LENGTH, CODA_MESSAGE_MAX_LENGTH, codaMessagePartCount } from '../admin/codaMessage';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
@@ -21,6 +21,7 @@ export function AdminView() {
   const [settings, setSettings] = useState<AdminSettings>();
   const [audit, setAudit] = useState<AdminAuditEntry[]>([]);
   const [roleResolution, setRoleResolution] = useState('');
+  const [viewPreferences, setViewPreferences] = useState<AdminViewPreferences>({ hidePrivateUserWorlds: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -28,8 +29,9 @@ export function AdminView() {
     if (!user?.permissions.canAdmin) { setLoading(false); return; }
     setLoading(true); setError('');
     try {
-      const [overviewData, settingsData, auditData] = await Promise.all([adminApi.overview(), adminApi.settings(), adminApi.audit()]);
+      const [overviewData, settingsData, auditData, preferenceData] = await Promise.all([adminApi.overview(), adminApi.settings(), adminApi.audit(), adminApi.viewPreferences()]);
       setOverview(overviewData); setSettings(settingsData.settings); setAudit(auditData.items); setRoleResolution(settingsData.roleResolution.reason);
+      setViewPreferences(preferenceData.preferences);
     } catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'The control room could not be opened.'); }
     finally { setLoading(false); }
   }, [user?.permissions.canAdmin]);
@@ -48,7 +50,7 @@ export function AdminView() {
       {loading && <div className="admin-loading">Opening the control room...</div>}
       {error && <AdminDenied title="Control room unavailable" body={error} action={<button className="button button--ghost" onClick={() => void load()}>Try again</button>} />}
       {!loading && !error && overview && settings && <>
-        {tab === 'overview' && <OverviewPanel overview={overview} audit={audit} />}
+        {tab === 'overview' && <OverviewPanel overview={overview} audit={audit} viewPreferences={viewPreferences} onViewPreferencesChange={setViewPreferences} />}
         {tab === 'discord' && <DiscordPanel settings={settings} roleResolution={roleResolution} onSaved={(next) => { setSettings(next); void load(); }} />}
         {tab === 'coda' && <CodaDiscordPanel />}
         {tab === 'access' && <AccessPanel settings={settings} />}
@@ -66,13 +68,50 @@ function AdminDenied({ title, body, action }: { title: string; body: string; act
   return <section className="admin-denied"><ShieldCheck /><h2>{title}</h2><p>{body}</p>{action}</section>;
 }
 
-function OverviewPanel({ overview, audit }: { overview: AdminOverview; audit: AdminAuditEntry[] }) {
+function OverviewPanel({ overview, audit, viewPreferences, onViewPreferencesChange }: {
+  overview: AdminOverview;
+  audit: AdminAuditEntry[];
+  viewPreferences: AdminViewPreferences;
+  onViewPreferencesChange: (preferences: AdminViewPreferences) => void;
+}) {
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState('');
   const labels: Record<keyof AdminOverview['status'], string> = {
     apiOnline: 'API online', databaseConnected: 'Database connected', discordOAuthConfigured: 'Discord OAuth',
     discordGuildConfigured: 'Discord guild', adultPolicyConfigured: 'Adult policy', creatorPolicyConfigured: 'Creator policy',
     adminPolicyConfigured: 'Admin recovery', inviteUrlConfigured: 'Website invite', codaDiscordConfigured: 'Coda Discord sender',
   };
-  return <div className="admin-stack"><section className="admin-section"><div className="admin-section__title"><Activity /><div><h2>Operational overview</h2><p>Current health and configuration readiness.</p></div></div><div className="status-grid">{Object.entries(overview.status).map(([key, value]) => <div className={`status-card ${value ? 'is-ready' : 'is-missing'}`} key={key}><span /><strong>{labels[key as keyof typeof labels]}</strong><small>{value ? 'Ready' : 'Needs configuration'}</small></div>)}</div></section><AuditPanel audit={audit} /></div>;
+  const togglePrivateWorlds = async () => {
+    setWorking(true); setError('');
+    try {
+      const result = await adminApi.updateViewPreferences({ hidePrivateUserWorlds: !viewPreferences.hidePrivateUserWorlds });
+      onViewPreferencesChange(result.preferences);
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : 'The recovery view could not be changed.');
+    } finally {
+      setWorking(false);
+    }
+  };
+  return <div className="admin-stack">
+    <section className="admin-section"><div className="admin-section__title"><Activity /><div><h2>Operational overview</h2><p>Current health and configuration readiness.</p></div></div><div className="status-grid">{Object.entries(overview.status).map(([key, value]) => <div className={`status-card ${value ? 'is-ready' : 'is-missing'}`} key={key}><span /><strong>{labels[key as keyof typeof labels]}</strong><small>{value ? 'Ready' : 'Needs configuration'}</small></div>)}</div></section>
+    <section className="admin-section">
+      <div className="admin-section__title"><EyeOff /><div><h2>Private world visibility</h2><p>Choose whether your normal Worlds and library views include private worlds owned by other members.</p></div></div>
+      <div className="coda-kill-switch is-live">
+        <div>{viewPreferences.hidePrivateUserWorlds ? <EyeOff /> : <Eye />}<span>
+          <strong>{viewPreferences.hidePrivateUserWorlds ? 'Hiding private user worlds' : 'Showing private user worlds'}</strong>
+          <small>{viewPreferences.hidePrivateUserWorlds
+            ? 'Other members\u2019 private worlds stay out of your lists, counts and search. Your own private worlds are always shown.'
+            : 'Every private world appears in your lists, counts and search. Useful for recovery and debugging.'}</small>
+        </span></div>
+        <button className="button button--ghost" disabled={working} onClick={() => void togglePrivateWorlds()}>
+          {viewPreferences.hidePrivateUserWorlds ? 'Reveal private worlds' : 'Hide private worlds'}
+        </button>
+      </div>
+      <p className="admin-resolution">This is a browsing filter for your own administrator account only. It is remembered between visits. It never changes owner visibility, privacy, permissions, publication state or world data, and a private world still opens normally if you follow a direct link to it.</p>
+      {error && <div className="policy-notice coda-console-error">{error}</div>}
+    </section>
+    <AuditPanel audit={audit} />
+  </div>;
 }
 
 function DiscordPanel({ settings, roleResolution, onSaved }: { settings: AdminSettings; roleResolution: string; onSaved: (settings: AdminSettings) => void }) {

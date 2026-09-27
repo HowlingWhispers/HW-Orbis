@@ -1,8 +1,35 @@
-import type { AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
+import type { AssetImage, AssetImageKind, AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
 
 export interface DeleteImpact {
   totalChildren: number;
   byType: Record<string, number>;
+}
+
+export interface AssetImageUploadInput {
+  kind: AssetImageKind;
+  file: File;
+  caption?: string;
+  altText?: string;
+  focalX?: number;
+  focalY?: number;
+}
+
+export interface AssetImageExternalInput {
+  kind: AssetImageKind;
+  url: string;
+  caption?: string;
+  altText?: string;
+  focalX?: number;
+  focalY?: number;
+}
+
+export interface AssetImageUpdateInput {
+  caption?: string | null;
+  altText?: string | null;
+  focalX?: number;
+  focalY?: number;
+  position?: number;
+  kind?: AssetImageKind;
 }
 
 export interface OwnershipTransferTarget {
@@ -31,6 +58,11 @@ export interface LibraryApi {
   searchOwnershipTransferTargets(id: string, search: string): Promise<OwnershipTransferTarget[]>;
   transferWorldOwnership(id: string, input: { targetUserId: string; confirmName: string }): Promise<OwnershipTransferResult>;
   simulateAsset(id: string): Promise<{ launchUrl: string; expiresAt: number }>;
+  listAssetImages(assetId: string, signal?: AbortSignal): Promise<AssetImage[]>;
+  uploadAssetImage(assetId: string, input: AssetImageUploadInput): Promise<AssetImage>;
+  addExternalAssetImage(assetId: string, input: AssetImageExternalInput): Promise<AssetImage>;
+  updateAssetImage(assetId: string, imageId: string, update: AssetImageUpdateInput): Promise<AssetImage>;
+  removeAssetImage(assetId: string, imageId: string): Promise<void>;
 }
 
 export class LibraryApiError extends Error {

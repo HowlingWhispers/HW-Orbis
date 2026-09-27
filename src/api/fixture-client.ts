@@ -1,5 +1,5 @@
-import type { LibraryApi, OwnershipTransferResult } from './contracts';
-import type { AssetListResponse, AssetQuery, LibraryAssetCreate, LibraryOverview } from '../types/library';
+import type { LibraryApi, OwnershipTransferResult, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput } from './contracts';
+import type { AssetImage, AssetListResponse, AssetQuery, LibraryAssetCreate, LibraryOverview } from '../types/library';
 import type { LibraryAssetUpdate } from '../types/library';
 import { assetTypes } from '../types/library';
 import { fixtures } from '../features/library/fixtures';
@@ -105,5 +105,26 @@ export class FixtureLibraryApi implements LibraryApi {
 
   async simulateAsset(_id: string): Promise<{ launchUrl: string; expiresAt: number }> {
     throw new Error('Speculus launches require the live Orbis API.');
+  }
+
+  async listAssetImages(_assetId: string): Promise<AssetImage[]> {
+    await pause();
+    return [];
+  }
+
+  async uploadAssetImage(_assetId: string, _input: AssetImageUploadInput): Promise<AssetImage> {
+    throw new Error('Image uploads require the live Orbis API.');
+  }
+
+  async addExternalAssetImage(_assetId: string, _input: AssetImageExternalInput): Promise<AssetImage> {
+    throw new Error('External image links require the live Orbis API.');
+  }
+
+  async updateAssetImage(_assetId: string, _imageId: string, _update: AssetImageUpdateInput): Promise<AssetImage> {
+    throw new Error('Image changes require the live Orbis API.');
+  }
+
+  async removeAssetImage(_assetId: string, _imageId: string): Promise<void> {
+    throw new Error('Image removal requires the live Orbis API.');
   }
 }

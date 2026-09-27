@@ -21,6 +21,31 @@ export interface AssetAuthor {
   avatarUrl?: string;
 }
 
+export type AssetImageKind = 'cover' | 'gallery';
+export type AssetImageStorageKind = 'local' | 'external';
+
+export interface AssetImage {
+  id: string;
+  assetId: string;
+  kind: AssetImageKind;
+  storageKind: AssetImageStorageKind;
+  /** Absolute for external URLs; an Orbis media route path for local uploads. */
+  url: string;
+  fileName?: string;
+  mimeType: string;
+  byteSize: number;
+  width: number | null;
+  height: number | null;
+  caption?: string;
+  altText?: string;
+  /** Focal point as a 0..1 fraction, applied to CSS object-position. */
+  focalX: number;
+  focalY: number;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LibraryAsset {
   id: string;
   type: AssetType;
@@ -42,6 +67,9 @@ export interface LibraryAsset {
   verificationPath?: string;
   sourceAssetId?: string;
   document?: Record<string, unknown>;
+  coverImage?: AssetImage;
+  images?: AssetImage[];
+  imageCount?: number;
   speculus?: {
     code: string;
     classification: string;

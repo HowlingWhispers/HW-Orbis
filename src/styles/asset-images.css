@@ -1,0 +1,60 @@
+/* Cover and gallery artwork for Orbis records. */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.asset-images { display: grid; gap: 18px; margin-bottom: 22px; }
+.asset-images__head h2 { margin: 3px 0 0; font-family: var(--serif); font-size: 22px; }
+.asset-images__hint { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.asset-images__notice { margin: 0; padding: 9px 12px; border: 1px solid rgba(92, 142, 214, .28); border-radius: 8px; background: rgba(61, 105, 166, .12); color: #cfe0f8; font-size: 10px; }
+.asset-images__notice.is-error { border-color: rgba(214, 122, 122, .4); background: rgba(140, 52, 52, .18); color: #f3cfcf; }
+.asset-images__meta { margin: 0; color: var(--faint); font-size: 9px; }
+.asset-images__advice { margin: 0; padding: 8px 10px; border-left: 2px solid var(--amber); background: rgba(77, 55, 35, .18); color: #e6cfa6; font-size: 9px; line-height: 1.55; }
+.asset-images__actions { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+
+.asset-images__cover { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.asset-images__cover-frame { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: radial-gradient(circle at 72% 26%, var(--tone-glow, rgba(223,236,255,.6)), transparent 15%), linear-gradient(165deg, #183e70, #0a1529); }
+.asset-images__cover-frame[role='button'] { cursor: crosshair; }
+.asset-images__cover-frame img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; }
+.asset-images__empty { display: grid; place-content: center; justify-items: center; gap: 8px; height: 100%; padding: 18px; color: #7f96b5; font-size: 9px; line-height: 1.6; text-align: center; }
+.asset-images__focal-marker { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid #fff; border-radius: 50%; background: rgba(4, 11, 24, .45); box-shadow: 0 0 0 2px rgba(4, 11, 24, .5); pointer-events: none; }
+.asset-images__cover-side { display: grid; gap: 9px; }
+.asset-images__cover-side h3, .asset-images__gallery h3 { margin: 0; font-family: var(--serif); font-size: 17px; }
+.asset-images__cover-side p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+
+.asset-images__fields { display: grid; gap: 8px; margin-top: 4px; }
+.asset-images__gallery { display: grid; gap: 11px; padding-top: 16px; border-top: 1px solid var(--line); }
+.asset-images__gallery > header { display: flex; align-items: baseline; gap: 9px; }
+.asset-images__gallery > header span { color: var(--faint); font-size: 9px; }
+.asset-images__gallery ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.asset-images__gallery li { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 13px; align-items: start; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: rgba(15, 29, 52, .5); }
+.asset-images__thumb { width: 132px; height: 88px; border-radius: 7px; object-fit: cover; background: #0d1b2e; }
+.asset-images__item-body { display: grid; gap: 9px; }
+.asset-images__add { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; padding-top: 4px; }
+.asset-images__external { display: flex; flex: 1 1 320px; gap: 9px; align-items: end; }
+.asset-images__external .editor-field { flex: 1; }
+
+.detail-gallery { margin: 22px 0; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.detail-gallery > header { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; color: var(--moon); }
+.detail-gallery > header h2 { margin: 0; font-family: var(--serif); font-size: 20px; }
+.detail-gallery > header span { color: var(--faint); font-size: 9px; }
+.detail-gallery__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.detail-gallery__grid figure { display: grid; gap: 7px; margin: 0; }
+.detail-gallery__grid img { width: 100%; max-height: 320px; border-radius: 9px; object-fit: cover; background: #0d1b2e; }
+.detail-gallery__grid figcaption { color: var(--muted); font-size: 9px; line-height: 1.5; }
+
+@media (max-width: 900px) {
+  .asset-images__cover { grid-template-columns: 1fr; }
+  .asset-images__gallery li { grid-template-columns: 1fr; }
+  .asset-images__thumb { width: 100%; height: 150px; }
+  .detail-gallery { padding: 15px; }
+}

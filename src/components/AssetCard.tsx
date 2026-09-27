@@ -2,6 +2,7 @@ import { Archive, ArrowUpRight, Boxes, MapPin, Pin, Sparkles, UserRound } from '
 import { Link } from 'react-router-dom';
 import type { LibraryAsset } from '../types/library';
 import { findNavigationItem } from '../app/library-nav';
+import { assetImageUrl, coverAltText, coverObjectPosition } from '../lib/asset-images';
 
 const sourceLabels: Record<LibraryAsset['sourceType'], string> = {
   curated: 'Curated',
@@ -16,14 +17,16 @@ export function AssetCard({ asset, featured = false }: { asset: LibraryAsset; fe
   const category = findNavigationItem(asset.type);
   const Icon = category?.icon;
   const target = asset.restricted ? asset.verificationPath ?? '/verification' : `/asset/${asset.id}`;
+  const coverUrl = asset.restricted ? '' : assetImageUrl(asset.coverImage);
   return (
     <article className={`asset-card tone-${asset.visualTone} ${featured ? 'asset-card--featured' : ''}`}>
-      <Link className="asset-card__visual" to={target} aria-label={asset.restricted ? 'Learn how to get verified' : `Open ${asset.name}`}>
-        <span className="visual-orb" />
-        <span className="visual-ridge visual-ridge--back" />
-        <span className="visual-ridge visual-ridge--front" />
+      <Link className={`asset-card__visual ${coverUrl ? 'has-cover' : ''}`} to={target} aria-label={asset.restricted ? 'Learn how to get verified' : `Open ${asset.name}`}>
+        {coverUrl && <img className="asset-card__cover" src={coverUrl} alt={coverAltText(asset.coverImage, asset.name)} style={{ objectPosition: coverObjectPosition(asset.coverImage) }} loading="lazy" decoding="async" />}
+        {!coverUrl && <><span className="visual-orb" /><span className="visual-ridge visual-ridge--back" /><span className="visual-ridge visual-ridge--front" /></>}
+        <span className="asset-card__scrim" />
         <span className="asset-card__type">{Icon && <Icon size={14} />} {category?.shortLabel}</span>
         {asset.pinned && <span className="asset-card__pin"><Pin size={13} /> Pinned</span>}
+        {(asset.imageCount ?? 0) > 1 && <span className="asset-card__gallery-count">{(asset.imageCount ?? 0) - 1} more</span>}
       </Link>
       <div className="asset-card__body">
         <div className="asset-card__title-row">

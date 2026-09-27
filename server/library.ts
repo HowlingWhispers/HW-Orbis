@@ -1,9 +1,11 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { applyAssetUpdate, assetTypes, createAssetSchema, insertAsset, updateAssetSchema } from './asset-writes.js';
+import type { AdminViewPreferenceStore } from './admin-view-preferences.js';
 import { ensureSuperAdminAccess, refreshSessionAccess, requireCreator, SUPER_ADMIN_DISCORD_ID } from './auth.js';
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
+import { loadAssetImages, type AssetImageResponse } from './media.js';
 import type { SettingsStore } from './settings.js';
 import { canDirectViewAssetRow, canDiscoverAssetRow } from './world-access.js';
 import { hydrateWorldDocument } from './world-projection-read.js';
@@ -14,7 +16,7 @@ function canViewAdult(request: Request) {
   return request.session.access?.canViewAdult === true;
 }
 
-function mapAsset(row: Record<string, unknown>, userId?: string, isSuperAdmin = false) {
+function mapAsset(row: Record<string, unknown>, userId?: string, isSuperAdmin = false, images: AssetImageResponse[] = []) {
   if (row.restricted) {
     return {
       id: `restricted:${row.id}`,
@@ -34,6 +36,7 @@ function mapAsset(row: Record<string, unknown>, userId?: string, isSuperAdmin = 
     };
   }
   const originalCreatorId = row.original_creator_user_id ?? row.creator_user_id;
+  const coverImage = images.find((image) => image.kind === 'cover');
   return {
     id: row.id,
     type: row.type,
@@ -51,6 +54,9 @@ function mapAsset(row: Record<string, unknown>, userId?: string, isSuperAdmin = 
     visualTone: row.visual_tone,
     sourceAssetId: row.source_asset_id ?? undefined,
     document: row.document ?? {},
+    coverImage,
+    images,
+    imageCount: images.length,
     speculus: row.speculus_code ? {
       code: String(row.speculus_code),
       classification: String(row.speculus_classification ?? ''),
@@ -83,17 +89,38 @@ const selectAccessRows = `
   FROM library_assets a
   LEFT JOIN library_assets origin ON origin.id = a.origin_world_id`;
 
-function requestIdentity(request: Request) {
-  const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
+function baseIdentity(request: Request) {
   return {
     userId: request.session.userId,
-    isSuperAdmin,
-    canSeePrivateWorlds: isSuperAdmin,
+    isSuperAdmin: request.session.discordUserId === SUPER_ADMIN_DISCORD_ID,
   };
 }
 
-export function createLibraryRouter(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
+export function createLibraryRouter(
+  config: AppConfig,
+  pool: DatabasePool,
+  settingsStore: SettingsStore,
+  adminViewPreferences: AdminViewPreferenceStore,
+) {
   const router = Router();
+
+  /**
+   * Discovery identity. `canSeePrivateWorlds` is the super-admin recovery
+   * capability and is used only for direct view, so a direct link to a private
+   * world keeps working. `hidePrivateUserWorlds` is the separate admin browsing
+   * preference that narrows what the admin's own library lists show.
+   */
+  const requestIdentity = async (request: Request) => {
+    const identity = baseIdentity(request);
+    const preferences = identity.isSuperAdmin && identity.userId
+      ? await adminViewPreferences.get(identity.userId)
+      : { hidePrivateUserWorlds: false };
+    return { ...identity, canSeePrivateWorlds: identity.isSuperAdmin, hidePrivateUserWorlds: preferences.hidePrivateUserWorlds };
+  };
+
+  /** The admin private-world filter applies to discovery only, never to direct view. */
+  const canDiscover = (row: Record<string, unknown>, identity: Awaited<ReturnType<typeof requestIdentity>>) =>
+    canDiscoverAssetRow(row, identity.userId, identity.isSuperAdmin, { hidePrivateUserWorlds: identity.hidePrivateUserWorlds });
 
   router.use(async (request, _response, next) => {
     try {
@@ -108,7 +135,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
   router.get('/overview', async (request, response, next) => {
     try {
       const adult = canViewAdult(request);
-      const identity = requestIdentity(request);
+      const identity = await requestIdentity(request);
       const [recent, pinned, countRows] = await Promise.all([
         pool.query(`${selectAssets} ORDER BY a.updated_at DESC LIMIT 40`, [adult, identity.userId ?? null]),
         pool.query(`${selectAssets} WHERE a.pinned = true ORDER BY a.updated_at DESC`, [adult, identity.userId ?? null]),
@@ -116,16 +143,14 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       ]);
       const countMap = Object.fromEntries(assetTypes.map((type) => [type, 0]));
       for (const row of countRows.rows) {
-        if (canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds)) countMap[row.type] = (countMap[row.type] ?? 0) + 1;
+        if (canDiscover(row, identity)) countMap[row.type] = (countMap[row.type] ?? 0) + 1;
       }
+      const discoveredRecent = recent.rows.filter((row) => canDiscover(row, identity)).slice(0, 4);
+      const discoveredPinned = pinned.rows.filter((row) => canDiscover(row, identity));
+      const images = await loadAssetImages(pool, [...new Set([...discoveredRecent, ...discoveredPinned].map((row) => String(row.id)))]);
       response.json({
-        recent: recent.rows
-          .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds))
-          .slice(0, 4)
-          .map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
-        pinned: pinned.rows
-          .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds))
-          .map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
+        recent: discoveredRecent.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin, images.get(String(row.id)) ?? [])),
+        pinned: discoveredPinned.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin, images.get(String(row.id)) ?? [])),
         counts: countMap,
       });
     } catch (error) {
@@ -135,7 +160,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
 
   router.get('/assets', async (request, response, next) => {
     try {
-      const identity = requestIdentity(request);
+      const identity = await requestIdentity(request);
       const values: unknown[] = [canViewAdult(request), identity.userId ?? null];
       const where: string[] = [];
       const type = typeof request.query.type === 'string' && assetTypes.includes(request.query.type as typeof assetTypes[number]) ? request.query.type : undefined;
@@ -151,10 +176,11 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       const order = request.query.sort === 'name' ? 'a.name ASC' : 'a.updated_at DESC';
       const result = await pool.query(`${selectAssets}${clause} ORDER BY ${order} LIMIT 400`, values);
       const visibleRows = result.rows
-        .filter((row) => canDiscoverAssetRow(row, identity.userId, identity.canSeePrivateWorlds))
+        .filter((row) => canDiscover(row, identity))
         .slice(0, 200);
+      const images = await loadAssetImages(pool, visibleRows.map((row) => String(row.id)));
       response.json({
-        items: visibleRows.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin)),
+        items: visibleRows.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin, images.get(String(row.id)) ?? [])),
         total: visibleRows.length,
       });
     } catch (error) {
@@ -165,7 +191,7 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
   router.get('/assets/:id', async (request, response, next) => {
     try {
       if (request.params.id.startsWith('restricted:')) return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
-      const identity = requestIdentity(request);
+      const identity = await requestIdentity(request);
       const result = await pool.query(`${selectAssets} WHERE a.id = $3`, [canViewAdult(request), identity.userId ?? null, request.params.id]);
       if (!result.rowCount) return response.status(404).json({ error: 'Record not found.' });
       const row = result.rows[0] as Record<string, unknown>;
@@ -174,7 +200,8 @@ export function createLibraryRouter(config: AppConfig, pool: DatabasePool, setti
       if (row.type === 'world') {
         row.document = await hydrateWorldDocument(pool, String(row.id), row.document);
       }
-      response.json(mapAsset(row, identity.userId, identity.isSuperAdmin));
+      const images = await loadAssetImages(pool, [String(row.id)]);
+      response.json(mapAsset(row, identity.userId, identity.isSuperAdmin, images.get(String(row.id)) ?? []));
     } catch (error) {
       next(error);
     }

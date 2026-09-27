@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { AssetImageEditor } from '../components/AssetImageEditor';
 import { CodaFileAssistant } from '../components/CodaFileAssistant';
 import { GenericAssetEditor } from '../components/GenericAssetEditor';
 import { PersonaEditor } from '../components/PersonaEditor';
@@ -40,6 +41,9 @@ export function AssetEditorView() {
       <Link className="back-link" to={`/asset/${asset.id}`}><ArrowLeft size={16} /> Back to record</Link>
       {supportsCodaFileMode && !codaMode && <Link className="button button--secondary" to={`/asset/${asset.id}/edit?coda=1`}><Sparkles size={16} /> Edit with Coda</Link>}
     </div>
+    {/* Artwork is available on every record type, so it lives beside the editor
+        rather than inside one of the type-specific editors. */}
+    <AssetImageEditor asset={asset} />
     {codaMode
       ? <div className="coda-file-layout"><CodaFileAssistant asset={asset} /><div className="coda-file-layout__editor">{editor}</div></div>
       : editor}

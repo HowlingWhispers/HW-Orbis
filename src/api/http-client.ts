@@ -1,6 +1,6 @@
-import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget } from './contracts';
+import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput } from './contracts';
 import { LibraryApiError } from './contracts';
-import type { AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
+import type { AssetImage, AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
 
 export class HttpLibraryApi implements LibraryApi {
   constructor(private readonly baseUrl: string) {}
@@ -21,6 +21,17 @@ export class HttpLibraryApi implements LibraryApi {
       if (error instanceof LibraryApiError || (error instanceof DOMException && error.name === 'AbortError')) throw error;
       throw new LibraryApiError('The Library service could not be reached.', undefined, error);
     }
+  }
+
+  private async send<T>(path: string, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: unknown): Promise<T> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const data = await response.json().catch(() => ({})) as T & { error?: string };
+    if (!response.ok) throw new LibraryApiError(data.error ?? `Library request failed with status ${response.status}.`, response.status);
+    return data;
   }
 
   getOverview(signal?: AbortSignal) {
@@ -99,5 +110,46 @@ export class HttpLibraryApi implements LibraryApi {
     const data = await response.json() as { launchUrl?: string; expiresAt?: number; error?: string; settingsPath?: string };
     if (!response.ok || !data.launchUrl || !data.expiresAt) throw new LibraryApiError(data.error ?? `Simulation launch failed with status ${response.status}.`, response.status);
     return { launchUrl: data.launchUrl, expiresAt: data.expiresAt };
+  }
+
+  private imagesPath(assetId: string) {
+    return `/v1/library/assets/${encodeURIComponent(assetId)}/images`;
+  }
+
+  async listAssetImages(assetId: string, signal?: AbortSignal) {
+    const data = await this.request<{ items: AssetImage[] }>(this.imagesPath(assetId), signal);
+    return data.items;
+  }
+
+  async uploadAssetImage(assetId: string, input: AssetImageUploadInput) {
+    // Local images travel as the raw request body: Orbis reads the format from
+    // the bytes themselves and hard-caps the payload at 1 MB, so no multipart
+    // parser and no client-supplied filename ever decide what is stored.
+    const params = new URLSearchParams({ kind: input.kind });
+    if (input.caption) params.set('caption', input.caption);
+    if (input.altText) params.set('altText', input.altText);
+    if (input.focalX !== undefined) params.set('focalX', String(input.focalX));
+    if (input.focalY !== undefined) params.set('focalY', String(input.focalY));
+    params.set('fileName', input.file.name);
+    const response = await fetch(`${this.baseUrl}${this.imagesPath(assetId)}?${params}`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': input.file.type || 'application/octet-stream' },
+      body: input.file,
+    });
+    const data = await response.json().catch(() => ({})) as AssetImage & { error?: string };
+    if (!response.ok) throw new LibraryApiError(data.error ?? `Image upload failed with status ${response.status}.`, response.status);
+    return data;
+  }
+
+  async addExternalAssetImage(assetId: string, input: AssetImageExternalInput) {
+    return this.send<AssetImage>(this.imagesPath(assetId), 'POST', { storageKind: 'external', ...input });
+  }
+
+  async updateAssetImage(assetId: string, imageId: string, update: AssetImageUpdateInput) {
+    return this.send<AssetImage>(`${this.imagesPath(assetId)}/${encodeURIComponent(imageId)}`, 'PATCH', update);
+  }
+
+  async removeAssetImage(assetId: string, imageId: string) {
+    await this.send<{ ok: boolean }>(`${this.imagesPath(assetId)}/${encodeURIComponent(imageId)}`, 'DELETE');
   }
 }

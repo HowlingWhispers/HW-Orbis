@@ -64,9 +64,36 @@ export function canDirectViewAssetRow(row: AssetRow, userId?: string, isSuperAdm
   return Boolean(userId && ownerUserId === userId);
 }
 
-export function canDiscoverAssetRow(row: AssetRow, userId?: string, isSuperAdmin = false) {
-  if (isSuperAdmin) return true;
+/**
+ * Super-admin recovery filter for library discovery.
+ *
+ * `hidePrivateUserWorlds` is a browsing preference for one administrator's own
+ * library views. It narrows discovery to the ordinary owner/public rules while
+ * it is on, so private worlds owned by other users disappear from the normal
+ * Worlds/library view while the admin's own private worlds stay visible. It
+ * never changes ownership, privacy, permissions, publication state or world
+ * data, and it does not affect `canDirectViewAssetRow`, so opening a private
+ * world by direct link still works with the filter on.
+ */
+export function canDiscoverAssetRow(
+  row: AssetRow,
+  userId?: string,
+  isSuperAdmin = false,
+  options?: { hidePrivateUserWorlds?: boolean },
+) {
+  if (isSuperAdmin && !options?.hidePrivateUserWorlds) return true;
   const { settings, ownerUserId } = accessContext(row);
   if (userId && ownerUserId === userId) return true;
   return settings.visibility === 'public' && settings.showInLibrary;
+}
+
+/**
+ * Adult gating for anything that exposes record bytes, including images.
+ * Mirrors the `restricted` projection in the library asset query so a media
+ * request can never reveal an adult record the asset list would have masked.
+ */
+export function isAdultRestrictedAssetRow(row: AssetRow, userId?: string, canViewAdult = false) {
+  if (row.content_rating !== 'adult') return false;
+  if (canViewAdult) return false;
+  return !(userId && row.creator_user_id === userId);
 }

@@ -6,9 +6,11 @@ import type { DeleteImpact, OwnershipTransferTarget } from '../api/contracts';
 import { downloadRecordArchive } from '../api/archive-transfer';
 import { useAuth } from '../auth/AuthContext';
 import { findNavigationItem } from '../app/library-nav';
+import { AssetImageGallery } from '../components/AssetImageGallery';
 import { ErrorState, LoadingState } from '../components/StatePanel';
 import { useLibraryData } from '../hooks/useLibraryData';
 import { useSEO } from '../hooks/useSEO';
+import { assetImageUrl, coverAltText, coverObjectPosition } from '../lib/asset-images';
 
 type DocumentRecord = Record<string, unknown>;
 
@@ -85,6 +87,7 @@ export function AssetDetailView() {
   const Icon = category?.icon;
   const canEdit = user && asset.canEdit === true;
   const canTransfer = asset.type === 'world' && asset.isOwner === true;
+  const coverUrl = assetImageUrl(asset.coverImage);
 
   const simulate = async () => {
     if (!user) { navigate('/account'); return; }
@@ -191,7 +194,11 @@ export function AssetDetailView() {
     <div className="page detail-page">
       <Link className="back-link" to={`/library/${asset.type}`}><ArrowLeft size={16} /> Back to {category?.label}</Link>
       <section className={`detail-hero tone-${asset.visualTone}`}>
-        <div className="detail-hero__art"><span className="visual-orb" /><span className="visual-ridge visual-ridge--back" /><span className="visual-ridge visual-ridge--front" /></div>
+        <div className={`detail-hero__art ${coverUrl ? 'has-cover' : ''}`}>
+          {coverUrl
+            ? <img className="detail-hero__cover" src={coverUrl} alt={coverAltText(asset.coverImage, asset.name)} style={{ objectPosition: coverObjectPosition(asset.coverImage) }} decoding="async" />
+            : <><span className="visual-orb" /><span className="visual-ridge visual-ridge--back" /><span className="visual-ridge visual-ridge--front" /></>}
+        </div>
         <div className="detail-hero__copy">
           <span className="eyebrow">{Icon && <Icon size={14} />} {category?.shortLabel} record</span>
           <h1>{asset.name}</h1>
@@ -265,6 +272,7 @@ export function AssetDetailView() {
           </section>}
         </div>
       </section>
+      <AssetImageGallery images={asset.images ?? []} />
       <div className="detail-layout">
         <section className="record-panel">
           <div className="record-panel__heading">

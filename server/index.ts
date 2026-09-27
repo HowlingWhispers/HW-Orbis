@@ -12,9 +12,13 @@ import { createCodaDiscordBridgeRouter } from './coda-discord-bridge.js';
 import { processDueCodaScheduledMessages } from './coda-discord.js';
 import { createArchiveTransferRouter } from './archive-transfer.js';
 import { createAdminRouter, requireAdmin } from './admin.js';
+import { PostgresAdminViewPreferenceStore } from './admin-view-preferences.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { createLibraryRouter } from './library.js';
+import { createMediaRouter, sweepOrphanedMediaFiles } from './media.js';
+import { mkdir } from 'node:fs/promises';
+import { assetImageMediaRoot } from './asset-images.js';
 import { createOwnershipTransferRouter } from './ownership-transfer.js';
 import { createProviderSettingsRouter } from './provider-settings.js';
 import { createSaveArchiveRouter } from './save-archive.js';
@@ -29,6 +33,7 @@ import './types.js';
 const config = loadConfig();
 const pool = createPool(config.DATABASE_URL);
 const settingsStore = new PostgresSettingsStore(pool, config);
+const adminViewPreferences = new PostgresAdminViewPreferenceStore(pool);
 const PgStore = connectPgSimple(session);
 const app = express();
 
@@ -136,14 +141,17 @@ app.use('/api/auth', createAuthRouter(config, pool, settingsStore));
 app.use('/api/provider-settings', createProviderSettingsRouter(config, pool));
 app.use('/api/coda-assistant', createCodaAssistantRouter(config, pool, settingsStore));
 app.use('/api/simulation-settings', createSimulationSettingsRouter(pool));
-app.use('/api/admin', requireAdmin(config, pool, settingsStore), createAdminRouter(config, pool, settingsStore));
+app.use('/api/admin', requireAdmin(config, pool, settingsStore), createAdminRouter(config, pool, settingsStore, adminViewPreferences));
 app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createSaveArchiveRouter(pool));
 app.use('/api/v1/library', createWorldDeleteRouter(pool));
 app.use('/api/v1/library', createWorldBrainRouter(pool));
 app.use('/api/v1/library', createOwnershipTransferRouter(pool));
 app.use('/api/v1/library', createArchiveTransferRouter(config, pool, settingsStore));
-app.use('/api/v1/library', createLibraryRouter(config, pool, settingsStore));
+// Mounted before the library router so image bytes are never parsed as JSON and
+// local artwork is only ever delivered through the access-checked media route.
+app.use('/api/v1/library', createMediaRouter(config, pool));
+app.use('/api/v1/library', createLibraryRouter(config, pool, settingsStore, adminViewPreferences));
 
 if (config.isProduction) {
   const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -181,8 +189,29 @@ const codaScheduler = setInterval(async () => {
 }, 30_000);
 codaScheduler.unref();
 
+// Local image bytes live on disk outside the repository. Create the root on
+// boot so the first upload does not fail, and sweep files whose record rows are
+// gone (for example after a world cascade delete).
+await mkdir(assetImageMediaRoot(config), { recursive: true });
+
+let mediaSweepBusy = false;
+const mediaSweep = setInterval(async () => {
+  if (mediaSweepBusy) return;
+  mediaSweepBusy = true;
+  try {
+    const removed = await sweepOrphanedMediaFiles(config, pool);
+    if (removed > 0) console.log(`Orbis media sweep removed ${removed} unreferenced image file(s).`);
+  } catch (error) {
+    console.error('Orbis media sweep failed.', error);
+  } finally {
+    mediaSweepBusy = false;
+  }
+}, 24 * 60 * 60 * 1000);
+mediaSweep.unref();
+
 const shutdown = () => {
   clearInterval(codaScheduler);
+  clearInterval(mediaSweep);
   server.close(() => pool.end().finally(() => process.exit(0)));
 };
 process.on('SIGTERM', shutdown);

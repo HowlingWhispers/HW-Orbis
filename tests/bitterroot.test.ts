@@ -6,6 +6,7 @@ import { AssetWriteError } from '../server/asset-writes';
 import { BITTERROOT_OWNER_DISCORD_ID, buildBitterrootSeedAssets, type BitterrootSourceWorld } from '../server/bitterroot-import';
 import { loadConfig } from '../server/config';
 import type { DatabasePool } from '../server/db';
+import type { AdminViewPreferenceStore } from '../server/admin-view-preferences';
 import { createLibraryRouter } from '../server/library';
 import type { SettingsStore } from '../server/settings';
 import source from '../server/data/bitterroot.json';
@@ -92,6 +93,7 @@ function editorApp(userId: string, creatorUserId = ownerUserId, canCreate = true
       if (sql.startsWith('UPDATE users SET is_guild_member')) return { rows: [], rowCount: 1 };
       if (sql.startsWith('SELECT * FROM library_assets')) return { rows: [current], rowCount: 1 };
       if (sql.startsWith('SELECT max(revision)')) return { rows: [{ revision: 1 }], rowCount: 1 };
+      if (sql.includes('FROM library_asset_images')) return { rows: [], rowCount: 0 };
       if (sql.startsWith('INSERT INTO library_asset_revisions')) return { rows: [], rowCount: 1 };
       if (sql.startsWith('UPDATE library_assets SET')) return { rows: [{ ...current, name: values?.[1], document: JSON.parse(String(values?.[7])) }], rowCount: 1 };
       if (sql.startsWith('SELECT display_name')) return { rows: [{ display_name: 'Eirvargr', avatar_url: null }], rowCount: 1 };
@@ -105,7 +107,10 @@ function editorApp(userId: string, creatorUserId = ownerUserId, canCreate = true
     Object.defineProperty(req, 'session', { value: { userId, access: { isGuildMember: true, canViewAdult: true, canCreate, canAdmin: false, checkedAt: Date.now() } }, configurable: true });
     next();
   });
-  app.use('/api/library', createLibraryRouter(config, pool, settingsStore));
+  app.use('/api/library', createLibraryRouter(config, pool, settingsStore, {
+    get: async () => ({ hidePrivateUserWorlds: true }),
+    set: async () => ({ hidePrivateUserWorlds: true }),
+  } satisfies AdminViewPreferenceStore));
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (error instanceof ZodError) return res.status(400).json({ error: 'Invalid request.' });
     if (error instanceof AssetWriteError) return res.status(error.status).json({ error: error.message });

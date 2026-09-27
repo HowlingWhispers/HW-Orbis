@@ -146,6 +146,10 @@ export interface AdminAuditEntry {
   changedAt: string;
 }
 
+export interface AdminViewPreferences {
+  hidePrivateUserWorlds: boolean;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/admin${path}`, {
     ...init, credentials: 'include',
@@ -187,4 +191,7 @@ export const adminApi = {
     }),
   updateSettings: (settings: Pick<AdminSettings, 'guildId' | 'adultRoleIds' | 'creatorRoleIds' | 'adminRoleIds' | 'inviteUrl'>) =>
     request<{ settings: AdminSettings }>('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+  viewPreferences: () => request<{ preferences: AdminViewPreferences }>('/view-preferences'),
+  updateViewPreferences: (preferences: Partial<AdminViewPreferences>) =>
+    request<{ preferences: AdminViewPreferences }>('/view-preferences', { method: 'PUT', body: JSON.stringify(preferences) }),
 };
