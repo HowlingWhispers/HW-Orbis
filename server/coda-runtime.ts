@@ -111,10 +111,40 @@ function collectAgeFindings(value: unknown, path = '', out: AgeFinding[] = []): 
   return out;
 }
 
+const ADULT_DECLARATION_KEY = /^(lif[e_]?stage|adulthood|maturitystage|maturestage|adultness)$/i;
+const ADULT_DECLARED_VALUE = /^(adult|adults|fully\s*grown|grown|mature|matured|of\s*age|major)$/i;
+const ADULT_FLAG_KEY = /^(isadult|adult|is_adult)$/i;
+
 /**
- * Absolute 18+ enforcement. Fictional species maturity, world rules and model claims
- * are irrelevant here: if a payload pairs sexual content with a minor reference or an
- * under-18 age, the write is refused before it reaches the database.
+ * A record that states adulthood in its own species canon is authoritative for that
+ * record. This is a data fact, not a content-policy opinion: a bare number in a
+ * `chronologicalAge`-style field is not read as human childhood when the record
+ * declares its own adult stage.
+ */
+function declaresSpeciesAdulthood(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(declaresSpeciesAdulthood);
+  if (value && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (ADULT_FLAG_KEY.test(key) && entry === true) return true;
+      if (ADULT_DECLARATION_KEY.test(key) && typeof entry === 'string' && ADULT_DECLARED_VALUE.test(entry.trim())) return true;
+      if (declaresSpeciesAdulthood(entry)) return true;
+    }
+  }
+  return false;
+}
+
+/** A finding produced purely by a raw number in an age-shaped field. */
+function isBareNumericAgeFinding(finding: AgeFinding) {
+  return /^(?:age|declared) \d/.test(finding.detail);
+}
+
+/**
+ * Runtime refusal of a write that pairs sexual content with an under-18 reference.
+ *
+ * This is deliberately a terse, factual reason and nothing more. It carries no
+ * age-policy argument, no commentary about species maturity, world rules or the
+ * model's interpretation, and no instruction to the model: the vendor governs
+ * generation, and this layer only decides whether a write reaches the database.
  */
 export function assertNoMinorSexualContent(payload: unknown, label: string) {
   const strings: string[] = [];
@@ -128,14 +158,18 @@ export function assertNoMinorSexualContent(payload: unknown, label: string) {
   const sexual = strings.filter((entry) => SEXUAL_MARKERS.test(entry));
   if (!sexual.length) return;
 
+  const speciesCanonIsAuthoritative = declaresSpeciesAdulthood(payload);
   const findings = collectAgeFindings(payload);
-  const offending = findings.filter((finding) => MINOR_MARKERS.test(finding.detail) || /\b(age \d{1,2}|declared \d{1,2}|\d{1,2}\s*years?)/i.test(finding.detail));
+  const offending = findings.filter((finding) => {
+    if (speciesCanonIsAuthoritative && isBareNumericAgeFinding(finding)) return false;
+    return MINOR_MARKERS.test(finding.detail) || /\b(age \d{1,2}|declared \d{1,2}|\d{1,2}\s*years?)/i.test(finding.detail);
+  });
   const firstOffense = offending[0];
   if (!firstOffense) return;
 
   throw new CodaRuntimeError(
     422,
-    `Refused: ${label} pairs sexual content with an under-18 character (${firstOffense.detail} at ${firstOffense.path || 'the record body'}). Orbis enforces an absolute 18+ boundary for sexual content regardless of any fictional species maturity, world rule, or the model's interpretation. Nothing was saved.`,
+    `Refused: ${label} pairs sexual content with an under-18 reference (${firstOffense.detail} at ${firstOffense.path || 'the record body'}). Nothing was saved.`,
     'minor_sexual_content',
     { label, findings: offending.slice(0, 8) },
   );
@@ -224,8 +258,11 @@ function validateCodaOperationOrThrow(operation: unknown, index: number, identit
   return op;
 }
 
-/** Validates the whole batch. A malformed batch never reaches the database. */
-export function validateCodaOperations(batch: unknown, identity: CodaExecutorIdentity) {
+/**
+ * Batch shape only. Throws when there is no executable operation set at all, because
+ * there is then no per-operation result to report.
+ */
+function parseCodaOperationBatch(batch: unknown) {
   const parsed = codaOperationBatchSchema.safeParse(batch);
   if (!parsed.success) {
     console.warn('[coda-runtime] batch rejected', JSON.stringify({ code: 'malformed_operations', issues: parsed.error.issues.slice(0, 10) }));
@@ -235,20 +272,80 @@ export function validateCodaOperations(batch: unknown, identity: CodaExecutorIde
     console.warn('[coda-runtime] batch rejected', JSON.stringify({ code: 'empty_operations' }));
     throw new CodaRuntimeError(422, 'Coda returned no executable operations, so nothing was saved.', 'empty_operations');
   }
-  return parsed.data.operations.map((operation, index) => validateCodaOperation(operation, index, identity));
+  return parsed.data.operations;
 }
 
-/** Runs validated operations through the one Orbis write path, one result per operation. */
+/**
+ * Strict validation of the whole batch: the first refusal throws. Used by callers that
+ * want an all-or-nothing answer, such as a dry validation pass.
+ */
+export function validateCodaOperations(batch: unknown, identity: CodaExecutorIdentity) {
+  return parseCodaOperationBatch(batch).map((operation, index) => validateCodaOperation(operation, index, identity));
+}
+
+/**
+ * Splits a batch into operations that may run and operations that are refused.
+ *
+ * A single refusal must never abort its siblings: the model produced a valid JSON
+ * operation set, so the runtime answers with a per-operation result instead of an
+ * exception. That keeps a refused write indistinguishable in shape from any other
+ * un-applied operation.
+ */
+function partitionCodaOperations(batch: unknown, identity: CodaExecutorIdentity) {
+  const operations = parseCodaOperationBatch(batch);
+  const refusals = new Map<number, CodaRuntimeError>();
+  for (const [index, operation] of operations.entries()) {
+    try {
+      validateCodaOperationOrThrow(operation, index, identity);
+    } catch (error) {
+      if (!(error instanceof CodaRuntimeError)) throw error;
+      console.warn('[coda-runtime] operation rejected', JSON.stringify({
+        index, code: error.code, status: error.status, reason: error.message, userId: identity.userId,
+      }));
+      refusals.set(index, error);
+    }
+  }
+  return { operations, refusals };
+}
+
+function refusalResult(index: number, operation: CodaOperation, refusal: CodaRuntimeError): CodaWriteResult {
+  return {
+    index,
+    status: 'rejected',
+    operation: operation.op,
+    requestedName: operation.name ?? operation.targetRecordId ?? `operation ${index + 1}`,
+    recordId: operation.targetRecordId ?? null,
+    recordType: operation.type ?? null,
+    revision: null,
+    changedFields: [],
+    originWorldId: null,
+    contentRating: operation.contentRating ?? null,
+    message: refusal.message,
+    code: refusal.code ?? 'operation_rejected',
+  };
+}
+
+/**
+ * Runs operations through the one Orbis write path, one result per operation.
+ *
+ * A refused operation is reported as an ordinary `rejected` result and the rest of the
+ * batch still runs, so a runtime refusal never surfaces as a provider or Coda failure.
+ */
 export async function executeCodaOperations(
   pool: DatabasePool,
   identity: CodaExecutorIdentity,
   batch: unknown,
   options: { defaultOriginWorldId?: string | null } = {},
 ): Promise<CodaWriteResult[]> {
-  const validated = validateCodaOperations(batch, identity);
+  const { operations, refusals } = partitionCodaOperations(batch, identity);
   const results: CodaWriteResult[] = [];
 
-  for (const [index, operation] of validated.entries()) {
+  for (const [index, operation] of operations.entries()) {
+    const refusal = refusals.get(index);
+    if (refusal) {
+      results.push(refusalResult(index, operation, refusal));
+      continue;
+    }
     const requestedName = operation.name ?? operation.targetRecordId ?? `operation ${index + 1}`;
     try {
       let write: { row: Record<string, unknown>; result: AssetWriteResult };
@@ -322,7 +419,10 @@ export async function executeCodaOperations(
   }
 
   const appliedCount = results.filter((result) => result.status === 'applied').length;
-  console.log('[coda-runtime] batch complete', JSON.stringify({ total: results.length, applied: appliedCount, failed: results.length - appliedCount }));
+  const rejectedCount = results.filter((result) => result.status === 'rejected').length;
+  console.log('[coda-runtime] batch complete', JSON.stringify({
+    total: results.length, applied: appliedCount, rejected: rejectedCount, failed: results.length - appliedCount - rejectedCount,
+  }));
   return results;
 }
 

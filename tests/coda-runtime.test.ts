@@ -64,7 +64,7 @@ describe('Coda runtime validation', () => {
 
 describe('Coda runtime 18+ enforcement', () => {
   it('refuses sexual content paired with a minor reference', () => {
-    expect(() => assertNoMinorSexualContent({ bio: 'a child character in explicit sexual scenarios' }, 'op')).toThrow(/absolute 18\+/);
+    expect(() => assertNoMinorSexualContent({ bio: 'a child character in explicit sexual scenarios' }, 'op')).toThrow(/under-18 reference/);
     expect(() => validateCodaOperation({
       op: 'create', type: 'character', name: 'Vessel',
       fields: { age: 12, notes: 'explicit sexual encounter described' },
@@ -78,11 +78,46 @@ describe('Coda runtime 18+ enforcement', () => {
         maturity: { minimumAge: 14, note: 'reaches sexual maturity unusually early for its kind' },
         culture: 'ritual sexual bonding is normal',
       },
-    }, 0, identity)).toThrow(/absolute 18\+/);
+    }, 0, identity)).toThrow(/under-18 reference/);
     expect(() => validateCodaOperation({
       op: 'create', type: 'character', name: 'Acolyte',
       fields: { appearance: 'she is 15 years old', scene: 'graphic sexual content' },
-    }, 0, identity)).toThrow(/absolute 18\+/);
+    }, 0, identity)).toThrow(/under-18 reference/);
+  });
+
+  it('states the refusal as a terse reason with no age-policy argument', () => {
+    let message = '';
+    try {
+      assertNoMinorSexualContent({ bio: 'a child character in explicit sexual scenarios' }, 'op');
+    } catch (error) {
+      message = error instanceof Error ? error.message : '';
+    }
+    expect(message).toContain('under-18 reference');
+    expect(message).toContain('Nothing was saved');
+    // No sermon, no argument about maturity, world rules or the model, nothing to echo back.
+    expect(message).not.toMatch(/absolute 18\+/i);
+    expect(message).not.toMatch(/regardless of/i);
+    expect(message).not.toMatch(/model's interpretation/i);
+    expect(message).not.toMatch(/fictional species maturity/i);
+  });
+
+  it('treats an explicit species adulthood declaration as authoritative for raw numbers', () => {
+    // Engages the content scan: "sexual" is a real marker, unlike vaguer prose.
+    expect(() => assertNoMinorSexualContent({
+      species: 'Mayfly Kin', chronologicalAge: 1, lifeStage: 'adult', speciesAdultAge: 0.5,
+      bio: 'an adult harbour master in an explicit sexual scene',
+    }, 'op')).not.toThrow();
+    // The same raw number without a declared adult stage is still refused.
+    expect(() => assertNoMinorSexualContent({
+      species: 'Mayfly Kin', chronologicalAge: 1,
+      bio: 'an adult harbour master in an explicit sexual scene',
+    }, 'op')).toThrow(/under-18 reference/);
+  });
+
+  it('still refuses a minor reference even when the record claims an adult stage', () => {
+    expect(() => assertNoMinorSexualContent({
+      lifeStage: 'adult', chronologicalAge: 1, bio: 'a child character in explicit sexual scenarios',
+    }, 'op')).toThrow(/under-18 reference/);
   });
 
   it('allows adult sexual content and non-sexual minor references', () => {
@@ -91,6 +126,56 @@ describe('Coda runtime 18+ enforcement', () => {
     expect(() => validateCodaOperation({
       op: 'create', type: 'character', name: 'Adult Weaver', fields: { age: 34, notes: 'explicit scene with an adult partner' },
     }, 0, identity)).not.toThrow();
+  });
+});
+
+describe('Coda runtime batch isolation', () => {
+  it('reports a refused operation as a structured result and still applies its siblings', async () => {
+    const { pool } = fakePool();
+    const results = await executeCodaOperations(pool, identity, {
+      operations: [
+        { op: 'create', type: 'character', name: 'Refused', fields: { age: 12, notes: 'explicit sexual encounter described' } },
+        { op: 'create', type: 'character', name: 'Allowed', fields: { age: 34 } },
+      ],
+    });
+
+    expect(results).toHaveLength(2);
+    expect(results[0]?.status).toBe('rejected');
+    expect(results[0]?.code).toBe('minor_sexual_content');
+    expect(results[0]?.index).toBe(0);
+    expect(results[0]?.revision).toBeNull();
+    expect(results[1]?.status).toBe('applied');
+    expect(results[1]?.index).toBe(1);
+  });
+
+  it('never throws for a runtime refusal and keeps ordering stable', async () => {
+    const { pool } = fakePool();
+    const results = await executeCodaOperations(pool, identity, {
+      operations: [
+        { op: 'create', type: 'character', name: 'A', fields: { age: 30 } },
+        { op: 'create', type: 'character', name: 'B', fields: { age: 11, notes: 'explicit scene' } },
+        { op: 'create', type: 'character', name: 'C', fields: { age: 40 } },
+      ],
+    });
+    expect(results).toHaveLength(3);
+    expect(results.map((result) => result.status)).toEqual(['applied', 'rejected', 'applied']);
+  });
+
+  it('surfaces a refused operation through the normal write report, not as a crash', async () => {
+    const { pool } = fakePool();
+    const results = await executeCodaOperations(pool, identity, {
+      operations: [{ op: 'create', type: 'character', name: 'Refused', fields: { age: 12, notes: 'explicit sexual scene' } }],
+    });
+    const report = buildCodaWriteReport(results);
+    expect(report).toContain('NOT SAVED');
+    expect(report).not.toMatch(/absolute 18\+/i);
+    expect(buildCodaOutcomeSummary(results, 0)).toBe('Orbis saved nothing. 1 operation failed.');
+  });
+
+  it('still refuses an entirely unusable batch', async () => {
+    const { pool } = fakePool();
+    await expect(executeCodaOperations(pool, identity, { operations: [] }, {}))
+      .rejects.toThrow(/no executable operations/);
   });
 });
 
@@ -130,13 +215,22 @@ describe('Coda runtime execution', () => {
     expect(buildCodaOutcomeSummary(results, 0)).toMatch(/Orbis saved nothing/);
   });
 
-  it('keeps a refused batch away from the database entirely', async () => {
+  it('keeps a refused operation away from the database without aborting the batch', async () => {
     const { pool, queries, insertCount } = fakePool();
-    await expect(executeCodaOperations(pool, identity, {
-      operations: [{ op: 'create', type: 'character', name: 'Bad', fields: { contentRating: 'adult' } }],
-    })).rejects.toThrow(CodaRuntimeError);
-    expect(insertCount()).toBe(0);
-    expect(queries.some((query) => query.sql.includes('INSERT INTO library_assets'))).toBe(false);
+    const results = await executeCodaOperations(pool, identity, {
+      operations: [
+        { op: 'create', type: 'character', name: 'Bad', fields: { contentRating: 'adult' } },
+        { op: 'create', type: 'character', name: 'Good', fields: { age: 30 } },
+      ],
+    });
+    expect(results[0]?.status).toBe('rejected');
+    expect(results[0]?.code).toBe('protected_field');
+    expect(results[1]?.status).toBe('applied');
+    // The refused operation itself still never reaches the database.
+    expect(insertCount()).toBe(1);
+    expect(queries.filter((query) => query.sql.includes('INSERT INTO library_assets'))).toHaveLength(1);
+    const inserted = queries.filter((query) => query.sql.startsWith('INSERT INTO library_assets'));
+    expect(inserted.every((query) => !JSON.stringify(query.params).includes('Bad'))).toBe(true);
   });
 
   it('builds a report that only reflects confirmed writes', () => {
