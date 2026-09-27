@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
 import { saveArchiveApi, type ArchivedSave, type SaveArchiveResponse } from '../api/save-archive';
 import { useAuth } from '../auth/AuthContext';
+import { PersonaPicker } from '../components/PersonaPicker';
 import '../styles/save-archive.css';
 
 const MAX_SAVE_BYTES = 16 * 1024 * 1024;
@@ -30,6 +31,7 @@ export function SaveArchiveView() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [launchSave, setLaunchSave] = useState<ArchivedSave | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const load = async (signal?: AbortSignal) => {
@@ -88,11 +90,11 @@ export function SaveArchiveView() {
     finally { setBusy(''); }
   };
 
-  const openSource = async (save: ArchivedSave) => {
+  const openSource = async (save: ArchivedSave, personaId: string) => {
     if (save.compatibility !== 'ready' || busy) return;
     setBusy(save.id); setError('');
     try {
-      const launch = await libraryApi.simulateAsset(save.sourceAssetId);
+      const launch = await libraryApi.simulateAsset(save.sourceAssetId, personaId);
       window.location.assign(launch.launchUrl);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Speculus could not start from this save source.');
@@ -127,6 +129,14 @@ export function SaveArchiveView() {
 
     {error && <p className="form-message" role="alert">{error}</p>}
 
+    {launchSave && <PersonaPicker
+      targetName={launchSave.sourceName}
+      busy={busy === launchSave.id}
+      error={error}
+      onCancel={() => { if (!busy) { setLaunchSave(null); setError(''); } }}
+      onSelect={(personaId) => void openSource(launchSave, personaId)}
+    />}
+
     {activeShelf === 'fabula' ? <section className="save-archive__empty save-archive__future">
       <Gamepad2 size={42} />
       <span className="eyebrow">Reserved for Fabula</span>
@@ -151,7 +161,7 @@ export function SaveArchiveView() {
             </div>
             <p className="save-card__revision" title={save.sourceRevision}>Source: {save.sourceName} · revision {save.sourceRevision}</p>
             <footer>
-              <button className="button button--secondary" disabled={save.compatibility !== 'ready' || Boolean(busy)} onClick={() => void openSource(save)} title="Launch the matching source in Speculus. Automatic archive-state handoff is the next bridge step."><Play size={15} /> Open in Speculus</button>
+              <button className="button button--secondary" disabled={save.compatibility !== 'ready' || Boolean(busy)} onClick={() => { setError(''); setLaunchSave(save); }} title="Choose a Persona and launch the matching source in Speculus. Automatic archive-state handoff is the next bridge step."><Play size={15} /> Open in Speculus</button>
               <a className="button button--secondary" href={saveArchiveApi.downloadUrl(save.id)}><Download size={15} /> Download</a>
               <button className="icon-button" disabled={Boolean(busy)} onClick={() => void rename(save)} aria-label={`Rename ${save.title}`}><Pencil size={16} /></button>
               <button className="icon-button" disabled={Boolean(busy)} onClick={() => void duplicate(save)} aria-label={`Duplicate ${save.title}`}><Copy size={16} /></button>

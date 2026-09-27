@@ -36,7 +36,7 @@ const familyRelationshipKinds = ['parent', 'partner', 'sibling', 'guardian'];
 const memoryKinds = ['event', 'discovery', 'death', 'conflict', 'persistent_change'];
 const memoryVisibilities = ['common', 'regional', 'faction', 'family', 'private', 'disputed'];
 
-const isObject = (value: JsonValue | undefined): value is JsonObject => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const isObject = (value: unknown): value is JsonObject => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const asObject = (value: JsonValue | undefined): JsonObject => isObject(value) ? value : {};
 const asArray = (value: JsonValue | undefined): JsonValue[] => Array.isArray(value) ? value : [];
 const asObjects = (value: JsonValue | undefined): JsonObject[] => asArray(value).filter(isObject);
@@ -53,6 +53,20 @@ const nameOf = (item: JsonObject, fallback = 'Untitled') => asString(item.name) 
 function updateObject(root: JsonObject, key: string, childKey: string, value: JsonValue): JsonObject {
   const child = asObject(root[key]);
   return { ...root, [key]: { ...child, [childKey]: value } };
+}
+
+/**
+ * A canonical Place document keeps both identity forms on purpose: `worldEntryId`
+ * is the stable authoring identity that parent links and the world projection use,
+ * and `id` stays because the Speculus packaging layer falls back to it when no
+ * source ID was imported. `libraryAssetId` and `name` are projection/column
+ * concerns and must never be written back as authored document fields.
+ */
+function locationDocument(item: JsonObject): Record<string, unknown> {
+  const document: Record<string, unknown> = { ...item, id: idOf(item), worldEntryId: idOf(item) };
+  delete document.libraryAssetId;
+  delete document.name;
+  return document;
 }
 
 const codaProtectedKeys = new Set(['id', 'sourceId', 'libraryAssetId', 'worldSettings', 'creatorUserId', 'ownerUserId', 'contentRating']);
@@ -163,17 +177,19 @@ function EntityActions({ onEdit, onDuplicate, onDelete, extra }: { onEdit: () =>
   </div>;
 }
 
-function LocationEditor({ value, memories, societies, onChange }: { value: JsonValue | undefined; memories: JsonObject[]; societies: JsonObject[]; onChange: (locations: JsonObject[]) => void }) {
-  const locations = asObjects(value);
+function LocationEditor({ worldId, locations, onReload, onMessage }: { worldId: string; locations: JsonObject[]; onReload: () => Promise<void>; onMessage: (message: string) => void }) {
   const [mode, setMode] = useState<EntityMode>('new');
   const [editingId, setEditingId] = useState('');
+  const [duplicateSourceId, setDuplicateSourceId] = useState('');
+  const [working, setWorking] = useState(false);
   const [form, setForm] = useState({ name: '', kind: 'region', parentLocationId: '', description: '', libraryAssetId: '' });
   const names = new Map(locations.map((item) => [idOf(item), nameOf(item)]));
 
-  const reset = () => { setMode('new'); setEditingId(''); setForm({ name: '', kind: 'region', parentLocationId: '', description: '', libraryAssetId: '' }); };
+  const reset = () => { setMode('new'); setEditingId(''); setDuplicateSourceId(''); setForm({ name: '', kind: 'region', parentLocationId: '', description: '', libraryAssetId: '' }); };
   const start = (item: JsonObject, nextMode: EntityMode) => {
     setMode(nextMode);
     setEditingId(nextMode === 'edit' ? idOf(item) : '');
+    setDuplicateSourceId(nextMode === 'duplicate' ? idOf(item) : '');
     setForm({
       name: nextMode === 'duplicate' ? `${nameOf(item)} copy` : nextMode === 'child' ? '' : nameOf(item),
       kind: nextMode === 'child' ? 'building' : asString(item.kind) || 'region',
@@ -182,33 +198,64 @@ function LocationEditor({ value, memories, societies, onChange }: { value: JsonV
       libraryAssetId: nextMode === 'duplicate' ? '' : asString(item.libraryAssetId),
     });
   };
-  const save = () => {
+  const runMutation = async (action: () => Promise<unknown>, successMessage: string) => {
+    if (working) return false;
+    setWorking(true);
+    onMessage('');
+    try {
+      await action();
+      await onReload();
+      onMessage(successMessage);
+      return true;
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'The location could not be saved.');
+      return false;
+    } finally {
+      setWorking(false);
+    }
+  };
+  const save = async () => {
     if (!form.name.trim()) return window.alert('Location name is required.');
     const id = editingId || crypto.randomUUID();
     const parentId = form.parentLocationId || undefined;
     if (wouldCreateCycle(locations, id, parentId, 'parentLocationId')) return window.alert('A location cannot be moved inside itself or one of its children.');
     const existing = locations.find((item) => idOf(item) === id);
-    const next: JsonObject = { ...(existing ?? {}), id, name: form.name.trim(), kind: form.kind, description: form.description };
+    const duplicateSource = locations.find((item) => idOf(item) === duplicateSourceId);
+    const next: JsonObject = { ...(existing ?? duplicateSource ?? {}), id, name: form.name.trim(), kind: form.kind, description: form.description };
+    delete next.libraryAssetId;
     if (parentId) next.parentLocationId = parentId; else delete next.parentLocationId;
-    if (form.libraryAssetId) next.libraryAssetId = form.libraryAssetId; else delete next.libraryAssetId;
-    onChange(existing ? locations.map((item) => idOf(item) === id ? next : item) : [...locations, next]);
-    reset();
+    if (existing) next.libraryAssetId = form.libraryAssetId;
+
+    const succeeded = await runMutation(async () => {
+      if (!existing) {
+        await libraryApi.createWorldChild(worldId, { type: 'place', name: nameOf(next), summary: asString(next.description), document: locationDocument(next) });
+        return;
+      }
+      const childId = asString(existing.libraryAssetId);
+      if (!childId) throw new Error('This canonical location is missing its library asset ID.');
+      const previousParentId = asString(existing.parentLocationId);
+      const updateProjection = { ...next };
+      if (previousParentId) updateProjection.parentLocationId = previousParentId; else delete updateProjection.parentLocationId;
+      await libraryApi.updateWorldChild(worldId, childId, { name: nameOf(next), summary: asString(next.description), document: locationDocument(updateProjection) });
+      if ((parentId ?? '') !== previousParentId) await libraryApi.moveWorldChild(worldId, childId, parentId ?? null);
+    }, existing ? 'Location saved.' : 'Location added.');
+    if (succeeded) reset();
   };
-  const remove = (item: JsonObject) => {
-    const id = idOf(item);
-    const referenced = memories.some((memory) => asStrings(memory.locationIds).includes(id)) || societies.some((society) => [...asStrings(society.territoryLocationIds), ...asStrings(society.settlementLocationIds)].includes(id));
-    if (referenced) return window.alert('This location is still referenced by a memory or society. Remove those links first.');
+  const remove = async (item: JsonObject) => {
     if (!window.confirm(`Delete ${nameOf(item)}?`)) return;
-    const parent = asString(item.parentLocationId);
-    onChange(locations.filter((location) => idOf(location) !== id).map((location) => asString(location.parentLocationId) === id ? { ...location, ...(parent ? { parentLocationId: parent } : { parentLocationId: null }) } : location).map((location) => location.parentLocationId === null ? Object.fromEntries(Object.entries(location).filter(([key]) => key !== 'parentLocationId')) as JsonObject : location));
+    const childId = asString(item.libraryAssetId);
+    if (!childId) return onMessage('This canonical location is missing its library asset ID.');
+    await runMutation(() => libraryApi.deleteWorldChild(worldId, childId), 'Location deleted.');
   };
-  const move = (item: JsonObject) => {
+  const move = async (item: JsonObject) => {
     const candidates = locations.filter((candidate) => idOf(candidate) !== idOf(item) && !wouldCreateCycle(locations, idOf(item), idOf(candidate), 'parentLocationId'));
     const answer = window.prompt(`Move ${nameOf(item)} inside which location?\nLeave blank for no parent.\n${candidates.map((candidate) => `${idOf(candidate)} = ${nameOf(candidate)}`).join('\n')}`, asString(item.parentLocationId));
     if (answer === null) return;
     const nextParent = answer.trim();
     if (nextParent && !candidates.some((candidate) => idOf(candidate) === nextParent)) return window.alert('Unknown or invalid parent location ID.');
-    onChange(locations.map((location) => idOf(location) === idOf(item) ? { ...location, ...(nextParent ? { parentLocationId: nextParent } : {}) } : location).map((location) => idOf(location) === idOf(item) && !nextParent ? Object.fromEntries(Object.entries(location).filter(([key]) => key !== 'parentLocationId')) as JsonObject : location));
+    const childId = asString(item.libraryAssetId);
+    if (!childId) return onMessage('This canonical location is missing its library asset ID.');
+    await runMutation(() => libraryApi.moveWorldChild(worldId, childId, nextParent || null), 'Location moved.');
   };
 
   return <>
@@ -216,9 +263,9 @@ function LocationEditor({ value, memories, societies, onChange }: { value: JsonV
       <ComposerHeader title={mode === 'edit' ? 'Edit location' : mode === 'child' ? 'Add child location' : mode === 'duplicate' ? 'Duplicate location' : 'Add location'} description={mode === 'edit' ? 'The existing location ID is preserved.' : mode === 'child' ? 'The parent location is already selected.' : 'Create a place inside this world.'} editing={mode !== 'new'} onCancel={reset} />
       <div className="forge-grid forge-grid--3"><TextField label="Name" value={form.name} onChange={(name) => setForm({ ...form, name })} /><SelectField label="Kind" value={form.kind} options={locationKinds.map((kind) => ({ value: kind, label: nice(kind) }))} onChange={(kind) => setForm({ ...form, kind })} /><SelectField label="Inside location" value={form.parentLocationId} options={[{ value: '', label: 'No parent' }, ...locations.filter((item) => !editingId || !wouldCreateCycle(locations, editingId, idOf(item), 'parentLocationId')).map((item) => ({ value: idOf(item), label: nameOf(item) }))]} onChange={(parentLocationId) => setForm({ ...form, parentLocationId })} /></div>
       <TextField label="Description" rows={3} value={form.description} onChange={(description) => setForm({ ...form, description })} />
-      <button type="button" className="button button--primary" onClick={save}><Plus size={15} /> {mode === 'edit' ? 'Save location' : 'Add location'}</button>
+      <button type="button" className="button button--primary" disabled={working} onClick={() => void save()}><Plus size={15} /> {mode === 'edit' ? 'Save location' : 'Add location'}</button>
     </div>
-    <div className="forge-entity-stack">{locations.length === 0 ? <p className="forge-empty">No locations yet.</p> : locations.map((item) => <article className="forge-entity-card" key={idOf(item)}><header><div><span className="eyebrow">{nice(asString(item.kind) || 'place')}{asString(item.parentLocationId) ? ` · inside ${names.get(asString(item.parentLocationId)) ?? 'Unknown'}` : ''}</span><strong>{nameOf(item)}</strong>{asString(item.libraryAssetId) ? <span className="forge-sync-badge" title="Linked to library place asset">✓ linked</span> : <span className="forge-sync-badge pending" title="Will be linked on next world save">pending</span>}</div><EntityActions onEdit={() => start(item, 'edit')} onDuplicate={() => start(item, 'duplicate')} onDelete={() => remove(item)} extra={[{ label: 'Add child', action: () => start(item, 'child') }, { label: 'Move', action: () => move(item) }]} /></header><p className="forge-card-copy">{asString(item.description) || 'No description.'}</p></article>)}</div>
+    <div className="forge-entity-stack">{locations.length === 0 ? <p className="forge-empty">No locations yet.</p> : locations.map((item) => <article className="forge-entity-card" key={idOf(item)}><header><div><span className="eyebrow">{nice(asString(item.kind) || 'place')}{asString(item.parentLocationId) ? ` · inside ${names.get(asString(item.parentLocationId)) ?? 'Unknown'}` : ''}</span><strong>{nameOf(item)}</strong>{asString(item.libraryAssetId) ? <span className="forge-sync-badge" title="Linked to library place asset">✓ linked</span> : <span className="forge-sync-badge pending" title="Will be linked on next world save">pending</span>}</div><EntityActions onEdit={() => start(item, 'edit')} onDuplicate={() => start(item, 'duplicate')} onDelete={() => void remove(item)} extra={[{ label: 'Add child', action: () => start(item, 'child') }, { label: 'Move', action: () => void move(item) }]} /></header><p className="forge-card-copy">{asString(item.description) || 'No description.'}</p></article>)}</div>
   </>;
 }
 
@@ -419,10 +466,10 @@ function TimeWeatherEditor({ document, onChange }: { document: JsonObject; onCha
   </section>;
 }
 
-function ContextPreview({ document }: { document: JsonObject }) {
+function ContextPreview({ document, locations }: { document: JsonObject; locations: JsonObject[] }) {
   const identity = asObject(document.identity); const rules = asObject(document.rules); const time = asObject(document.timeWeather);
-  const groups: Array<[string, JsonObject[]]> = [['Species', asObjects(document.species)], ['Locations', asObjects(document.locations)], ['Factions', asObjects(document.factions)], ['Peoples & societies', asObjects(document.societies)], ['Families', asObjects(document.families)]];
-  const counts = [['Species', asObjects(document.species).length], ['Places', asObjects(document.locations).length], ['Societies', asObjects(document.societies).length], ['Families', asObjects(document.families).length], ['Factions', asObjects(document.factions).length], ['Memories', asObjects(document.memories).length]];
+  const groups: Array<[string, JsonObject[]]> = [['Species', asObjects(document.species)], ['Locations', locations], ['Factions', asObjects(document.factions)], ['Peoples & societies', asObjects(document.societies)], ['Families', asObjects(document.families)]];
+  const counts = [['Species', asObjects(document.species).length], ['Places', locations.length], ['Societies', asObjects(document.societies).length], ['Families', asObjects(document.families).length], ['Factions', asObjects(document.factions).length], ['Memories', asObjects(document.memories).length]];
   const seasons = asObjects(time.seasons).map((season) => asString(season.name)).filter(Boolean);
   return <aside className="forge-context"><div className="forge-context__sigil">{(asString(identity.name) || 'W').slice(0, 1).toUpperCase()}</div><span className="eyebrow">Living Reality Container</span><h2>{asString(identity.name) || 'Untitled world'}</h2><p>{asString(identity.description) || 'Define the reality that every character will grow inside.'}</p><div className="forge-context__facts">{asString(identity.genre) && <p><strong>Genre:</strong> {asString(identity.genre)}</p>}{asString(identity.tone) && <p><strong>Tone:</strong> {asString(identity.tone)}</p>}{asString(rules.technology) && <p><strong>Technology:</strong> {asString(rules.technology)}</p>}{asString(rules.magicPhysics) && <p><strong>Magic / physics:</strong> {asString(rules.magicPhysics)}</p>}<p><strong>Time:</strong> {asNumber(time.hoursPerDay, 24)}h day · {(asString(time.mode) || 'tick') === 'tick' ? `${asNumber(time.minutesPerInput, 1)}m/input` : 'real-time'}</p>{seasons.length > 0 && <p><strong>Seasons:</strong> {seasons.join(', ')}</p>}{asString(time.climate) && <p><strong>Climate:</strong> {asString(time.climate)}</p>}{groups.map(([label, items]) => items.length ? <p key={label}><strong>{label}:</strong> {items.map((item) => nameOf(item)).join(', ')}</p> : null)}</div><div className="forge-context__counts">{counts.map(([label, count]) => <span key={String(label)}><b>{count}</b>{label}</span>)}</div></aside>;
 }
@@ -441,11 +488,32 @@ export function WorldForgeEditor({ asset }: { asset: LibraryAsset }) {
   const [message, setMessage] = useState('');
 
   const identity = asObject(document.identity); const lore = asObject(document.lore); const rules = asObject(document.rules);
-  const locations = asObjects(document.locations); const species = asObjects(document.species); const factions = asObjects(document.factions); const societies = asObjects(document.societies); const families = asObjects(document.families); const memories = asObjects(document.memories);
+  const species = asObjects(document.species); const factions = asObjects(document.factions); const societies = asObjects(document.societies); const families = asObjects(document.families); const memories = asObjects(document.memories);
+  // Places are canonical child records now. The embedded `document.locations`
+  // array is only a compatibility projection, so it is read from the canonical
+  // API and never used as the editor's source of truth.
+  const [canonicalLocations, setCanonicalLocations] = useState<JsonObject[]>([]);
+  const [childrenError, setChildrenError] = useState('');
+  const reloadChildren = useCallback(async () => {
+    try {
+      const children = await libraryApi.listWorldChildren(asset.id);
+      setCanonicalLocations((children.locations as unknown as JsonObject[]).filter(isObject));
+      setChildrenError('');
+    } catch (error) {
+      setChildrenError(error instanceof Error ? error.message : 'The world places could not be loaded.');
+    }
+  }, [asset.id]);
+  const locations = canonicalLocations;
   const markDocument = (next: JsonObject) => { setDocument(next); setDirty(true); setMessage(''); };
   const updateIdentity = (key: string, value: JsonValue) => { const next = updateObject(document, 'identity', key, value); if (key === 'name') setName(String(value)); if (key === 'description') setSummary(String(value).slice(0, 2000)); markDocument(next); };
 
-  const payload = useMemo<LibraryAssetUpdate>(() => ({ name: name.trim(), summary: summary.trim(), contentRating, tags: tags.split('\n').map((tag) => tag.trim()).filter(Boolean), visualTone, document }), [contentRating, document, name, summary, tags, visualTone]);
+  useEffect(() => { void reloadChildren(); }, [reloadChildren]);
+
+  const rootDocument = useMemo<JsonObject>(() => {
+    const { locations: _places, ...worldLevel } = document;
+    return worldLevel;
+  }, [document]);
+  const payload = useMemo<LibraryAssetUpdate>(() => ({ name: name.trim(), summary: summary.trim(), contentRating, tags: tags.split('\n').map((tag) => tag.trim()).filter(Boolean), visualTone, document: rootDocument }), [contentRating, name, rootDocument, summary, tags, visualTone]);
   const save = useCallback(async () => { if (!payload.name) return setMessage('World name is required.'); setSaving(true); setMessage(''); try { await libraryApi.updateAsset(asset.id, payload); setDirty(false); setMessage('World saved.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'The world could not be saved.'); } finally { setSaving(false); } }, [asset.id, payload]);
 
   useEffect(() => { const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); }; const shortcut = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save(); } }; window.addEventListener('beforeunload', beforeUnload); window.addEventListener('keydown', shortcut); return () => { window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('keydown', shortcut); }; }, [dirty, save]);
@@ -474,7 +542,7 @@ export function WorldForgeEditor({ asset }: { asset: LibraryAsset }) {
     <div className="forge-workbench"><main>
       {activeTab === 'identity' && <section className="forge-module"><header className="forge-module__title"><div><span className="eyebrow">World Module 01</span><h2>Identity</h2></div><small>THE REALITY CONTAINER</small></header><div className="forge-grid forge-grid--3"><TextField label="World name" value={asString(identity.name) || name} onChange={(value) => updateIdentity('name', value)} /><TextField label="Genre" value={asString(identity.genre)} onChange={(value) => updateIdentity('genre', value)} /><TextField label="Tone" value={asString(identity.tone)} onChange={(value) => updateIdentity('tone', value)} /></div><TextField label="Description" rows={8} value={asString(identity.description)} onChange={(value) => updateIdentity('description', value)} /><div className="forge-inheritance"><span className="forge-lamp" /><div><strong>{asset.dependencyCount} connected records</strong><p>World-linked records remain connected to this root object and inherit relevant authored context.</p></div></div></section>}
       {activeTab === 'lore' && <section className="forge-module"><header className="forge-module__title"><div><span className="eyebrow">World Module 02</span><h2>Lore</h2></div><small>HISTORY · CULTURE · FACT</small></header><TextField label="History" rows={7} value={asString(lore.history)} onChange={(value) => markDocument(updateObject(document, 'lore', 'history', value))} /><TextField label="Cultures" rows={6} value={asString(lore.cultures)} onChange={(value) => markDocument(updateObject(document, 'lore', 'cultures', value))} /><TextField label="Customs" rows={6} value={asString(lore.customs)} onChange={(value) => markDocument(updateObject(document, 'lore', 'customs', value))} /><LinesField label="Important facts" value={asStrings(lore.importantFacts)} onChange={(value) => markDocument(updateObject(document, 'lore', 'importantFacts', value))} /></section>}
-      {activeTab === 'places' && <section className="forge-module"><header className="forge-module__title"><div><span className="eyebrow">World Module 03</span><h2>Places</h2></div><small>REGIONS · SETTLEMENTS · LANDMARKS</small></header><LocationEditor value={document.locations} memories={memories} societies={societies} onChange={(value) => markDocument({ ...document, locations: value })} /></section>}
+      {activeTab === 'places' && <section className="forge-module"><header className="forge-module__title"><div><span className="eyebrow">World Module 03</span><h2>Places</h2></div><small>REGIONS · SETTLEMENTS · LANDMARKS</small></header>{childrenError && <p className="forge-empty">{childrenError}</p>}<LocationEditor worldId={asset.id} locations={locations} onReload={reloadChildren} onMessage={setMessage} /></section>}
       {activeTab === 'people' && <section className="forge-module"><header className="forge-module__title"><div><span className="eyebrow">World Module 04</span><h2>People of the world</h2></div><small>SPECIES · FACTIONS</small></header><div className="forge-split"><SimpleEntityEditor label="Species" value={document.species} onChange={(value) => markDocument({ ...document, species: value })} /><SimpleEntityEditor label="Faction" value={document.factions} onChange={(value) => markDocument({ ...document, factions: value })} /></div></section>}
       {activeTab === 'societies' && <section className="forge-module"><header className="forge-module__title"><div><span className="eyebrow">World Module 05</span><h2>Peoples & Societies</h2></div><small>CLANS · TRIBES · HOUSEHOLDS · SETTLEMENTS</small></header><SocietyEditor value={document.societies} locations={locations} species={species} families={families} factions={factions} onChange={(value) => markDocument({ ...document, societies: value })} /></section>}
       {activeTab === 'families' && <section className="forge-module"><header className="forge-module__title"><div><span className="eyebrow">World Module 06</span><h2>Family Trees</h2></div><small>KINSHIP · ADOPTION · GUARDIANSHIP</small></header><FamilyEditor value={document.families} onChange={(value) => markDocument({ ...document, families: value })} /></section>}
@@ -483,6 +551,6 @@ export function WorldForgeEditor({ asset }: { asset: LibraryAsset }) {
       {activeTab === 'time' && <TimeWeatherEditor document={document} onChange={markDocument} />}
       {activeTab === 'brain' && <WorldBrainPanel worldId={asset.id} />}
       {activeTab === 'settings' && <WorldSettingsPanel document={document} onChange={markDocument} />}
-    </main><ContextPreview document={document} /></div><footer className="forge-footer"><span role="status">{message}</span><small>Ctrl+S saves the world.</small></footer>
+    </main><ContextPreview document={rootDocument} locations={locations} /></div><footer className="forge-footer"><span role="status">{message}</span><small>Ctrl+S saves the world.</small></footer>
   </div>;
 }

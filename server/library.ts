@@ -9,6 +9,8 @@ import { loadAssetImages, type AssetImageResponse } from './media.js';
 import type { SettingsStore } from './settings.js';
 import { canDirectViewAssetRow, canDiscoverAssetRow } from './world-access.js';
 import { hydrateWorldDocument } from './world-projection-read.js';
+import { createWorldChild, deleteWorldChild, listWorldChildren, moveWorldChild, updateWorldChild } from './world-children.js';
+import { isAdultRestrictedAssetRow } from './world-access.js';
 
 const sourceTypes = ['curated', 'user-created', 'imported-v2', 'copied', 'public-curated', 'legacy-import'] as const;
 
@@ -183,6 +185,74 @@ export function createLibraryRouter(
         items: visibleRows.map((row) => mapAsset(row, identity.userId, identity.isSuperAdmin, images.get(String(row.id)) ?? [])),
         total: visibleRows.length,
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/assets/:worldId/children', async (request, response, next) => {
+    try {
+      const identity = await requestIdentity(request);
+      const result = await pool.query(
+        'SELECT id, type, creator_user_id, content_rating, document FROM library_assets WHERE id = $1 AND type = \'world\'',
+        [request.params.worldId],
+      );
+      if (!result.rowCount) return response.status(404).json({ error: 'World not found.' });
+      const world = result.rows[0] as Record<string, unknown>;
+      if (!canDirectViewAssetRow(world, identity.userId, identity.canSeePrivateWorlds)) {
+        return response.status(404).json({ error: 'World not found.' });
+      }
+      if (isAdultRestrictedAssetRow(world, identity.userId, canViewAdult(request))) {
+        return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
+      }
+      response.json(await listWorldChildren(pool, String(world.id)));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/assets/:worldId/children', requireCreator(config, pool, settingsStore), async (request, response, next) => {
+    try {
+      const identity = baseIdentity(request);
+      const { row, result } = await createWorldChild(pool, { userId: identity.userId!, isSuperAdmin: identity.isSuperAdmin }, String(request.params.worldId), request.body);
+      response.status(201).json({ ...mapAsset({ ...row, restricted: false }, identity.userId, identity.isSuperAdmin), revision: result.revision, changedFields: result.changedFields });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/assets/:worldId/children/:childId', async (request, response, next) => {
+    try {
+      if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to edit this record.' });
+      const identity = baseIdentity(request);
+      const { row, result } = await updateWorldChild(pool, { userId: identity.userId!, isSuperAdmin: identity.isSuperAdmin }, String(request.params.worldId), String(request.params.childId), request.body);
+      response.json({ ...mapAsset({ ...row, restricted: false }, identity.userId, identity.isSuperAdmin), revision: result.revision, changedFields: result.changedFields });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.put('/assets/:worldId/children/:childId/parent', async (request, response, next) => {
+    try {
+      if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to move this Place.' });
+      const parentLocationId = request.body?.parentLocationId;
+      if (parentLocationId !== null && typeof parentLocationId !== 'string') {
+        return response.status(400).json({ error: 'parentLocationId must be a Place ID or null.' });
+      }
+      const identity = baseIdentity(request);
+      const { row, result } = await moveWorldChild(pool, { userId: identity.userId!, isSuperAdmin: identity.isSuperAdmin }, String(request.params.worldId), String(request.params.childId), parentLocationId);
+      response.json({ ...mapAsset({ ...row, restricted: false }, identity.userId, identity.isSuperAdmin), revision: result.revision, changedFields: result.changedFields });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/assets/:worldId/children/:childId', async (request, response, next) => {
+    try {
+      if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to delete this record.' });
+      const identity = baseIdentity(request);
+      await deleteWorldChild(pool, { userId: identity.userId!, isSuperAdmin: identity.isSuperAdmin }, String(request.params.worldId), String(request.params.childId));
+      response.status(204).end();
     } catch (error) {
       next(error);
     }

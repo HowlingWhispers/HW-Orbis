@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseExecutor } from './db.js';
 import { isRecord, rebuildWorldProjection } from './world-entity-sync.js';
+import { createImportedWorldChild } from './world-children.js';
 
 /**
  * Import a private place bundle as a world plus its canonical children.
@@ -176,31 +177,27 @@ export async function importPlaceBundle(
     worldCreated = true;
   }
 
-  // INSERT ... DO NOTHING keyed on the stable source id. A re-run re-derives the
-  // same source ids, so every existing child is left exactly as it is.
+  // The world and its children go through the shared canonical child service
+  // rather than a second hand-written child writer. The service preserves the
+  // bundle's stable source IDs, refuses an orphan child, and treats a re-run as
+  // a no-op, so this importer keeps its own outer transaction and its own
+  // provenance without re-implementing any of that.
   let childrenCreated = 0;
   let childrenExisting = 0;
   for (const child of children) {
-    const existing = await db.query(
-      `SELECT id FROM library_assets WHERE source_type = 'imported-v2' AND source_asset_id = $1`,
-      [child.sourceKey],
-    );
-    if (existing.rowCount) {
-      childrenExisting += 1;
-      continue;
-    }
-    const tone = child.type === 'society' ? 'ember' : 'forest';
-    const inserted = await db.query(
-      `INSERT INTO library_assets
-         (id, type, name, summary, origin_world_id, creator_user_id, source_type, source_asset_id,
-          content_rating, tags, visual_tone, document, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'imported-v2', $7, $8, '{}', $9, $10::jsonb, now(), now())
-       ON CONFLICT (source_type, source_asset_id) WHERE source_asset_id IS NOT NULL DO NOTHING
-       RETURNING id`,
-      [randomUUID(), child.type, child.name, child.summary, worldId, options.userId, child.sourceKey,
-        contentRating, tone, JSON.stringify(child.document)],
-    );
-    if (inserted.rowCount) childrenCreated += 1;
+    const outcome = await createImportedWorldChild(db, {
+      worldId,
+      type: child.type,
+      name: child.name,
+      summary: child.summary,
+      document: child.document,
+      sourceType: 'imported-v2',
+      sourceAssetId: child.sourceKey,
+      creatorUserId: options.userId,
+      contentRating,
+      visualTone: child.type === 'society' ? 'ember' : 'forest',
+    });
+    if (outcome.created) childrenCreated += 1;
     else childrenExisting += 1;
   }
 

@@ -1,4 +1,4 @@
-import type { LibraryApi, OwnershipTransferResult, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput } from './contracts';
+import type { LibraryApi, OwnershipTransferResult, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput, WorldChildCreate, WorldChildren, WorldChildProjection, WorldChildUpdate } from './contracts';
 import type { AssetImage, AssetListResponse, AssetQuery, LibraryAssetCreate, LibraryOverview } from '../types/library';
 import type { LibraryAssetUpdate } from '../types/library';
 import { assetTypes } from '../types/library';
@@ -32,6 +32,45 @@ export class FixtureLibraryApi implements LibraryApi {
     const asset = fixtures.find((item) => item.id === id);
     if (!asset) throw new Error(`Asset not found: ${id}`);
     return asset;
+  }
+
+  async listWorldChildren(worldId: string): Promise<WorldChildren> {
+    await pause();
+    const grouped: WorldChildren = { locations: [], species: [], factions: [], societies: [], families: [], memories: [] };
+    const keys = { place: 'locations', species: 'species', faction: 'factions', society: 'societies', family: 'families', memory: 'memories' } as const;
+    for (const asset of fixtures.filter((item) => item.originWorldId === worldId).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))) {
+      const key = keys[asset.type as keyof typeof keys];
+      if (!key) continue;
+      const document = { ...(asset.document ?? {}) };
+      const worldEntryId = typeof document.worldEntryId === 'string' ? document.worldEntryId : asset.id;
+      delete document.worldEntryId;
+      const titleField = asset.type === 'memory' ? 'title' : 'name';
+      grouped[key].push({ ...document, id: worldEntryId, libraryAssetId: asset.id, [titleField]: asset.name } as WorldChildProjection);
+    }
+    return grouped;
+  }
+
+  createWorldChild(worldId: string, asset: WorldChildCreate) {
+    return this.createAsset({ ...asset, originWorldId: worldId });
+  }
+
+  updateWorldChild(_worldId: string, childId: string, update: WorldChildUpdate) {
+    return this.updateAsset(childId, update as LibraryAssetUpdate);
+  }
+
+  async moveWorldChild(worldId: string, childId: string, parentLocationId: string | null) {
+    const asset = await this.getAsset(childId);
+    if (asset.originWorldId !== worldId || asset.type !== 'place') throw new Error(`World child not found: ${childId}`);
+    const document = { ...(asset.document ?? {}) };
+    if (parentLocationId) document.parentLocationId = parentLocationId;
+    else delete document.parentLocationId;
+    return this.updateAsset(childId, { document } as LibraryAssetUpdate);
+  }
+
+  async deleteWorldChild(worldId: string, childId: string) {
+    const asset = fixtures.find((item) => item.id === childId);
+    if (!asset || asset.originWorldId !== worldId) throw new Error(`World child not found: ${childId}`);
+    await this.deleteAsset(childId);
   }
 
   async createAsset(asset: LibraryAssetCreate) {
@@ -103,7 +142,11 @@ export class FixtureLibraryApi implements LibraryApi {
     throw new Error('Ownership transfer requires the live Orbis API.');
   }
 
-  async simulateAsset(_id: string): Promise<{ launchUrl: string; expiresAt: number }> {
+  async listSimulationPersonas() {
+    return [];
+  }
+
+  async simulateAsset(_id: string, _personaId: string): Promise<{ launchUrl: string; expiresAt: number }> {
     throw new Error('Speculus launches require the live Orbis API.');
   }
 

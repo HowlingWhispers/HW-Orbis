@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { SUPER_ADMIN_DISCORD_ID } from './auth.js';
 import type { DatabasePool } from './db.js';
 import { isWorldCollectionType } from './world-entity-sync.js';
-import { removeCanonicalChildFromWorldProjection, WorldChildRemovalError } from './world-child-removal.js';
+import { deleteWorldChildInTransaction } from './world-children.js';
 
 function deletionImpactRows(rows: Array<{ type: string; count: string | number }>) {
   const byType = Object.fromEntries(rows.map((row) => [row.type, Number(row.count)]));
@@ -91,25 +91,17 @@ export function createWorldDeleteRouter(pool: DatabasePool) {
       }
 
       if (asset.type !== 'world' && asset.origin_world_id && isWorldCollectionType(String(asset.type))) {
-        try {
-          await removeCanonicalChildFromWorldProjection(client, asset);
-        } catch (error) {
-          if (error instanceof WorldChildRemovalError) {
-            await client.query('ROLLBACK');
-            return response.status(409).json({
-              error: 'Orbis refused this delete because the world link is ambiguous or still referenced. Nothing was deleted.',
-              details: error.issues,
-            });
-          }
-          throw error;
+        await deleteWorldChildInTransaction(client, {
+          userId: request.session.userId,
+          isSuperAdmin,
+        }, String(asset.origin_world_id), asset);
+      } else {
+        if (cascade && impact.totalChildren > 0) {
+          await client.query('DELETE FROM library_assets WHERE origin_world_id = $1', [asset.id]);
         }
+        await client.query('DELETE FROM library_assets WHERE id = $1', [asset.id]);
       }
-
-      if (cascade && impact.totalChildren > 0) {
-        await client.query('DELETE FROM library_assets WHERE origin_world_id = $1', [asset.id]);
-      }
-      await client.query('DELETE FROM library_assets WHERE id = $1', [asset.id]);
-      if (originWorldId && asset.type !== 'world') {
+      if (originWorldId && asset.type !== 'world' && !isWorldCollectionType(String(asset.type))) {
         await client.query(
           `UPDATE library_assets
            SET dependency_count = (SELECT count(*) FROM library_assets WHERE origin_world_id = $1)

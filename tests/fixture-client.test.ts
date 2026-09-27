@@ -21,4 +21,11 @@ describe('FixtureLibraryApi', () => {
     const response = await api.listAssets({ sort: 'name' });
     expect(response.items[0].name.localeCompare(response.items[1].name)).toBeLessThanOrEqual(0);
   });
+
+  it('groups only canonical world-child fixture types', async () => {
+    const children = await api.listWorldChildren('world_bitterroot');
+    expect(Object.keys(children)).toEqual(['locations', 'species', 'factions', 'societies', 'families', 'memories']);
+    expect(children.locations.map((item) => item.libraryAssetId)).toContain('place_whispering_woods');
+    expect(JSON.stringify(children)).not.toContain('char_ragna_holte');
+  });
 });

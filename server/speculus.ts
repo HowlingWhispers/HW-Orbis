@@ -6,11 +6,12 @@ import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import { credentialKey, openCredential } from './provider-settings.js';
 import type { SettingsStore } from './settings.js';
-import { canDirectViewAssetRow } from './world-access.js';
+import { canDirectViewAssetRow, canUsePersonaAssetRow, isAdultRestrictedAssetRow } from './world-access.js';
 import { generationErrors, providerErrorCode, rejectedParameter, safeFinishReason, type GenerationErrorCode } from './generation-errors.js';
 import { bitterrootDirectTravelFromHollowmere } from './bitterroot-travel-canon.js';
 
 const launchableTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
+const launchSchema = z.object({ personaId: z.string().uuid() }).strict();
 const modelNames = ['xialong-v1', 'glm-4-6'] as const;
 const generationSchema = z.object({
   launchId: z.string().uuid(),
@@ -152,6 +153,31 @@ function characterCard(row: Record<string, unknown>) {
   };
 }
 
+const personaCoreKeys = ['appearance', 'personality', 'background', 'speech', 'preferences', 'skills', 'notes'] as const;
+const personaIdentityKeys = ['displayName', 'species', 'age', 'pronouns', 'description'] as const;
+
+export function simulationPersona(row: Record<string, unknown>) {
+  const document = asRecord(row.document);
+  const coreDocument: Record<string, unknown> = {};
+  const sourceIdentity = asRecord(document.identity);
+  const identity = Object.fromEntries(personaIdentityKeys
+    .filter((key) => sourceIdentity[key] !== undefined)
+    .map((key) => [key, sourceIdentity[key]]));
+  if (Object.keys(identity).length) coreDocument.identity = identity;
+  for (const key of personaCoreKeys) {
+    if (document[key] !== undefined) coreDocument[key] = document[key];
+  }
+  return {
+    kind: 'persona' as const,
+    id: String(row.id),
+    name: String(row.name),
+    document: coreDocument,
+    description: Object.keys(coreDocument).length
+      ? JSON.stringify(coreDocument, null, 2)
+      : String(row.summary ?? ''),
+  };
+}
+
 function extractNovelAiText(value: unknown) {
   const choices = asRecord(value).choices;
   if (!Array.isArray(choices)) return '';
@@ -181,10 +207,34 @@ async function requireLaunchUser(request: Request, config: AppConfig, pool: Data
 export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
   const router = Router();
 
+  router.get('/simulation-personas', async (request, response, next) => {
+    try {
+      if (!await requireLaunchUser(request, config, pool, settingsStore)) return response.status(401).json({ error: 'Sign in with Discord to choose a Persona.' });
+      const result = await pool.query(
+        `SELECT id, type, name, summary, creator_user_id, content_rating, document
+         FROM library_assets
+         WHERE type = 'persona'
+         ORDER BY name ASC`,
+      );
+      const items = result.rows
+        .filter((row) => canUsePersonaAssetRow(row, request.session.userId))
+        .filter((row) => !isAdultRestrictedAssetRow(row, request.session.userId, request.session.access?.canViewAdult === true))
+        .map((row) => ({
+          id: String(row.id),
+          name: String(row.name),
+          summary: String(row.summary ?? ''),
+          owned: row.creator_user_id === request.session.userId,
+        }));
+      response.json({ items });
+    } catch (error) { next(error); }
+  });
+
   router.post('/assets/:id/simulate', async (request, response, next) => {
     try {
       if (!await requireLaunchUser(request, config, pool, settingsStore)) return response.status(401).json({ error: 'Sign in with Discord to simulate a record.' });
       if (!config.SPECULUS_BRIDGE_SECRET) return response.status(503).json({ error: 'The Speculus bridge is not configured.' });
+      const parsedBody = launchSchema.safeParse(request.body);
+      if (!parsedBody.success) return response.status(400).json({ error: 'Choose a valid Persona before starting Speculus.' });
 
       const assetResult = await pool.query(
         `SELECT a.*, origin.document AS origin_world_document,
@@ -203,9 +253,24 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
       }
 
-      const [providerResult, userResult, relatedResult] = await Promise.all([
+      const personaResult = await pool.query(
+        `SELECT id, type, name, summary, creator_user_id, content_rating, document
+         FROM library_assets
+         WHERE id = $1 AND type = 'persona'`,
+        [parsedBody.data.personaId],
+      );
+      if (!personaResult.rowCount) return response.status(404).json({ error: 'Persona not found.' });
+      const persona = personaResult.rows[0];
+      const hasOrdinaryPersonaAccess = canDirectViewAssetRow(persona, request.session.userId, false);
+      const mayUsePersona = canUsePersonaAssetRow(persona, request.session.userId);
+      if (!hasOrdinaryPersonaAccess && !isSuperAdmin) return response.status(404).json({ error: 'Persona not found.' });
+      if (!mayUsePersona && !isSuperAdmin) return response.status(403).json({ error: 'This Persona is not shared for use.' });
+      if (isAdultRestrictedAssetRow(persona, request.session.userId, request.session.access?.canViewAdult === true)) {
+        return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
+      }
+
+      const [providerResult, relatedResult] = await Promise.all([
         pool.query(`SELECT model FROM user_provider_settings WHERE user_id = $1 AND provider = 'novelai'`, [request.session.userId]),
-        pool.query('SELECT id, display_name FROM users WHERE id = $1', [request.session.userId]),
         pool.query(
           `SELECT * FROM library_assets
            WHERE id <> $1
@@ -217,7 +282,6 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         ),
       ]);
       if (!providerResult.rowCount) return response.status(409).json({ error: 'Add your NovelAI token in Orbis Account settings before starting Speculus.', settingsPath: '/account' });
-      if (!userResult.rowCount) return response.status(401).json({ error: 'Your Orbis account could not be loaded.' });
 
       const now = Date.now();
       const expiresAt = now + config.SPECULUS_LAUNCH_TTL_SECONDS * 1000;
@@ -249,12 +313,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         primaryAsset,
         relatedAssets,
         character: card,
-        persona: {
-          kind: 'persona',
-          id: `orbis-user:${userResult.rows[0].id}`,
-          name: userResult.rows[0].display_name,
-          description: 'The active Orbis user. The simulator must not invent this person\'s actions, thoughts, or dialogue.',
-        },
+        persona: simulationPersona(persona),
         scene: card?.scenario || String(asset.summary ?? ''),
         contextBlocks: scopedRelatedRows.slice(0, 20).map((row) => ({
           id: String(row.id),

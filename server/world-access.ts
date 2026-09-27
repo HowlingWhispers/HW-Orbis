@@ -64,6 +64,13 @@ export function canDirectViewAssetRow(row: AssetRow, userId?: string, isSuperAdm
   return Boolean(userId && ownerUserId === userId);
 }
 
+/** Ordinary Persona-use permission. Super-admin recovery is intentionally handled by callers. */
+export function canUsePersonaAssetRow(row: AssetRow, userId?: string) {
+  if (row.type !== 'persona') return false;
+  if (userId && row.creator_user_id === userId) return true;
+  return canDirectViewAssetRow(row, userId, false) && readPersonaAccessSettings(row.document).allowUse;
+}
+
 /**
  * Super-admin recovery filter for library discovery.
  *

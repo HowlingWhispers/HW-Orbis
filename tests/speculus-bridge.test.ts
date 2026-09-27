@@ -10,6 +10,7 @@ import { createSpeculusGenerationRouter, createSpeculusLaunchRouter } from '../s
 const encryptionKey = Buffer.alloc(32, 7).toString('base64');
 const userId = '11111111-1111-4111-8111-111111111111';
 const assetId = '22222222-2222-4222-8222-222222222222';
+const personaId = '55555555-5555-4555-8555-555555555555';
 const relatedPlaceId = '44444444-4444-4444-8444-444444444444';
 const updatedAt = '2026-09-07T20:00:00.000Z';
 const config = loadConfig({
@@ -21,11 +22,11 @@ const config = loadConfig({
 });
 const settingsStore = { getEffective: async () => ({}) } as SettingsStore;
 
-function withSession(app: express.Express) {
+function withSession(app: express.Express, canViewAdult = true) {
   app.use((req, _res, next) => {
     Object.defineProperty(req, 'session', { value: {
       userId, discordUserId: '999999999999999999',
-      access: { isGuildMember: true, canViewAdult: true, canCreate: false, canAdmin: false, checkedAt: Date.now() },
+      access: { isGuildMember: true, canViewAdult, canCreate: false, canAdmin: false, checkedAt: Date.now() },
     }, configurable: true });
     next();
   });
@@ -56,8 +57,17 @@ describe('Speculus security bridge', () => {
         creator_user_id: userId, content_rating: 'adult', origin_world_id: null, updated_at: updatedAt,
         tags: ['Werewolf'], document: { description: 'Terse and observant.', personality: 'Protective' },
       }] };
+      if (sql.includes("WHERE id = $1 AND type = 'persona'")) return { rowCount: 1, rows: [{
+        id: personaId, type: 'persona', name: 'Eirvargr', summary: 'A wandering wolf.',
+        creator_user_id: userId, content_rating: 'sfw',
+        document: {
+          identity: { displayName: 'Eirvargr', species: 'Wolf', pronouns: 'they/them', currentLocation: 'Must not leak' },
+          appearance: 'Silver-grey fur.', personality: 'Watchful.', skills: ['Tracking'],
+          inventory: ['Must not leak'],
+          personaSettings: { visibility: 'private', allowUse: false },
+        },
+      }] };
       if (sql.includes('SELECT model FROM user_provider_settings')) return { rowCount: 1, rows: [{ model: 'xialong-v1' }] };
-      if (sql.includes('SELECT id, display_name FROM users')) return { rowCount: 1, rows: [{ id: userId, display_name: 'Eirvargr' }] };
       if (sql.includes('id <> $1')) return { rowCount: 1, rows: [{
         id: relatedPlaceId, type: 'place', name: 'Brackenjaw Enclave', summary: 'An upland settlement.',
         content_rating: 'sfw', creator_user_id: userId, origin_world_id: null, updated_at: updatedAt,
@@ -78,14 +88,21 @@ describe('Speculus security bridge', () => {
     const app = express(); app.use(express.json()); withSession(app);
     app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
 
-    const response = await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).expect(201);
+    const response = await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).send({ personaId }).expect(201);
     expect(response.body.launchUrl).toContain('spec.thehowlingwhispers.com');
     expect(captured.authorization).toBe('Bearer shared-test-bridge-secret');
     expect(captured.body).toMatchObject({
       version: 2, engine: 'v2', model: 'xialong-v1',
       primaryAsset: { id: assetId, type: 'character', revision: updatedAt },
       catalog: { code: 'SPC-C-KD41827', classification: 'character' },
-      persona: { name: 'Eirvargr' },
+      persona: {
+        id: personaId,
+        name: 'Eirvargr',
+        document: {
+          identity: { displayName: 'Eirvargr', species: 'Wolf', pronouns: 'they/them' },
+          appearance: 'Silver-grey fur.', personality: 'Watchful.', skills: ['Tracking'],
+        },
+      },
       character: { name: 'Ragna Holt', description: 'Terse and observant.' },
     });
     const relatedAssets = captured.body?.relatedAssets as Array<Record<string, unknown>>;
@@ -105,6 +122,80 @@ describe('Speculus security bridge', () => {
     expect(captured.body?.engine).toBe('v2');
     expect(response.body.launchUrl).toBe('https://spec.thehowlingwhispers.com/?launch=once');
     expect(JSON.stringify(captured.body)).not.toContain('novelai-secret-token');
+    expect(JSON.stringify(captured.body)).not.toContain('personaSettings');
+    expect(JSON.stringify(captured.body)).not.toContain('Must not leak');
+    expect(JSON.stringify(captured.body)).not.toContain('active Orbis user');
+  });
+
+  it('requires an explicit valid Persona id before querying the target', async () => {
+    const pool = { query: vi.fn() } as unknown as DatabasePool;
+    const app = express(); app.use(express.json()); withSession(app);
+    app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
+
+    await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).send({}).expect(400);
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  it('lists only owned and directly shared allowUse Personas', async () => {
+    const pool = { query: vi.fn(async (sql: string) => {
+      if (sql.includes("WHERE type = 'persona'")) return { rowCount: 4, rows: [
+        { id: personaId, type: 'persona', name: 'Owned', summary: '', creator_user_id: userId, content_rating: 'adult', document: {} },
+        { id: '66666666-6666-4666-8666-666666666666', type: 'persona', name: 'Shared', summary: '', creator_user_id: 'other', content_rating: 'sfw', document: { personaSettings: { visibility: 'unlisted', allowUse: true } } },
+        { id: '77777777-7777-4777-8777-777777777777', type: 'persona', name: 'View only', summary: '', creator_user_id: 'other', content_rating: 'sfw', document: { personaSettings: { visibility: 'public', allowUse: false } } },
+        { id: '88888888-8888-4888-8888-888888888888', type: 'persona', name: 'Private', summary: '', creator_user_id: 'other', content_rating: 'sfw', document: {} },
+      ] };
+      throw new Error(`Unexpected query: ${sql}`);
+    }) } as unknown as DatabasePool;
+    const app = express(); app.use(express.json()); withSession(app);
+    app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
+
+    const response = await request(app).get('/api/v1/library/simulation-personas').expect(200);
+    expect(response.body.items).toEqual([
+      expect.objectContaining({ id: personaId, name: 'Owned', owned: true }),
+      expect.objectContaining({ name: 'Shared', owned: false }),
+    ]);
+  });
+
+  it('validates target access separately before looking up the selected Persona', async () => {
+    const pool = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [{
+        id: assetId, type: 'character', name: 'Private target', creator_user_id: 'other', content_rating: 'sfw',
+        origin_world_document: { worldSettings: { visibility: 'private' } }, origin_world_creator_user_id: 'other',
+      }] };
+      throw new Error(`Persona query should not run: ${sql}`);
+    }) } as unknown as DatabasePool;
+    const app = express(); app.use(express.json()); withSession(app);
+    app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
+
+    await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).send({ personaId }).expect(404);
+    expect((pool.query as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it('validates Persona existence, allowUse, and adult access independently', async () => {
+    const target = {
+      id: assetId, type: 'character', name: 'Target', creator_user_id: userId, content_rating: 'sfw',
+      origin_world_id: null, updated_at: updatedAt, document: {},
+    };
+    const launchWithPersona = async (persona: Record<string, unknown> | null, canViewAdult: boolean, status: number) => {
+      const pool = { query: vi.fn(async (sql: string) => {
+        if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [target] };
+        if (sql.includes("WHERE id = $1 AND type = 'persona'")) return { rowCount: persona ? 1 : 0, rows: persona ? [persona] : [] };
+        throw new Error(`Unexpected query: ${sql}`);
+      }) } as unknown as DatabasePool;
+      const app = express(); app.use(express.json()); withSession(app, canViewAdult);
+      app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
+      await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).send({ personaId }).expect(status);
+    };
+
+    await launchWithPersona(null, true, 404);
+    await launchWithPersona({
+      id: personaId, type: 'persona', name: 'View only', creator_user_id: 'other', content_rating: 'sfw',
+      document: { personaSettings: { visibility: 'public', allowUse: false } },
+    }, true, 403);
+    await launchWithPersona({
+      id: personaId, type: 'persona', name: 'Adult shared', creator_user_id: 'other', content_rating: 'adult',
+      document: { personaSettings: { visibility: 'unlisted', allowUse: true } },
+    }, false, 403);
   });
 
   it('uses the saved token only inside Orbis when redeeming a scoped grant', async () => {

@@ -1,4 +1,4 @@
-import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput } from './contracts';
+import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput, SimulationPersona, WorldChildCreate, WorldChildren, WorldChildUpdate } from './contracts';
 import { LibraryApiError } from './contracts';
 import type { AssetImage, AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
 
@@ -47,6 +47,30 @@ export class HttpLibraryApi implements LibraryApi {
 
   getAsset(id: string, signal?: AbortSignal) {
     return this.request<LibraryAsset>(`/v1/library/assets/${encodeURIComponent(id)}`, signal);
+  }
+
+  private worldChildrenPath(worldId: string) {
+    return `/v1/library/assets/${encodeURIComponent(worldId)}/children`;
+  }
+
+  listWorldChildren(worldId: string, signal?: AbortSignal) {
+    return this.request<WorldChildren>(this.worldChildrenPath(worldId), signal);
+  }
+
+  createWorldChild(worldId: string, asset: WorldChildCreate) {
+    return this.send<LibraryAsset>(this.worldChildrenPath(worldId), 'POST', asset);
+  }
+
+  updateWorldChild(worldId: string, childId: string, update: WorldChildUpdate) {
+    return this.send<LibraryAsset>(`${this.worldChildrenPath(worldId)}/${encodeURIComponent(childId)}`, 'PATCH', update);
+  }
+
+  moveWorldChild(worldId: string, childId: string, parentLocationId: string | null) {
+    return this.send<LibraryAsset>(`${this.worldChildrenPath(worldId)}/${encodeURIComponent(childId)}/parent`, 'PUT', { parentLocationId });
+  }
+
+  async deleteWorldChild(worldId: string, childId: string) {
+    await this.send<unknown>(`${this.worldChildrenPath(worldId)}/${encodeURIComponent(childId)}`, 'DELETE');
   }
 
   async createAsset(asset: LibraryAssetCreate) {
@@ -103,9 +127,15 @@ export class HttpLibraryApi implements LibraryApi {
     return data;
   }
 
-  async simulateAsset(id: string) {
+  async listSimulationPersonas(signal?: AbortSignal) {
+    const data = await this.request<{ items: SimulationPersona[] }>('/v1/library/simulation-personas', signal);
+    return data.items;
+  }
+
+  async simulateAsset(id: string, personaId: string) {
     const response = await fetch(`${this.baseUrl}/v1/library/assets/${encodeURIComponent(id)}/simulate`, {
-      method: 'POST', credentials: 'include', headers: { Accept: 'application/json' },
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ personaId }),
     });
     const data = await response.json() as { launchUrl?: string; expiresAt?: number; error?: string; settingsPath?: string };
     if (!response.ok || !data.launchUrl || !data.expiresAt) throw new LibraryApiError(data.error ?? `Simulation launch failed with status ${response.status}.`, response.status);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canDirectViewAssetRow, canDiscoverAssetRow, readPersonaAccessSettings, readWorldAccessSettings } from '../server/world-access.js';
+import { canDirectViewAssetRow, canDiscoverAssetRow, canUsePersonaAssetRow, readPersonaAccessSettings, readWorldAccessSettings } from '../server/world-access.js';
 
 describe('per-world access settings', () => {
   it('keeps existing worlds public when no settings exist', () => {
@@ -75,5 +75,23 @@ describe('Persona access settings', () => {
     expect(canDirectViewAssetRow(persona, 'viewer')).toBe(true);
     expect(canDiscoverAssetRow(persona, 'viewer')).toBe(true);
     expect(readPersonaAccessSettings(persona.document)).toMatchObject({ allowUse: true, allowForking: true });
+  });
+
+  it('allows owners regardless of sharing and requires direct visibility plus allowUse for everyone else', () => {
+    const privatePersona = { type: 'persona', creator_user_id: 'owner', document: {} };
+    const sharedPersona = {
+      type: 'persona', creator_user_id: 'owner',
+      document: { personaSettings: { visibility: 'unlisted', allowUse: true } },
+    };
+    const viewOnlyPersona = {
+      type: 'persona', creator_user_id: 'owner',
+      document: { personaSettings: { visibility: 'public', allowUse: false } },
+    };
+
+    expect(canUsePersonaAssetRow(privatePersona, 'owner')).toBe(true);
+    expect(canUsePersonaAssetRow(privatePersona, 'admin')).toBe(false);
+    expect(canUsePersonaAssetRow(sharedPersona, 'viewer')).toBe(true);
+    expect(canUsePersonaAssetRow(viewOnlyPersona, 'viewer')).toBe(false);
+    expect(canUsePersonaAssetRow({ ...sharedPersona, type: 'character' }, 'viewer')).toBe(false);
   });
 });

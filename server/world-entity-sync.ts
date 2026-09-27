@@ -191,6 +191,12 @@ export type WorldEntitySyncOptions = {
   allowLegacyNameMatch?: boolean;
   strict?: boolean;
   onlyKeys?: readonly WorldCollectionKey[];
+  /**
+   * Collections the caller owns and has already handled elsewhere. A skipped
+   * collection is never read as canon, so a stale copy submitted through a world
+   * root save can never reach a canonical child row.
+   */
+  skipKeys?: readonly WorldCollectionKey[];
 };
 
 export async function syncWorldEmbeddedEntities(
@@ -205,11 +211,13 @@ export async function syncWorldEmbeddedEntities(
   let created = 0;
   let updated = 0;
   let linked = 0;
+  const skipped = new Set(options.skipKeys ?? []);
   const selectedSpecs = options.onlyKeys?.length
     ? options.onlyKeys.map((key) => specByKey.get(key)).filter((spec): spec is EmbeddedSpec => Boolean(spec))
     : [...worldCollectionSpecs];
 
   for (const spec of selectedSpecs) {
+    if (skipped.has(spec.key)) continue;
     const rawItems = document[spec.key];
     if (rawItems === undefined) continue;
     if (!Array.isArray(rawItems)) {
@@ -365,7 +373,7 @@ export async function mirrorCanonicalChildToWorld(db: DatabaseExecutor, row: Rec
 export async function rebuildWorldProjection(
   db: DatabaseExecutor,
   worldId: string,
-  options: { dropUnlinked?: boolean } = {},
+  options: { dropUnlinked?: boolean; preserveUnlinkedKeys?: readonly WorldCollectionKey[] } = {},
 ) {
   const worldResult = await db.query('SELECT document FROM library_assets WHERE id = $1 AND type = \'world\' FOR UPDATE', [worldId]);
   if (!worldResult.rowCount) throw new Error(`World ${worldId} does not exist.`);
@@ -388,7 +396,9 @@ export async function rebuildWorldProjection(
   );
 
   const after: Record<string, unknown> = { ...before };
+  const preserveUnlinked = new Set(options.preserveUnlinkedKeys ?? []);
   for (const spec of worldCollectionSpecs) {
+    const keepUnlinked = options.dropUnlinked !== true || preserveUnlinked.has(spec.key);
     const children = childResult.rows.filter((row) => row.type === spec.type) as Record<string, unknown>[];
     const byId = new Map(children.map((row) => [String(row.id), row]));
     const byEntry = new Map<string, Record<string, unknown>>();
@@ -408,7 +418,7 @@ export async function rebuildWorldProjection(
       if (child && !used.has(String(child.id))) {
         projected.push(projectionFromAsset(spec, child));
         used.add(String(child.id));
-      } else if (!options.dropUnlinked) {
+      } else if (keepUnlinked) {
         projected.push(raw);
       }
     }

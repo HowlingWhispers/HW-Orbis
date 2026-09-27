@@ -11,6 +11,7 @@ import {
   rebuildWorldProjection,
   syncWorldEmbeddedEntities,
   WorldEntitySyncError,
+  type WorldCollectionKey,
 } from './world-entity-sync.js';
 import { removeCanonicalChildrenMissingFromWorld, WorldChildRemovalError } from './world-child-removal.js';
 
@@ -72,6 +73,11 @@ export type AssetWriteResult = {
 };
 
 type WriteIdentity = { userId: string; isSuperAdmin: boolean };
+
+export type AssetWriteHooks = {
+  beforeInsert?: (db: DatabaseExecutor, asset: CreateAssetInput) => Promise<CreateAssetInput>;
+  beforeUpdate?: (db: DatabaseExecutor, existing: Record<string, unknown>, asset: UpdateAssetInput) => Promise<UpdateAssetInput>;
+};
 
 async function inTransaction<T>(pool: DatabasePool, work: (client: DatabaseExecutor) => Promise<T>) {
   // Production pg.Pool always exposes connect(). Tests intentionally use tiny
@@ -154,6 +160,16 @@ export async function syncWorldLocations(
   });
 }
 
+/**
+ * Collections whose canonical rows are owned by the shared world-child service.
+ *
+ * The world root document keeps a compatibility projection of these, but the
+ * root write path must never read it as canon. A root save carries whatever the
+ * editor last loaded, which is routinely older than a canonical child edited
+ * elsewhere, so submitting one must not update or delete a canonical row.
+ */
+const rootOwnedWorldCollections = ['locations'] as const;
+
 async function syncWorldCollections(
   db: DatabaseExecutor,
   worldId: string,
@@ -161,11 +177,13 @@ async function syncWorldCollections(
   document: Record<string, unknown>,
   contentRating: string,
   strict: boolean,
+  options: { skipKeys?: readonly WorldCollectionKey[] } = {},
 ) {
   try {
     return await syncWorldEmbeddedEntities(db, worldId, userId, document, contentRating, {
       strict,
       allowLegacyNameMatch: false,
+      skipKeys: options.skipKeys,
     });
   } catch (error) {
     if (error instanceof WorldEntitySyncError) {
@@ -173,6 +191,26 @@ async function syncWorldCollections(
     }
     throw error;
   }
+}
+
+/**
+ * Restore the stored compatibility projections for root-owned collections.
+ *
+ * This is the boundary that makes a stale or hand-crafted `document.locations`
+ * inert: the submitted array is discarded before change detection, inferred
+ * removal, the world write and the projection rebuild, so it can neither
+ * overwrite nor delete a canonical Place.
+ */
+function restoreRootOwnedCollections(
+  existingDocument: Record<string, unknown>,
+  nextDocument: Record<string, unknown>,
+) {
+  const restored = { ...nextDocument };
+  for (const key of rootOwnedWorldCollections) {
+    if (existingDocument[key] === undefined) delete restored[key];
+    else restored[key] = existingDocument[key];
+  }
+  return restored;
 }
 
 export async function currentAssetRevision(db: DatabaseExecutor, assetId: string) {
@@ -267,10 +305,11 @@ export async function insertAsset(
   identity: WriteIdentity,
   rawInput: unknown,
   source: AssetWriteSource = 'editor',
+  hooks: AssetWriteHooks = {},
 ): Promise<{ row: Record<string, unknown>; result: AssetWriteResult }> {
   const parsed = createAssetSchema.safeParse(rawInput);
   if (!parsed.success) throw new AssetWriteError(400, 'Those record details are not valid Orbis fields.', parsed.error.flatten());
-  const asset = parsed.data;
+  let asset = parsed.data;
 
   if (asset.type === 'world' && asset.originWorldId) throw new AssetWriteError(400, 'A world cannot be created inside another world.');
   if (asset.type === 'persona' && asset.originWorldId) throw new AssetWriteError(400, 'A Persona is reusable and cannot be created inside a world.');
@@ -284,6 +323,8 @@ export async function insertAsset(
         throw new AssetWriteError(403, 'Only the world owner can add records to this world.');
       }
     }
+
+    if (hooks.beforeInsert) asset = await hooks.beforeInsert(client, asset);
 
     const id = randomUUID();
     const baseDocument = asset.type === 'world'
@@ -335,10 +376,11 @@ export async function applyAssetUpdate(
   assetId: string,
   rawInput: unknown,
   source: AssetWriteSource = 'editor',
+  hooks: AssetWriteHooks = {},
 ): Promise<{ row: Record<string, unknown>; result: AssetWriteResult }> {
   const parsed = updateAssetSchema.safeParse(rawInput);
   if (!parsed.success) throw new AssetWriteError(400, 'Those record details are not valid Orbis fields.', parsed.error.flatten());
-  const asset = parsed.data;
+  let asset = parsed.data;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assetId)) {
     throw new AssetWriteError(400, 'Use an exact Orbis record ID.');
   }
@@ -371,6 +413,8 @@ export async function applyAssetUpdate(
       }
     }
 
+    if (hooks.beforeUpdate) asset = await hooks.beforeUpdate(client, existing, asset);
+
     const existingDocument = isRecord(existing.document) ? existing.document : {};
     let nextDocument = asset.document !== undefined ? { ...asset.document } : { ...existingDocument };
     if (existing.origin_world_id && isWorldCollectionType(String(existing.type))) {
@@ -397,6 +441,9 @@ export async function applyAssetUpdate(
       (identityBlock as Record<string, unknown>).name = nextAsset.name;
     }
     if (existing.type === 'world') nextAsset.document = normalizeWorldDocument(nextAsset.document);
+    if (existing.type === 'world' && asset.document !== undefined) {
+      nextAsset.document = restoreRootOwnedCollections(existingDocument, nextAsset.document);
+    }
     assertWorldDocumentCollections(String(existing.type), nextAsset.document);
     if (existing.type === 'persona') {
       const existingPersonaSettings = isRecord(existingDocument.personaSettings) ? existingDocument.personaSettings : {};
@@ -447,8 +494,12 @@ export async function applyAssetUpdate(
     });
 
     if (row.type === 'world') {
-      await syncWorldCollections(client, assetId, identity.userId, row.document as Record<string, unknown>, String(row.content_rating ?? 'sfw'), true);
-      await rebuildWorldProjection(client, assetId, { dropUnlinked: true });
+      await syncWorldCollections(client, assetId, identity.userId, row.document as Record<string, unknown>, String(row.content_rating ?? 'sfw'), true, {
+        skipKeys: rootOwnedWorldCollections,
+      });
+      // Root-owned collections keep any unlinked legacy entry rather than having
+      // it dropped, because a root save must never delete authored world data.
+      await rebuildWorldProjection(client, assetId, { dropUnlinked: true, preserveUnlinkedKeys: rootOwnedWorldCollections });
       const fresh = await client.query('SELECT * FROM library_assets WHERE id = $1', [assetId]);
       row = fresh.rows[0] as Record<string, unknown>;
     } else if (row.origin_world_id && isWorldCollectionType(String(row.type))) {

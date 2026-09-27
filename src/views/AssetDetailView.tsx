@@ -7,6 +7,7 @@ import { downloadRecordArchive } from '../api/archive-transfer';
 import { useAuth } from '../auth/AuthContext';
 import { findNavigationItem } from '../app/library-nav';
 import { AssetImageGallery } from '../components/AssetImageGallery';
+import { PersonaPicker } from '../components/PersonaPicker';
 import { ErrorState, LoadingState } from '../components/StatePanel';
 import { useLibraryData } from '../hooks/useLibraryData';
 import { useSEO } from '../hooks/useSEO';
@@ -19,6 +20,7 @@ export function AssetDetailView() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [launching, setLaunching] = useState(false);
+  const [personaPickerOpen, setPersonaPickerOpen] = useState(false);
   const [launchError, setLaunchError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -89,11 +91,16 @@ export function AssetDetailView() {
   const canTransfer = asset.type === 'world' && asset.isOwner === true;
   const coverUrl = assetImageUrl(asset.coverImage);
 
-  const simulate = async () => {
+  const openPersonaPicker = () => {
     if (!user) { navigate('/account'); return; }
+    setLaunchError('');
+    setPersonaPickerOpen(true);
+  };
+
+  const simulate = async (personaId: string) => {
     setLaunching(true); setLaunchError('');
     try {
-      const launch = await libraryApi.simulateAsset(asset.id);
+      const launch = await libraryApi.simulateAsset(asset.id, personaId);
       window.location.assign(launch.launchUrl);
     } catch (reason) {
       setLaunchError(reason instanceof Error ? reason.message : 'Speculus could not start.');
@@ -208,7 +215,7 @@ export function AssetDetailView() {
             {canEdit
               ? <Link className="button button--primary" to={`/asset/${asset.id}/edit`}><Pencil size={16} /> Edit record</Link>
               : <button className="button button--disabled" disabled title="Only the owner can edit this record"><Pencil size={16} /> Owner protected</button>}
-            <button className="button button--secondary" disabled={launching} onClick={() => void simulate()}><Sparkles size={16} /> {launching ? 'Packaging...' : 'Simulate'}</button>
+            <button className="button button--secondary" disabled={launching} onClick={openPersonaPicker}><Sparkles size={16} /> Simulate</button>
             {asset.type === 'world' && <Link className="button button--secondary" to={`/asset/${asset.id}/saves`}><Archive size={16} /> Save Archive</Link>}
             {canEdit && <button className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : asset.type === 'world' ? 'Download world' : 'Download SPC'}</button>}
             {canTransfer && <button className="button button--secondary" type="button" disabled={transferring} onClick={openTransfer}><ArrowRightLeft size={16} /> Transfer to user</button>}
@@ -218,6 +225,14 @@ export function AssetDetailView() {
           {deleteError && <p className="form-message" role="alert">{deleteError}</p>}
           {downloadError && <p className="form-message" role="alert">{downloadError}</p>}
           {transferError && <p className="form-message" role="alert">{transferError}</p>}
+
+          {personaPickerOpen && <PersonaPicker
+            targetName={asset.name}
+            busy={launching}
+            error={launchError}
+            onCancel={() => { if (!launching) { setPersonaPickerOpen(false); setLaunchError(''); } }}
+            onSelect={(personaId) => void simulate(personaId)}
+          />}
 
           {transferOpen && canTransfer && <section className="world-delete-review" role="dialog" aria-modal="true" aria-labelledby="world-transfer-title">
             <header>

@@ -1,5 +1,18 @@
 import type { AssetImage, AssetImageKind, AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
 
+export type WorldChildType = 'place' | 'species' | 'faction' | 'society' | 'family' | 'memory';
+export type WorldChildProjection = Record<string, unknown> & { id: string; libraryAssetId: string };
+export interface WorldChildren {
+  locations: WorldChildProjection[];
+  species: WorldChildProjection[];
+  factions: WorldChildProjection[];
+  societies: WorldChildProjection[];
+  families: WorldChildProjection[];
+  memories: WorldChildProjection[];
+}
+export type WorldChildCreate = Omit<LibraryAssetCreate, 'type' | 'originWorldId'> & { type: WorldChildType };
+export type WorldChildUpdate = Partial<LibraryAssetUpdate>;
+
 export interface DeleteImpact {
   totalChildren: number;
   byType: Record<string, number>;
@@ -47,17 +60,30 @@ export interface OwnershipTransferResult {
   transferredTo: OwnershipTransferTarget;
 }
 
+export interface SimulationPersona {
+  id: string;
+  name: string;
+  summary: string;
+  owned: boolean;
+}
+
 export interface LibraryApi {
   getOverview(signal?: AbortSignal): Promise<LibraryOverview>;
   listAssets(query?: AssetQuery, signal?: AbortSignal): Promise<AssetListResponse>;
   getAsset(id: string, signal?: AbortSignal): Promise<LibraryAsset>;
+  listWorldChildren(worldId: string, signal?: AbortSignal): Promise<WorldChildren>;
+  createWorldChild(worldId: string, asset: WorldChildCreate): Promise<LibraryAsset>;
+  updateWorldChild(worldId: string, childId: string, update: WorldChildUpdate): Promise<LibraryAsset>;
+  moveWorldChild(worldId: string, childId: string, parentLocationId: string | null): Promise<LibraryAsset>;
+  deleteWorldChild(worldId: string, childId: string): Promise<void>;
   createAsset(asset: LibraryAssetCreate): Promise<LibraryAsset>;
   updateAsset(id: string, update: LibraryAssetUpdate): Promise<LibraryAsset>;
   getDeleteImpact(id: string): Promise<DeleteImpact>;
   deleteAsset(id: string, options?: { cascade?: boolean; confirmName?: string }): Promise<void>;
   searchOwnershipTransferTargets(id: string, search: string): Promise<OwnershipTransferTarget[]>;
   transferWorldOwnership(id: string, input: { targetUserId: string; confirmName: string }): Promise<OwnershipTransferResult>;
-  simulateAsset(id: string): Promise<{ launchUrl: string; expiresAt: number }>;
+  listSimulationPersonas(signal?: AbortSignal): Promise<SimulationPersona[]>;
+  simulateAsset(id: string, personaId: string): Promise<{ launchUrl: string; expiresAt: number }>;
   listAssetImages(assetId: string, signal?: AbortSignal): Promise<AssetImage[]>;
   uploadAssetImage(assetId: string, input: AssetImageUploadInput): Promise<AssetImage>;
   addExternalAssetImage(assetId: string, input: AssetImageExternalInput): Promise<AssetImage>;

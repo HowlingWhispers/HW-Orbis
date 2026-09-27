@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertNoMinorSexualContent, buildCodaOutcomeSummary, buildCodaWriteReport, CodaRuntimeError,
-  executeCodaOperations, stripWriteClaims, validateCodaOperation, validateCodaOperations,
+  executeCodaOperations, mergeCodaDocumentPatch, stripWriteClaims, validateCodaOperation, validateCodaOperations,
   type CodaExecutorIdentity,
 } from '../server/coda-runtime';
 import type { DatabasePool } from '../server/db';
@@ -38,6 +38,65 @@ function fakePool() {
   return { pool, queries, insertCount: () => insertCount };
 }
 
+function canonicalPlacePool() {
+  const queries: Array<{ sql: string; params?: unknown[] }> = [];
+  let revision = 0;
+  let child: Record<string, unknown> | undefined;
+  const parent: Record<string, unknown> = {
+    id: '33333333-3333-4333-8333-333333333333', type: 'place', name: 'Ridge', summary: '',
+    origin_world_id: worldId, creator_user_id: identity.userId, content_rating: 'sfw', tags: [], visual_tone: 'mist',
+    document: { worldEntryId: 'ridge', kind: 'region' }, updated_at: new Date('2026-01-01T00:00:00Z'),
+  };
+  let worldDocument: Record<string, unknown> = { lore: 'kept', locations: [] };
+  let failCanonicalUpdate = false;
+  const pool = {
+    query: async (sql: string, params?: unknown[]) => {
+      queries.push({ sql, params });
+      if (sql.includes("SELECT id FROM library_assets WHERE id = $1 AND type = 'world' FOR UPDATE")) return { rows: [{ id: worldId }], rowCount: 1 };
+      if (sql.includes('SELECT id, type, creator_user_id FROM library_assets')) return { rows: [{ id: worldId, type: 'world', creator_user_id: identity.userId }], rowCount: 1 };
+      if (sql.startsWith('INSERT INTO library_assets')) {
+        child = {
+          id: params?.[0], type: params?.[1], name: params?.[2], summary: params?.[3], origin_world_id: params?.[4],
+          creator_user_id: identity.userId, content_rating: params?.[6], tags: params?.[7], visual_tone: params?.[8],
+          document: JSON.parse(String(params?.[9])), updated_at: new Date('2026-02-02T00:00:00Z'),
+        };
+        return { rows: [child], rowCount: 1 };
+      }
+      if (sql.includes('SELECT max(revision)')) return { rows: [{ revision }], rowCount: 1 };
+      if (sql.includes('INSERT INTO library_asset_revisions')) { revision += 1; return { rows: [], rowCount: 1 }; }
+      if (sql.startsWith('SELECT * FROM library_assets WHERE id = $1')) {
+        const row = params?.[0] === child?.id ? child : undefined;
+        return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+      }
+      if (sql.includes("WHERE id = $1 OR (origin_world_id = $2 AND type = 'place'")) {
+        return params?.[0] === 'ridge' ? { rows: [parent], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
+      if (sql.includes("WHERE origin_world_id = $1 AND type = 'place'")) return { rows: [parent, ...(child ? [child] : [])], rowCount: child ? 2 : 1 };
+      if (sql.startsWith('UPDATE library_assets SET name=$2')) {
+        if (failCanonicalUpdate) throw new Error('simulated canonical failure');
+        child = {
+          ...child, name: params?.[1], summary: params?.[2], origin_world_id: params?.[3], content_rating: params?.[4],
+          tags: params?.[5], visual_tone: params?.[6], document: JSON.parse(String(params?.[7])), updated_at: new Date('2026-03-03T00:00:00Z'),
+        };
+        return { rows: [child], rowCount: 1 };
+      }
+      if (sql.includes("SELECT document FROM library_assets WHERE id = $1 AND type = 'world' FOR UPDATE")) return { rows: [{ document: worldDocument }], rowCount: 1 };
+      if (sql.includes('SET document = $2::jsonb, updated_at = now() WHERE id = $1')) {
+        worldDocument = JSON.parse(String(params?.[1]));
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.startsWith('UPDATE library_assets')) return { rows: [], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    },
+  } as unknown as DatabasePool;
+  return {
+    pool, queries,
+    child: () => child,
+    worldDocument: () => worldDocument,
+    failCanonicalUpdates: () => { failCanonicalUpdate = true; },
+  };
+}
+
 describe('Coda runtime validation', () => {
   it('rejects a malformed operation instead of pretending it ran', () => {
     expect(() => validateCodaOperation({ op: 'create', name: 'X' }, 0, identity)).toThrow(/record type/);
@@ -52,6 +111,12 @@ describe('Coda runtime validation', () => {
     expect(() => validateCodaOperation({ op: 'create', type: 'character', name: 'X', fields: { creatorUserId: 'someone' } }, 0, identity)).toThrow(/control fields/);
     expect(() => validateCodaOperation({ op: 'create', type: 'character', name: 'X', fields: { nested: { visibility: 'public' } } }, 0, identity)).toThrow(/control fields/);
     expect(() => validateCodaOperation({ op: 'create', type: 'character', name: 'X', fields: { contentRating: 'adult' } }, 0, identity)).toThrow(/content rating/);
+  });
+
+  it('refuses a world locations replacement before it can reach a write path', () => {
+    expect(() => validateCodaOperation({
+      op: 'update', type: 'world', targetRecordId: worldId, fields: { locations: [] },
+    }, 0, identity)).toThrow(/canonical Place records/);
   });
 
   it('requires creator access and adult access before writing', () => {
@@ -192,6 +257,48 @@ describe('Coda runtime execution', () => {
     expect(queries.some((query) => query.sql.includes('INSERT INTO library_asset_revisions'))).toBe(true);
   });
 
+  it('creates, edits, and moves a Place through canonical child writes and equivalent projection shape', async () => {
+    const fixture = canonicalPlacePool();
+    const created = await executeCodaOperations(fixture.pool, identity, {
+      operations: [{ op: 'create', type: 'place', name: 'Harbor', fields: { kind: 'settlement', description: 'Old', authored: { keeper: true } } }],
+    }, { defaultOriginWorldId: worldId });
+    expect(created[0]).toMatchObject({ status: 'applied', recordType: 'place', originWorldId: worldId });
+    expect(fixture.queries.some(({ sql }) => sql.startsWith('INSERT INTO library_assets'))).toBe(true);
+
+    const childId = String(created[0].recordId);
+    const updated = await executeCodaOperations(fixture.pool, identity, {
+      operations: [{ op: 'update', targetRecordId: childId, fields: { description: 'New', parentLocationId: 'ridge' } }],
+    });
+    expect(updated[0]).toMatchObject({ status: 'applied', operation: 'update' });
+    expect(fixture.child()?.document).toMatchObject({ kind: 'settlement', description: 'New', authored: { keeper: true }, parentLocationId: 'ridge' });
+    const projected = (fixture.worldDocument().locations as Record<string, unknown>[])[0];
+    expect(projected).toMatchObject({
+      id: (fixture.child()?.document as Record<string, unknown>).worldEntryId,
+      libraryAssetId: childId,
+      name: 'Harbor',
+      kind: 'settlement',
+      description: 'New',
+      parentLocationId: 'ridge',
+    });
+    expect(fixture.queries.some(({ sql }) => sql.startsWith('UPDATE library_assets SET name=$2'))).toBe(true);
+  });
+
+  it('does not touch the world projection when the canonical Place write fails', async () => {
+    const fixture = canonicalPlacePool();
+    const created = await executeCodaOperations(fixture.pool, identity, {
+      operations: [{ op: 'create', type: 'place', name: 'Harbor', fields: { description: 'Old' } }],
+    }, { defaultOriginWorldId: worldId });
+    const projectionBefore = structuredClone(fixture.worldDocument());
+    fixture.failCanonicalUpdates();
+    const worldProjectionWritesBefore = fixture.queries.filter(({ sql }) => sql.includes('SET document = $2::jsonb, updated_at = now() WHERE id = $1')).length;
+    const failed = await executeCodaOperations(fixture.pool, identity, {
+      operations: [{ op: 'update', targetRecordId: created[0].recordId, fields: { description: 'Never projected' } }],
+    });
+    expect(failed[0]?.status).toBe('failed');
+    expect(fixture.worldDocument()).toEqual(projectionBefore);
+    expect(fixture.queries.filter(({ sql }) => sql.includes('SET document = $2::jsonb, updated_at = now() WHERE id = $1'))).toHaveLength(worldProjectionWritesBefore);
+  });
+
   it('performs a real update and reports the changed fields', async () => {
     const { pool, queries } = fakePool();
     const results = await executeCodaOperations(pool, identity, {
@@ -200,6 +307,34 @@ describe('Coda runtime execution', () => {
     expect(results[0]).toMatchObject({ status: 'applied', operation: 'update', recordId });
     expect(results[0].changedFields).toContain('document');
     expect(queries.some((query) => query.sql.startsWith('UPDATE library_assets'))).toBe(true);
+  });
+
+  it('merges a Place patch without erasing authored sibling fields', () => {
+    expect(mergeCodaDocumentPatch({
+      description: 'Old', kind: 'settlement', authored: { keeper: true, note: 'old' },
+    }, {
+      description: 'New', authored: { note: 'new' }, parentLocationId: 'ridge',
+    })).toEqual({
+      description: 'New', kind: 'settlement', authored: { keeper: true, note: 'new' }, parentLocationId: 'ridge',
+    });
+  });
+
+  it('rejects locations against the stored world type even when the operation omits type', async () => {
+    const queries: string[] = [];
+    const pool = {
+      query: async (sql: string) => {
+        queries.push(sql);
+        if (sql.startsWith('SELECT * FROM library_assets')) {
+          return { rowCount: 1, rows: [{ id: worldId, type: 'world', document: { locations: [] } }] };
+        }
+        throw new Error('unexpected write');
+      },
+    } as unknown as DatabasePool;
+    const results = await executeCodaOperations(pool, identity, {
+      operations: [{ op: 'update', targetRecordId: worldId, fields: { locations: [{ name: 'Injected' }] } }],
+    });
+    expect(results[0]).toMatchObject({ status: 'rejected', code: 'embedded_locations_forbidden' });
+    expect(queries.some((sql) => sql.startsWith('UPDATE') || sql.startsWith('INSERT'))).toBe(false);
   });
 
   it('reports failure honestly and never claims a save when the write is rejected', async () => {

@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import {
-  applyAssetUpdate, assetTypes, contentRatings, insertAsset, recordAssetRevision, visualTones,
+  applyAssetUpdate, AssetWriteError, assetTypes, contentRatings, insertAsset, recordAssetRevision, visualTones,
   type AssetWriteResult,
 } from './asset-writes.js';
 import type { DatabasePool } from './db.js';
+import { createWorldChild, mergeChildDocumentPatch, patchWorldChild } from './world-children.js';
 
 /**
  * Coda's deterministic runtime.
@@ -194,6 +195,24 @@ function summaryFromFields(fields: Record<string, unknown>, fallback: string) {
   return typeof candidate === 'string' ? candidate : fallback;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+// One merge authority. Coda and the editor reach canonical child documents
+// through the shared world-child service, so they must not diverge on what a
+// partial patch means.
+export const mergeCodaDocumentPatch = mergeChildDocumentPatch;
+
+function assertNoEmbeddedLocationsPatch(operation: CodaOperation, index: number, targetType?: string) {
+  if (targetType !== 'world' || !Object.prototype.hasOwnProperty.call(operation.fields, 'locations')) return;
+  throw new CodaRuntimeError(
+    422,
+    `Operation ${index + 1} tried to replace a world's embedded locations. Coda must create or update canonical Place records instead, so nothing was saved.`,
+    'embedded_locations_forbidden',
+  );
+}
+
 /**
  * Validates one model operation without touching the database. Throws a
  * CodaRuntimeError with the real reason; never silently coerces a broken operation.
@@ -242,6 +261,8 @@ function validateCodaOperationOrThrow(operation: unknown, index: number, identit
   if (op.originWorldId) {
     throw new CodaRuntimeError(422, `Operation ${index + 1} tried to place a record with a raw world reference that Coda cannot verify. Nothing was saved.`, 'unverified_world_reference');
   }
+
+  assertNoEmbeddedLocationsPatch(op, index, op.type);
 
   if (!identity.canCreate && !identity.isSuperAdmin) {
     throw new CodaRuntimeError(403, 'Coda cannot save records for this account. Creator access is required, so nothing was saved.', 'creator_access_required');
@@ -351,7 +372,7 @@ export async function executeCodaOperations(
       let write: { row: Record<string, unknown>; result: AssetWriteResult };
       if (operation.op === 'create') {
         const originWorldId = operation.type === 'world' ? null : options.defaultOriginWorldId ?? null;
-        write = await insertAsset(pool, identity, {
+        const input = {
           type: operation.type,
           name: operation.name!,
           summary: (operation.summary ?? summaryFromFields(operation.fields, '')).slice(0, 2000),
@@ -360,16 +381,31 @@ export async function executeCodaOperations(
           tags: operation.tags ?? [],
           visualTone: operation.visualTone ?? 'moon',
           document: operation.fields,
-        }, 'coda');
+        };
+        write = operation.type === 'place' && originWorldId
+          ? await createWorldChild(pool, identity, originWorldId, input, 'coda')
+          : await insertAsset(pool, identity, input, 'coda');
       } else {
-        write = await applyAssetUpdate(pool, identity, operation.targetRecordId!, {
+        const target = await pool.query('SELECT * FROM library_assets WHERE id = $1', [operation.targetRecordId!]);
+        if (!target.rowCount || !target.rows[0]) throw new AssetWriteError(404, 'Record not found.');
+        const existing = target.rows[0] as Record<string, unknown>;
+        const targetType = String(existing.type ?? '');
+        assertNoEmbeddedLocationsPatch(operation, index, targetType);
+        const document = targetType === 'place' && !existing.origin_world_id
+          ? mergeCodaDocumentPatch(isRecord(existing.document) ? existing.document : {}, operation.fields)
+          : operation.fields;
+        const input = {
           ...(operation.name ? { name: operation.name } : {}),
           ...(operation.summary !== undefined ? { summary: operation.summary } : {}),
           ...(operation.contentRating ? { contentRating: operation.contentRating } : {}),
           ...(operation.tags ? { tags: operation.tags } : {}),
           ...(operation.visualTone ? { visualTone: operation.visualTone } : {}),
-          document: operation.fields,
-        }, 'coda');
+          document,
+        };
+        const originWorldId = typeof existing.origin_world_id === 'string' ? existing.origin_world_id : '';
+        write = targetType === 'place' && originWorldId
+          ? await patchWorldChild(pool, identity, originWorldId, operation.targetRecordId!, input, 'coda')
+          : await applyAssetUpdate(pool, identity, operation.targetRecordId!, input, 'coda');
       }
 
       const { result } = write;
@@ -403,7 +439,7 @@ export async function executeCodaOperations(
       }));
       results.push({
         index,
-        status: 'failed',
+        status: error instanceof CodaRuntimeError ? 'rejected' : 'failed',
         operation: operation.op,
         requestedName,
         recordId: operation.targetRecordId ?? null,
@@ -413,7 +449,7 @@ export async function executeCodaOperations(
         originWorldId: null,
         contentRating: operation.contentRating ?? null,
         message: `Nothing was saved for "${requestedName}": ${message}`,
-        code: `write_failed_${status}`,
+        code: error instanceof CodaRuntimeError ? error.code : `write_failed_${status}`,
       });
     }
   }

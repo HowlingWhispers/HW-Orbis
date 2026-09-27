@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { libraryApi } from '../api/client';
 import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaHistoryTurn } from '../api/coda-assistant';
 import { PERSONA_DOCUMENT_KEYS, unwrapDocumentPatch } from '../lib/coda-patch';
+import type { WorldChildCreate } from '../api/contracts';
 import type { LibraryAsset, LibraryAssetUpdate } from '../types/library';
 
 type WorldTarget = {
@@ -103,6 +104,34 @@ function scopeWorldPatch(patch: unknown, target: WorldTarget) {
   return Object.keys(scoped).length > 0 ? scoped : null;
 }
 
+/**
+ * Turn an approved one-place draft into a canonical world-child create.
+ *
+ * Coda may not write a world's embedded `locations` array, so the draft is
+ * interpreted as a child record and handed to the shared world-child service,
+ * which assigns the stable entry ID and validates the parent link. Model-supplied
+ * identity fields are dropped rather than trusted.
+ */
+export function codaPlaceCreateFromPatch(world: LibraryAsset, patch: Record<string, unknown>): WorldChildCreate {
+  const locations = patch.locations;
+  const place = Array.isArray(locations) ? locations[0] : undefined;
+  if (!isRecord(place)) throw new Error('Coda did not return one valid place.');
+  const name = typeof place.name === 'string' ? place.name.trim() : '';
+  if (!name) throw new Error('Coda’s place needs a name before Orbis can save it.');
+
+  const { id: _id, libraryAssetId: _libraryAssetId, worldEntryId: _worldEntryId, name: _name, ...document } = place;
+  const description = typeof document.description === 'string' ? document.description.trim() : '';
+  return {
+    type: 'place',
+    name,
+    summary: description.slice(0, 2000),
+    contentRating: world.contentRating ?? 'sfw',
+    tags: [],
+    visualTone: 'mist',
+    document,
+  };
+}
+
 function mergePatchValue(current: unknown, patch: unknown): unknown {
   if (isRecord(patch)) {
     const base = isRecord(current) ? current : {};
@@ -170,6 +199,18 @@ function undoStorageKey(assetId: string) {
   return `orbis:coda-undo:${assetId}`;
 }
 
+function placeNoticeStorageKey(assetId: string) {
+  return `orbis:coda-place-notice:${assetId}`;
+}
+
+function loadPlaceNotice(assetId: string) {
+  if (typeof window === 'undefined') return '';
+  const key = placeNoticeStorageKey(assetId);
+  const notice = window.sessionStorage.getItem(key) ?? '';
+  window.sessionStorage.removeItem(key);
+  return notice;
+}
+
 function loadUndo(assetId: string): UndoSnapshot | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -199,6 +240,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
   const [appliedSection, setAppliedSection] = useState('');
   const [worldTarget, setWorldTarget] = useState('identity');
   const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(() => loadUndo(asset.id));
+  const [undoUnavailable, setUndoUnavailable] = useState(() => loadPlaceNotice(asset.id));
 
   const selectedWorldTarget = liveAsset.type === 'world'
     ? worldTargets.find((target) => target.value === worldTarget) ?? worldTargets[0]
@@ -227,6 +269,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
     setSettingsPath('');
     setApplied(false);
     setAppliedSection('');
+    setUndoUnavailable('');
     try {
       const next = await askCoda({
         mode: 'sort',
@@ -273,6 +316,19 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
     setError('');
     try {
       const current = await libraryApi.getAsset(liveAsset.id);
+      if (current.type === 'world' && target?.value === 'place') {
+        await libraryApi.createWorldChild(current.id, codaPlaceCreateFromPatch(current, patch));
+        saveUndo(current.id, null);
+        setUndoSnapshot(null);
+        setApplied(true);
+        setAppliedSection(target.sectionLabel);
+        const notice = 'Undo is unavailable for a newly created Place because Orbis cannot atomically prove that deleting it is still safe. You can review and delete the Place from its canonical record.';
+        window.sessionStorage.setItem(placeNoticeStorageKey(current.id), notice);
+        setUndoUnavailable(notice);
+        setResult(null);
+        window.location.reload();
+        return;
+      }
       const currentDocument = current.document ?? {};
       const nextDocument = current.type === 'world' && target
         ? mergeWorldPatch(currentDocument, patch, target)
@@ -334,6 +390,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
     setSettingsPath('');
     setApplied(false);
     setAppliedSection('');
+    setUndoUnavailable('');
   };
 
   return <aside className="coda-file-assistant" aria-label="Coda file assistant">
@@ -357,6 +414,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
           setResult(null);
           setApplied(false);
           setAppliedSection('');
+          setUndoUnavailable('');
           setError('');
         }}>
           {worldTargets.map((target) => <option key={target.value} value={target.value}>{target.label}</option>)}
@@ -371,6 +429,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
     <div className="coda-file-transcript" aria-live="polite">
       {error && <div className="coda-file-notice is-error"><div><strong>{error}</strong>{settingsPath && <Link to={settingsPath}>Open Account settings</Link>}</div></div>}
       {undoSnapshot && <div className="coda-file-notice is-success"><div><strong>Last Coda change is saved{undoSnapshot.sectionLabel ? ` in ${undoSnapshot.sectionLabel}` : ''}.</strong><span>You can undo it until another edit changes this record.</span></div><button type="button" className="button button--secondary" disabled={applying} onClick={() => void undoCodaChange()}><Undo2 size={14} /> {applying ? 'Undoing...' : 'Undo Coda change'}</button></div>}
+      {undoUnavailable && <div className="coda-file-notice"><div><strong>Place saved as a canonical Orbis record.</strong><span>{undoUnavailable}</span></div></div>}
       {result?.summary && <p className="coda-file-summary">{result.summary}</p>}
       {result?.questions?.length ? <section><strong>Needs your answer</strong><ul>{result.questions.map((question) => <li key={question}>{question}</li>)}</ul></section> : null}
       {result?.warnings?.length ? <section><strong>Coda noticed</strong><ul>{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></section> : null}
