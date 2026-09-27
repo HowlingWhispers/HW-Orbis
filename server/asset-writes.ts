@@ -12,7 +12,7 @@ import {
 } from './world-entity-sync.js';
 import { removeCanonicalChildrenMissingFromWorld, WorldChildRemovalError } from './world-child-removal.js';
 
-export const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
+export const assetTypes = ['world', 'persona', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 export type AssetType = (typeof assetTypes)[number];
 export const contentRatings = ['sfw', 'adult'] as const;
 export const visualTones = ['moon', 'forest', 'ember', 'mist', 'violet', 'river'] as const;
@@ -114,6 +114,23 @@ export function normalizeWorldDocument(document: Record<string, unknown>) {
       visibility,
       showInLibrary: visibility === 'public' ? settings.showInLibrary === true : false,
       allowForking: settings.allowForking === true,
+    },
+  };
+}
+
+/** Personas are reusable user assets, not world children. Sharing is explicit and private by default. */
+export function normalizePersonaDocument(document: Record<string, unknown>, forcedSettings?: Record<string, unknown>) {
+  const rawSettings = forcedSettings ?? (isRecord(document.personaSettings) ? document.personaSettings : {});
+  const visibility = rawSettings.visibility === 'public' || rawSettings.visibility === 'unlisted'
+    ? rawSettings.visibility
+    : 'private';
+  return {
+    ...document,
+    personaSettings: {
+      visibility,
+      showInLibrary: visibility === 'public' ? rawSettings.showInLibrary === true : false,
+      allowUse: rawSettings.allowUse === true,
+      allowForking: rawSettings.allowForking === true,
     },
   };
 }
@@ -231,6 +248,7 @@ export async function insertAsset(
   const asset = parsed.data;
 
   if (asset.type === 'world' && asset.originWorldId) throw new AssetWriteError(400, 'A world cannot be created inside another world.');
+  if (asset.type === 'persona' && asset.originWorldId) throw new AssetWriteError(400, 'A Persona is reusable and cannot be created inside a world.');
 
   return inTransaction(pool, async (client) => {
     if (asset.originWorldId) {
@@ -243,7 +261,11 @@ export async function insertAsset(
     }
 
     const id = randomUUID();
-    const baseDocument = asset.type === 'world' ? normalizeWorldDocument(asset.document) : asset.document;
+    const baseDocument = asset.type === 'world'
+      ? normalizeWorldDocument(asset.document)
+      : asset.type === 'persona'
+        ? normalizePersonaDocument(asset.document, source === 'coda' ? {} : undefined)
+        : asset.document;
     const document = asset.originWorldId
       ? childDocumentWithStableEntryId(asset.type, id, baseDocument)
       : baseDocument;
@@ -314,6 +336,7 @@ export async function applyAssetUpdate(
 
     if (asset.originWorldId !== undefined && asset.originWorldId !== existing.origin_world_id) {
       if (existing.type === 'world' && asset.originWorldId) throw new AssetWriteError(400, 'A world cannot be moved inside another world.');
+      if (existing.type === 'persona' && asset.originWorldId) throw new AssetWriteError(400, 'A Persona is reusable and cannot be moved inside a world.');
       if (isWorldCollectionType(String(existing.type)) && existing.origin_world_id) {
         throw new AssetWriteError(409, 'Move world-owned places/species/factions/societies/families/memories from World Forge so their world link stays atomic.');
       }
@@ -348,6 +371,10 @@ export async function applyAssetUpdate(
       (identityBlock as Record<string, unknown>).name = nextAsset.name;
     }
     if (existing.type === 'world') nextAsset.document = normalizeWorldDocument(nextAsset.document);
+    if (existing.type === 'persona') {
+      const existingPersonaSettings = isRecord(existingDocument.personaSettings) ? existingDocument.personaSettings : {};
+      nextAsset.document = normalizePersonaDocument(nextAsset.document, source === 'coda' ? existingPersonaSettings : undefined);
+    }
 
     const changedFields: string[] = [];
     if (asset.name !== undefined && asset.name !== existing.name) changedFields.push('name');
