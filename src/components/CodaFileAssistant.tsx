@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { libraryApi } from '../api/client';
 import { askCoda, CodaAssistantError, type CodaAssistantResponse, type CodaHistoryTurn } from '../api/coda-assistant';
+import { PERSONA_DOCUMENT_KEYS, unwrapDocumentPatch } from '../lib/coda-patch';
 import type { LibraryAsset, LibraryAssetUpdate } from '../types/library';
 
 type WorldTarget = {
@@ -216,7 +217,9 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
       ? target.singleCollectionKey
         ? `\n- TARGET: ${target.label}. Draft exactly ONE new ${target.singular}.\n- recordPatch must contain ONLY the top-level key ${target.singleCollectionKey}, with exactly one new object inside its array.\n- Never echo, rewrite, or return the whole existing ${target.singleCollectionKey} collection. Existing entries are supplied only as a compact index so you can avoid duplicates.\n- If the user describes several entries, draft only the first/next one now. They can ask for the next entry in another turn.`
         : `\n- TARGET WORLD FORGE SECTION: ${target.label}. Put recordPatch changes ONLY under these existing top-level key(s): ${target.keys.join(', ')}. Do not include any other World Forge section.`
-      : '';
+      : liveAsset.type === 'persona'
+        ? `\n- TARGET PERSONA DOCUMENT: put your recordPatch keys at the TOP LEVEL of the Persona document, using only these existing keys: ${PERSONA_DOCUMENT_KEYS.join(', ')}.\n- Do NOT wrap your changes in a "document" key. "identity" is a nested object holding displayName, species, age, pronouns and description; the other keys are plain text or string lists.\n- Do not include id, name, summary, tags, contentRating, or any sharing or protected metadata.`
+        : '';
     const compactContext = target ? compactWorldTargetContext(liveAsset, target) : '';
 
     setWorking(true);
@@ -273,7 +276,7 @@ export function CodaFileAssistant({ asset }: { asset: LibraryAsset }) {
       const currentDocument = current.document ?? {};
       const nextDocument = current.type === 'world' && target
         ? mergeWorldPatch(currentDocument, patch, target)
-        : mergePatchValue(currentDocument, patch) as Record<string, unknown>;
+        : mergePatchValue(currentDocument, unwrapDocumentPatch(patch)) as Record<string, unknown>;
 
       if (JSON.stringify(nextDocument) === JSON.stringify(currentDocument)) {
         throw new Error('Coda did not produce a change to save.');

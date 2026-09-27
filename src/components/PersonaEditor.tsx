@@ -2,6 +2,7 @@ import { Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { libraryApi } from '../api/client';
+import { unwrapDocumentPatch } from '../lib/coda-patch';
 import type { ContentRating, LibraryAsset, LibraryAssetUpdate } from '../types/library';
 
 type JsonRecord = Record<string, unknown>;
@@ -112,7 +113,7 @@ export function PersonaEditor({ asset }: { asset: LibraryAsset }) {
     const applyCodaDraft = (event: Event) => {
       const detail = (event as CustomEvent<{ assetId?: string; patch?: unknown }>).detail;
       if (detail?.assetId !== asset.id || !detail.patch || typeof detail.patch !== 'object' || Array.isArray(detail.patch)) return;
-      setDocument((current) => mergeCodaDraft(current, detail.patch) as JsonRecord);
+      setDocument((current) => mergeCodaDraft(current, unwrapDocumentPatch(detail.patch)) as JsonRecord);
       setDirty(true);
       setMessage('Coda draft applied locally. Sharing settings were left untouched. Review before saving.');
     };
