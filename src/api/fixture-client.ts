@@ -1,4 +1,4 @@
-import type { LibraryApi } from './contracts';
+import type { LibraryApi, OwnershipTransferResult } from './contracts';
 import type { AssetListResponse, AssetQuery, LibraryAssetCreate, LibraryOverview } from '../types/library';
 import type { LibraryAssetUpdate } from '../types/library';
 import { assetTypes } from '../types/library';
@@ -96,7 +96,10 @@ export class FixtureLibraryApi implements LibraryApi {
     return [];
   }
 
-  async transferWorldOwnership(_id: string, _input: { targetUserId: string; confirmName: string }) {
+  async transferWorldOwnership(
+    _id: string,
+    _input: { targetUserId: string; confirmName: string },
+  ): Promise<OwnershipTransferResult> {
     throw new Error('Ownership transfer requires the live Orbis API.');
   }
 
