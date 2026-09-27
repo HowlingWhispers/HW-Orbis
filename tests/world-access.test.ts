@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canDirectViewAssetRow, canDiscoverAssetRow, readWorldAccessSettings } from '../server/world-access.js';
+import { canDirectViewAssetRow, canDiscoverAssetRow, readPersonaAccessSettings, readWorldAccessSettings } from '../server/world-access.js';
 
 describe('per-world access settings', () => {
   it('keeps existing worlds public when no settings exist', () => {
@@ -39,5 +39,41 @@ describe('per-world access settings', () => {
     };
     expect(canDirectViewAssetRow(world, 'viewer')).toBe(true);
     expect(canDiscoverAssetRow(world, 'viewer')).toBe(false);
+  });
+});
+
+describe('Persona access settings', () => {
+  it('keeps a Persona private by default', () => {
+    expect(readPersonaAccessSettings({})).toEqual({
+      visibility: 'private',
+      showInLibrary: false,
+      allowUse: false,
+      allowForking: false,
+    });
+    const persona = { type: 'persona', creator_user_id: 'owner', document: {} };
+    expect(canDirectViewAssetRow(persona, 'owner')).toBe(true);
+    expect(canDirectViewAssetRow(persona, 'viewer')).toBe(false);
+    expect(canDiscoverAssetRow(persona, 'viewer')).toBe(false);
+  });
+
+  it('supports unlisted direct sharing without public discovery', () => {
+    const persona = {
+      type: 'persona',
+      creator_user_id: 'owner',
+      document: { personaSettings: { visibility: 'unlisted', allowUse: true } },
+    };
+    expect(canDirectViewAssetRow(persona, 'viewer')).toBe(true);
+    expect(canDiscoverAssetRow(persona, 'viewer')).toBe(false);
+  });
+
+  it('discovers only explicitly public Personas shown in the library', () => {
+    const persona = {
+      type: 'persona',
+      creator_user_id: 'owner',
+      document: { personaSettings: { visibility: 'public', showInLibrary: true, allowUse: true, allowForking: true } },
+    };
+    expect(canDirectViewAssetRow(persona, 'viewer')).toBe(true);
+    expect(canDiscoverAssetRow(persona, 'viewer')).toBe(true);
+    expect(readPersonaAccessSettings(persona.document)).toMatchObject({ allowUse: true, allowForking: true });
   });
 });
