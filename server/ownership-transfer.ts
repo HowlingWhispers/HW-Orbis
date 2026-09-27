@@ -108,14 +108,27 @@ export function createOwnershipTransferRouter(pool: DatabasePool) {
       }
       const target = targetResult.rows[0];
 
-      const children = await client.query(
-        'SELECT count(*)::int AS count FROM library_assets WHERE origin_world_id = $1',
-        [world.id],
+      // A transfer is all-or-nothing. Never silently take a child record that is
+      // controlled by somebody other than the current world owner.
+      const ownership = await client.query(
+        `SELECT
+           count(*)::int AS child_count,
+           count(*) FILTER (WHERE creator_user_id IS DISTINCT FROM $2)::int AS foreign_count
+         FROM library_assets
+         WHERE origin_world_id = $1`,
+        [world.id, request.session.userId],
       );
-      const childCount = Number(children.rows[0]?.count ?? 0);
+      const childCount = Number(ownership.rows[0]?.child_count ?? 0);
+      const foreignCount = Number(ownership.rows[0]?.foreign_count ?? 0);
+      if (foreignCount > 0) {
+        await client.query('ROLLBACK');
+        return response.status(409).json({
+          error: `This world contains ${foreignCount} linked record${foreignCount === 1 ? '' : 's'} owned by another account. Ownership was not changed.`,
+        });
+      }
 
-      // The creator provenance column is protected by a DB trigger. Only the legacy
-      // operational-owner column moves, so Created by remains historically correct.
+      // The provenance column is protected by a DB trigger. Only current control
+      // moves, so Created by remains historically correct for every transferred row.
       await client.query(
         `UPDATE library_assets
          SET creator_user_id = $2,
