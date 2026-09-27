@@ -14,6 +14,11 @@ type EditableSettings = Pick<AdminSettings, 'guildId' | 'adultRoleIds' | 'creato
 const splitIds = (value: string) => [...new Set(value.split(/[\s,]+/).map((id) => id.trim()).filter(Boolean))];
 const joinIds = (ids: string[]) => ids.join('\n');
 
+function describeLoadFailure(section: string, reason: unknown) {
+  const detail = reason instanceof Error ? reason.message : 'That section could not be loaded.';
+  return `${section}: ${detail}`;
+}
+
 export function AdminView() {
   const { user, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<AdminTab>('overview');
@@ -24,16 +29,37 @@ export function AdminView() {
   const [viewPreferences, setViewPreferences] = useState<AdminViewPreferences>({ hidePrivateUserWorlds: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [partialError, setPartialError] = useState('');
 
   const load = useCallback(async () => {
     if (!user?.permissions.canAdmin) { setLoading(false); return; }
-    setLoading(true); setError('');
-    try {
-      const [overviewData, settingsData, auditData, preferenceData] = await Promise.all([adminApi.overview(), adminApi.settings(), adminApi.audit(), adminApi.viewPreferences()]);
-      setOverview(overviewData); setSettings(settingsData.settings); setAudit(auditData.items); setRoleResolution(settingsData.roleResolution.reason);
-      setViewPreferences(preferenceData.preferences);
-    } catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'The control room could not be opened.'); }
-    finally { setLoading(false); }
+    setLoading(true); setError(''); setPartialError('');
+    // Each section loads independently. One unavailable endpoint must not take down
+    // the sections that succeeded, so a missing route degrades to a notice rather
+    // than an entirely dead control room.
+    const [overviewResult, settingsResult, auditResult, preferenceResult] = await Promise.allSettled([
+      adminApi.overview(), adminApi.settings(), adminApi.audit(), adminApi.viewPreferences(),
+    ]);
+
+    const failures: string[] = [];
+    if (overviewResult.status === 'fulfilled') setOverview(overviewResult.value);
+    else failures.push(describeLoadFailure('System information', overviewResult.reason));
+    if (settingsResult.status === 'fulfilled') {
+      setSettings(settingsResult.value.settings);
+      setRoleResolution(settingsResult.value.roleResolution.reason);
+    } else failures.push(describeLoadFailure('Discord access settings', settingsResult.reason));
+    if (auditResult.status === 'fulfilled') setAudit(auditResult.value.items);
+    else failures.push(describeLoadFailure('Audit log', auditResult.reason));
+    if (preferenceResult.status === 'fulfilled') setViewPreferences(preferenceResult.value.preferences);
+    else failures.push(describeLoadFailure('Library view preferences', preferenceResult.reason));
+
+    // The console is only unusable when nothing at all could be loaded.
+    if (failures.length && overviewResult.status === 'rejected' && settingsResult.status === 'rejected') {
+      setError(failures[0] ?? 'The control room could not be opened.');
+    } else if (failures.length) {
+      setPartialError(failures.join(' '));
+    }
+    setLoading(false);
   }, [user?.permissions.canAdmin]);
 
   useEffect(() => { void load(); }, [load]);
@@ -49,6 +75,7 @@ export function AdminView() {
       </nav>
       {loading && <div className="admin-loading">Opening the control room...</div>}
       {error && <AdminDenied title="Control room unavailable" body={error} action={<button className="button button--ghost" onClick={() => void load()}>Try again</button>} />}
+      {!error && partialError && <p className="admin-notice" role="status">{partialError} The rest of the control room is still usable.</p>}
       {!loading && !error && overview && settings && <>
         {tab === 'overview' && <OverviewPanel overview={overview} audit={audit} viewPreferences={viewPreferences} onViewPreferencesChange={setViewPreferences} />}
         {tab === 'discord' && <DiscordPanel settings={settings} roleResolution={roleResolution} onSaved={(next) => { setSettings(next); void load(); }} />}

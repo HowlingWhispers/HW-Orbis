@@ -328,6 +328,8 @@ kbd { padding: 2px 6px; border: 1px solid var(--line); border-bottom-color: rgba
 .audit-list small { margin-top: 2px; color: var(--faint); font-size: 12px; }
 .admin-empty { color: var(--muted); font-size: 14px; }
 .admin-loading, .admin-denied { min-height: 280px; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 30px; border: 1px dashed var(--line-strong); border-radius: 12px; color: var(--muted); text-align: center; }
+/* Non-blocking notice for a single unavailable admin section. */
+.admin-notice { margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--line-strong); border-left: 3px solid var(--amber); border-radius: 8px; background: color-mix(in srgb, var(--amber) 8%, transparent); color: var(--muted); font-size: 13px; line-height: 1.5; }
 .admin-denied > svg { color: var(--amber); }
 .admin-denied h2 { margin: 6px 0 0; font-family: var(--serif); color: var(--text); font-size: 30px; }
 .admin-denied p { max-width: 580px; margin: 0 0 12px; font-size: 14px; line-height: 1.55; }

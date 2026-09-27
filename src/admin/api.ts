@@ -151,11 +151,34 @@ export interface AdminViewPreferences {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api/admin${path}`, {
-    ...init, credentials: 'include',
-    headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
-  });
-  const data = await response.json() as T & { error?: string };
+  let response: Response;
+  try {
+    response = await fetch(`/api/admin${path}`, {
+      ...init, credentials: 'include',
+      headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
+    });
+  } catch {
+    throw new Error('Orbis could not reach the administration service. Check your connection and try again.');
+  }
+
+  // Never assume JSON. A proxy error page, a gateway timeout, or a stale server that
+  // answers with the single-page app would otherwise surface as an opaque
+  // "Unexpected token '<'" that hides the real cause.
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(
+      response.ok
+        ? 'The administration service returned an unexpected page instead of data. Reload to get the current Orbis application.'
+        : `The administration service refused that request (HTTP ${response.status}).`,
+    );
+  }
+
+  let data: T & { error?: string };
+  try {
+    data = await response.json() as T & { error?: string };
+  } catch {
+    throw new Error('The administration service returned a response Orbis could not read. Try again.');
+  }
   if (!response.ok) throw new Error(data.error ?? 'Orbis administration could not complete that request.');
   return data;
 }

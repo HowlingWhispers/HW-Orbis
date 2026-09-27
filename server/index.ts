@@ -6,6 +6,7 @@ import session from 'express-session';
 import helmet from 'helmet';
 import { ZodError } from 'zod';
 import { AssetWriteError } from './asset-writes.js';
+import { apiNotFound } from './api-not-found.js';
 import { createAuthRouter } from './auth.js';
 import { createCodaAssistantRouter } from './coda-assistant.js';
 import { createCodaDiscordBridgeRouter } from './coda-discord-bridge.js';
@@ -152,6 +153,11 @@ app.use('/api/v1/library', createArchiveTransferRouter(config, pool, settingsSto
 // local artwork is only ever delivered through the access-checked media route.
 app.use('/api/v1/library', createMediaRouter(config, pool));
 app.use('/api/v1/library', createLibraryRouter(config, pool, settingsStore, adminViewPreferences));
+
+// An unmatched /api/ path must never fall through to the single-page app. Returning
+// index.html with 200 turns a missing endpoint (stale client, wrong base URL, version
+// skew) into a JSON parse failure deep inside a fetch, which hides the real cause.
+app.use('/api', apiNotFound);
 
 if (config.isProduction) {
   const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
