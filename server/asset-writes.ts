@@ -14,6 +14,7 @@ import {
   type WorldCollectionKey,
 } from './world-entity-sync.js';
 import { removeCanonicalChildrenMissingFromWorld, WorldChildRemovalError } from './world-child-removal.js';
+import { propagateWorldContentRating } from './world-child-rating.js';
 
 export const assetTypes = ['world', 'persona', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 export type AssetType = (typeof assetTypes)[number];
@@ -348,6 +349,10 @@ export async function insertAsset(
     });
 
     if (asset.type === 'world') {
+      // A new world's children are created with its rating by the sync below,
+      // so this matches zero rows here. It is kept so the inherited-rating
+      // invariant does not quietly depend on that ordering.
+      await propagateWorldContentRating(client, String(row.id), String(row.content_rating ?? asset.contentRating));
       await syncWorldCollections(client, String(row.id), identity.userId, document, String(row.content_rating ?? asset.contentRating), true);
       await rebuildWorldProjection(client, String(row.id), { dropUnlinked: true });
       const fresh = await client.query('SELECT * FROM library_assets WHERE id = $1', [row.id]);
@@ -494,6 +499,10 @@ export async function applyAssetUpdate(
     });
 
     if (row.type === 'world') {
+      // Canonical Places are excluded from the sync below, so their rating is
+      // pushed explicitly. This is metadata only: no Place document, and never
+      // document.locations, is read or written here.
+      await propagateWorldContentRating(client, assetId, String(row.content_rating ?? 'sfw'));
       await syncWorldCollections(client, assetId, identity.userId, row.document as Record<string, unknown>, String(row.content_rating ?? 'sfw'), true, {
         skipKeys: rootOwnedWorldCollections,
       });
