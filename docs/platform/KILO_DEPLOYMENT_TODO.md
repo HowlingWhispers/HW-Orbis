@@ -18,11 +18,28 @@ This checklist connects the Orbis build in `/var/www/hw/orbis-next` to the Specu
 - [ ] Verify the owner can edit their own Orbis record even when `canCreate` is false. This is the production check for the recurring lost-edit-permission regression.
 - [ ] Verify a different user still receives `403` when attempting to edit that record.
 - [ ] Verify creator and adult Discord roles still control new-record creation and access to other users' adult records.
-- [ ] Apply `server/migrations/022_asset_images.sql` to the Orbis PostgreSQL database.
-- [ ] Create the local image media root (`ORBIS_MEDIA_ROOT`, default `/srv/howling-whispers/orbis-media`) outside the repository and confirm it is writable by the `orbis.service` user. Confirm the media root is never served by the reverse proxy or by `express.static`.
+- [ ] Apply `server/migrations/022_asset_images.sql` to the Orbis PostgreSQL database. *(Already applied 2026-09-27 to the current live database behind `orbis.service` in `/srv/howling-whispers/orbis`; `library_asset_images` and `admin_view_preferences` exist with 0 rows. Still required for any other target database, because Orbis has no migration runner — every migration is applied by hand with `psql -f`.)*
+- [ ] Create the local image media root (`ORBIS_MEDIA_ROOT`, default `/srv/howling-whispers/orbis-media`) outside the repository and confirm it is writable by the `orbis.service` user. Confirm the media root is never served by the reverse proxy or by `express.static`. *(Boot already creates the directory; only the proxy-exposure check remains.)*
 - [ ] Confirm a local upload over 1 MB is refused with a clear 413, and that a non-image upload is refused regardless of its `Content-Type` or filename.
 - [ ] Confirm cover and gallery artwork stays private: an image on a private or adult record must not load for another user without access.
 - [ ] In the control room Overview panel, confirm **Hide private user worlds** is on by default, that another member's private world is absent from the Worlds list, and that turning it off reveals it. Confirm the preference survives a reload and that a direct link to that world still opens.
+
+## Deploy ordering: build, then restart, as one step
+
+The web client is served from `dist/` **on disk at request time**, while the API routes
+are loaded into memory once at boot. A `npm run build` without a `systemctl restart`
+therefore leaves the newest client talking to the previous server, and the browser starts
+requesting endpoints the running process does not have. Restart and build together; never
+treat a successful build as a deployment.
+
+Unmatched `/api/` paths now return a JSON 404 rather than falling through to the single-page
+app, so this skew is visible in the response body instead of surfacing as a JSON parse error
+inside the client. When you see "That Orbis API endpoint does not exist… reload", the fix is
+a restart, not a client bug.
+
+Because there is no migration runner, a restart cannot create the tables a new feature needs.
+Apply the migration with `psql -f` **before** restarting onto code that queries it, or the
+new routes will answer with a database error until the schema catches up.
 
 ## World-child link maintenance
 
