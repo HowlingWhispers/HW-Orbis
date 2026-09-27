@@ -1,0 +1,134 @@
+/* Public changelog page and the "What's New" bulletin.
+   Readability first: the bulletin is a reading surface, so the body scrolls
+   independently while the header, section navigation and ROGER footer stay put. */
+
+.changelog-page {
+  max-width: 70rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.changelog-page__header { margin-bottom: 2rem; }
+.changelog-page__header h1 { margin: .25rem 0 .5rem; }
+.changelog-page__header p { color: var(--ink-muted, #9aa4b2); margin: 0; }
+
+.changelog-page__entry {
+  border-top: 1px solid rgba(255, 255, 255, .12);
+  padding: 2rem 0;
+}
+.changelog-page__entry h2 { margin: 0 0 .25rem; }
+.changelog-page__title { color: var(--ink-muted, #9aa4b2); margin: 0 0 1.5rem; font-style: italic; }
+.changelog-page__entry h3 { margin: 1.75rem 0 .5rem; letter-spacing: .04em; text-transform: uppercase; font-size: .82rem; }
+.changelog-page__entry ul { margin: 0; padding-left: 1.1rem; }
+.changelog-page__entry li { margin-bottom: .5rem; line-height: 1.6; }
+.changelog-page__back { margin-top: 2.5rem; }
+
+/* ---- What's New bulletin ---- */
+
+.whats-new-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: clamp(.75rem, 3vw, 2rem);
+  background: rgba(4, 6, 10, .74);
+  backdrop-filter: blur(3px);
+}
+
+.whats-new {
+  display: flex;
+  flex-direction: column;
+  width: min(56rem, 100%);
+  /* A generous desktop reading area that still collapses cleanly on mobile. */
+  max-height: min(46rem, calc(100dvh - 2rem));
+  background: linear-gradient(180deg, #12141c 0%, #0d0f15 100%);
+  border: 1px solid rgba(214, 190, 140, .32);
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+  overflow: hidden;
+}
+
+.whats-new__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, .1);
+  background: rgba(255, 255, 255, .02);
+}
+.whats-new__header h2 { margin: .2rem 0 0; }
+.whats-new__date { margin: .35rem 0 0; font-size: .85rem; color: var(--ink-muted, #9aa4b2); }
+
+.whats-new__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  padding: .6rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  background: rgba(0, 0, 0, .2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.whats-new__nav-item {
+  padding: .3rem .7rem;
+  font-size: .78rem;
+  letter-spacing: .03em;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.whats-new__nav-item:hover,
+.whats-new__nav-item:focus-visible { border-color: rgba(214, 190, 140, .6); }
+.whats-new__nav-item.is-current { background: rgba(214, 190, 140, .16); border-color: rgba(214, 190, 140, .5); }
+
+/* The one independently scrollable region: header, nav and footer never move. */
+.whats-new__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.25rem 1.5rem 1.75rem;
+  scrollbar-gutter: stable;
+}
+.whats-new__body:focus-visible { outline: 2px solid rgba(214, 190, 140, .7); outline-offset: -2px; }
+
+.whats-new__entry + .whats-new__entry { margin-top: 2.25rem; padding-top: 1.75rem; border-top: 1px dashed rgba(255, 255, 255, .14); }
+.whats-new__entry-title { margin: 0 0 .25rem; }
+.whats-new__entry-date { margin: 0 0 1rem; font-size: .82rem; color: var(--ink-muted, #9aa4b2); }
+
+.whats-new__section { margin-top: 1.6rem; scroll-margin-top: .5rem; }
+.whats-new__section:focus-visible { outline: 2px solid rgba(214, 190, 140, .7); outline-offset: 4px; border-radius: 4px; }
+.whats-new__section h4 {
+  margin: 0 0 .5rem;
+  font-size: .8rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(214, 190, 140, .95);
+}
+.whats-new__section ul { margin: 0; padding-left: 1.1rem; }
+.whats-new__section li { margin-bottom: .45rem; line-height: 1.6; }
+
+.whats-new__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .9rem 1.5rem 1.1rem;
+  border-top: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(0, 0, 0, .28);
+}
+.whats-new__hint { margin: 0; font-size: .8rem; color: var(--ink-muted, #9aa4b2); max-width: 34rem; }
+.whats-new__roger { letter-spacing: .18em; font-weight: 700; min-width: 9rem; }
+
+@media (max-width: 40rem) {
+  .whats-new { max-height: calc(100dvh - 1rem); }
+  .whats-new__header, .whats-new__nav, .whats-new__body, .whats-new__footer { padding-left: 1rem; padding-right: 1rem; }
+  .whats-new__footer { flex-direction: column; align-items: stretch; }
+  .whats-new__roger { width: 100%; }
+}

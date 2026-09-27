@@ -26,6 +26,7 @@ import './styles/coda-assistant.css';
 import './styles/coda-file-editor.css';
 import './styles/coda-workspace.css';
 import './styles/coda-admin.css';
+import './styles/changelog.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

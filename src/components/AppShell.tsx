@@ -1,4 +1,4 @@
-import { LogIn, Menu, Search, Settings, SlidersHorizontal, X, MessageSquare, Sparkles } from 'lucide-react';
+import { LogIn, Menu, Search, Settings, SlidersHorizontal, X, MessageSquare, Sparkles, ScrollText } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { libraryNavigation } from '../app/library-nav';
@@ -8,6 +8,8 @@ import { projectList } from '../data/projects';
 import { useI18n } from '../i18n/I18nContext';
 import { UserAvatar } from './UserAvatar';
 import { CodaAssistant } from './CodaAssistant';
+import { WhatsNewDialog } from './WhatsNewDialog';
+import { useWhatsNew } from '../hooks/useWhatsNew';
 
 function formatCountdown(targetIso: string, now: number, liveLabel: string) {
   const remaining = Math.max(0, new Date(targetIso).getTime() - now);
@@ -53,6 +55,9 @@ export function AppShell() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { t } = useI18n();
+  // Only signed-in members get the automatic notice; acknowledgement is
+  // account-backed, so an anonymous visitor has nothing to compare against.
+  const whatsNew = useWhatsNew(Boolean(user) && !authLoading);
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
@@ -88,7 +93,8 @@ export function AppShell() {
              <MessageSquare size={17} /><span>{t('Join Discord')}</span>
            </a>
            <div className="api-lamp"><span /> <small>{t('Development archive')}</small></div>
-           {user?.permissions.canAdmin && <NavLink className="sidebar__settings" to="/admin"><SlidersHorizontal size={17} /> {t('Administration')}</NavLink>}
+            <NavLink className="sidebar__settings" to="/changelog"><ScrollText size={17} /> {t('Changelog')}</NavLink>
+            {user?.permissions.canAdmin && <NavLink className="sidebar__settings" to="/admin"><SlidersHorizontal size={17} /> {t('Administration')}</NavLink>}
            <NavLink className="sidebar__settings" to="/account"><Settings size={17} /> {t('Account')}</NavLink>
          </div>
       </aside>
@@ -121,6 +127,7 @@ export function AppShell() {
         <main className="content"><Outlet /></main>
       </div>
       {location.pathname !== '/coda' && <CodaAssistant />}
+      <WhatsNewDialog open={whatsNew.open} entries={whatsNew.entries} onAcknowledge={whatsNew.acknowledge} onDismiss={whatsNew.dismiss} />
     </div>
   );
 }

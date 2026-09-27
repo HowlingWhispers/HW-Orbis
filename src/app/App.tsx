@@ -5,6 +5,7 @@ import { AdminView } from '../views/AdminView';
 import { AssetDetailView } from '../views/AssetDetailView';
 import { AssetEditorView } from '../views/AssetEditorView';
 import { CodaWorkspaceView } from '../views/CodaWorkspaceView';
+import { ChangelogView } from '../views/ChangelogView';
 import { CollectionView } from '../views/CollectionView';
 import { CreatePersonaView } from '../views/CreatePersonaView';
 import { CreateWorldView } from '../views/CreateWorldView';
@@ -27,6 +28,7 @@ export function App() {
         <Route path="asset/:id/saves" element={<SaveArchiveView />} />
         <Route path="asset/:id/edit" element={<AssetEditorView />} />
         <Route path="coda" element={<CodaWorkspaceView />} />
+        <Route path="changelog" element={<ChangelogView />} />
         <Route path="projects/:slug" element={<ProjectView />} />
         <Route path="account" element={<AccountView />} />
         <Route path="verification" element={<VerificationView />} />
