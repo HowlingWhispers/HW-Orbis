@@ -35,7 +35,8 @@ describe('Coda Assistant sandbox boundaries', () => {
     expect(prompt).toContain('active AI provider governs generation/content-policy decisions');
     expect(prompt).toContain('does not add a second moral/content-review layer');
     expect(prompt).toContain('Do not add unsolicited moral warnings, lectures, scolding');
-    expect(prompt).toContain('process it normally unless an Orbis software, security, permission, privacy, rating');
+    expect(prompt).toContain('process it normally unless an Orbis software, security, permission, privacy, or rating rule blocks the operation');
+    expect(prompt).not.toContain('Sexual content involving anyone under 18 is refused by Orbis before it is written');
   });
 
   it('uses species adulthood canon and avoids inventing extra systems', () => {
@@ -55,8 +56,9 @@ describe('Coda Assistant sandbox boundaries', () => {
     );
 
     expect(prompt).toContain('Treat numeric age according to the fictional species');
-    expect(prompt).toContain('sexual content may never involve anyone under 18');
-    expect(prompt).toContain('No fictional species maturity, world rule or in-fiction age makes it acceptable');
+    expect(prompt).toContain('Species-specific life stages and explicit authored adulthood definitions control the fictional classification');
+    expect(prompt).not.toContain('sexual content may never involve anyone under 18');
+    expect(prompt).not.toContain('No fictional species maturity, world rule or in-fiction age makes it acceptable');
     expect(prompt).toContain('Do not invent a new faction, institution, legal code, rule system');
     expect(prompt).toContain('Do not rewrite world rules merely to "support"');
     expect(prompt).toContain('Do not add unrelated sexual, reproductive, consent');
