@@ -34,6 +34,37 @@ export function isWorldCollectionType(type: string): type is WorldEntityType {
   return specByType.has(type);
 }
 
+export type MalformedCollection = { key: WorldCollectionKey; actual: string };
+
+/**
+ * Report world collections that are present but not arrays.
+ *
+ * A collection is either absent — the world simply has not authored that kind of
+ * child yet, which is legitimate — or an array of entries. A present-but-wrongly
+ * typed value is a defect. The JSON string `"[]"`, which a legacy import could
+ * write, is the case that matters: code that guards with
+ * `Array.isArray(value) ? value : []` reads it as an empty collection, so the
+ * world reports no drift while refusing every save with "must be an array".
+ *
+ * Never coerce these. Reporting them is what lets an operator repair the world
+ * instead of losing the distinction between "empty" and "broken" on the next
+ * write.
+ */
+export function findMalformedCollections(document: unknown): MalformedCollection[] {
+  if (!isRecord(document)) return [];
+  const problems: MalformedCollection[] = [];
+  for (const spec of worldCollectionSpecs) {
+    const value = document[spec.key];
+    if (value === undefined || Array.isArray(value)) continue;
+    problems.push({ key: spec.key, actual: value === null ? 'null' : typeof value });
+  }
+  return problems;
+}
+
+export function describeMalformedCollections(problems: readonly MalformedCollection[]) {
+  return problems.map((problem) => `${problem.key} is ${problem.actual}, not an array`).join('; ');
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -302,6 +333,13 @@ export async function mirrorCanonicalChildToWorld(db: DatabaseExecutor, row: Rec
   const worldResult = await db.query('SELECT document FROM library_assets WHERE id = $1 AND type = \'world\' FOR UPDATE', [worldId]);
   if (!worldResult.rowCount) throw new Error(`Origin world ${worldId} does not exist.`);
   const before = isRecord(worldResult.rows[0].document) ? worldResult.rows[0].document as Record<string, unknown> : {};
+  // Mirroring must not launder a wrongly typed collection. Reading it as empty
+  // would replace it with an array holding only this child, silently discarding
+  // whatever the malformed value held. Repair the world's types first.
+  const malformed = findMalformedCollections(before);
+  if (malformed.length) {
+    throw new Error(`World ${worldId} has malformed collections and was not mirrored: ${describeMalformedCollections(malformed)}.`);
+  }
   const current = Array.isArray(before[spec.key]) ? [...before[spec.key] as unknown[]] : [];
   const projection = projectionFromAsset(spec, row);
   const matches: number[] = [];
@@ -332,6 +370,15 @@ export async function rebuildWorldProjection(
   const worldResult = await db.query('SELECT document FROM library_assets WHERE id = $1 AND type = \'world\' FOR UPDATE', [worldId]);
   if (!worldResult.rowCount) throw new Error(`World ${worldId} does not exist.`);
   const before = isRecord(worldResult.rows[0].document) ? worldResult.rows[0].document as Record<string, unknown> : {};
+
+  // Never rebuild over a wrongly typed collection. Substituting an empty array
+  // would silently discard whatever the value held and destroy the difference
+  // between "this world has no factions" and "this world's factions are broken".
+  const malformed = findMalformedCollections(before);
+  if (malformed.length) {
+    throw new Error(`World ${worldId} has malformed collections and was not rebuilt: ${describeMalformedCollections(malformed)}.`);
+  }
+
   const childResult = await db.query(
     `SELECT id, type, name, summary, origin_world_id, source_type, content_rating, visual_tone, document
      FROM library_assets

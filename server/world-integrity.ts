@@ -1,5 +1,5 @@
 import type { DatabaseExecutor } from './db.js';
-import { isRecord, worldCollectionSpecs } from './world-entity-sync.js';
+import { findMalformedCollections, isRecord, worldCollectionSpecs } from './world-entity-sync.js';
 
 export type WorldIntegrityIssue = {
   severity: 'error' | 'warning';
@@ -40,6 +40,17 @@ export async function inspectWorldIntegrity(db: DatabaseExecutor, onlyWorldId?: 
     const worldId = String(world.id);
     const worldName = String(world.name ?? worldId);
     const document = isRecord(world.document) ? world.document : {};
+
+    // A wrongly typed collection is an error in its own right. Counting it as an
+    // empty array here is what let a world whose `factions` was the string "[]"
+    // report zero drift while refusing every save.
+    for (const problem of findMalformedCollections(document)) {
+      issues.push({
+        severity: 'error', worldId, worldName, collection: problem.key, code: 'malformed_collection_type',
+        message: `${problem.key} is ${problem.actual}, not an array. Orbis cannot read or save this world until it is an array.`,
+      });
+    }
+
     const childResult = await db.query(
       `SELECT id, type, name, source_type, document
        FROM library_assets
@@ -50,7 +61,11 @@ export async function inspectWorldIntegrity(db: DatabaseExecutor, onlyWorldId?: 
     canonicalRows += childResult.rowCount ?? childResult.rows.length;
 
     for (const spec of worldCollectionSpecs) {
-      const entries = Array.isArray(document[spec.key]) ? document[spec.key] as unknown[] : [];
+      const raw = document[spec.key];
+      // A malformed collection is already reported above; skip its entry loop
+      // rather than reinterpreting the wrong-typed value as an empty one.
+      if (raw !== undefined && !Array.isArray(raw)) continue;
+      const entries = Array.isArray(raw) ? raw as unknown[] : [];
       const children = childResult.rows.filter((row) => row.type === spec.type);
       embeddedEntries += entries.length;
 

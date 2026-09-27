@@ -1,5 +1,7 @@
 import type { DatabaseExecutor } from './db.js';
-import { isRecord, jsonSemanticallyEqual, worldCollectionSpecs } from './world-entity-sync.js';
+import {
+  describeMalformedCollections, findMalformedCollections, isRecord, jsonSemanticallyEqual, worldCollectionSpecs,
+} from './world-entity-sync.js';
 
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -47,6 +49,18 @@ export async function removeCanonicalChildrenMissingFromWorld(
 ) {
   const issues: string[] = [];
   const removals: Array<{ id: string; type: string; name: string; worldEntryId: string }> = [];
+
+  // Refuse before computing anything. A wrongly typed collection reads as an empty
+  // array, so a valid `before` plus a malformed `after` would present every
+  // canonical child as "missing from the world" and queue it for deletion with no
+  // issue to trip the refusal below. This is the only thing standing between a
+  // malformed world document and silent deletion of its children.
+  const malformedBefore = findMalformedCollections(beforeDocument);
+  const malformedAfter = findMalformedCollections(afterDocument);
+  if (malformedBefore.length || malformedAfter.length) {
+    const problems = [...malformedBefore.map((p) => `stored ${describeMalformedCollections([p])}`), ...malformedAfter.map((p) => `submitted ${describeMalformedCollections([p])}`)];
+    throw new WorldChildRemovalError([`Refusing to evaluate world child removal because ${problems.join('; ')}. Nothing was deleted.`]);
+  }
 
   for (const spec of worldCollectionSpecs) {
     const before = Array.isArray(beforeDocument[spec.key]) ? beforeDocument[spec.key] as unknown[] : [];
@@ -133,6 +147,11 @@ export async function removeCanonicalChildFromWorldProjection(
 
   const world = await db.query('SELECT document FROM library_assets WHERE id = $1 AND type = \'world\' FOR UPDATE', [worldId]);
   if (!world.rowCount) throw new WorldChildRemovalError([`Origin world ${worldId} does not exist.`]);
+  const worldDocument = isRecord(world.rows[0].document) ? world.rows[0].document : {};
+  const malformed = findMalformedCollections(worldDocument);
+  if (malformed.length) {
+    throw new WorldChildRemovalError([`Refusing to edit the world projection because ${describeMalformedCollections(malformed)}. Nothing was deleted.`]);
+  }
   const before = isRecord(world.rows[0].document) ? world.rows[0].document as Record<string, unknown> : {};
   const current = Array.isArray(before[spec.key]) ? before[spec.key] as unknown[] : [];
   let matches = 0;
