@@ -1,82 +1,36 @@
--- Migration: Promote embedded world locations to linked library place assets
--- Run with: sudo -u postgres psql -d orbis -f migrate-world-locations.sql
+-- RETIRED. Do not run this file.
+--
+-- This was a second, hand-written implementation of the embedded-location
+-- migration. It has been replaced by:
+--
+--     npm run migrate:world-locations
+--     DATABASE_URL=... node migrate-world-locations.mjs [--dry-run] [worldId]
+--
+-- The implementation lives in server/migrate-world-locations.ts, which delegates
+-- to the same sync the editor and Coda use.
+--
+-- It was retired because of two defects:
+--
+--   1. It copied only three fields (kind, parentLocationId, description) into each
+--      new place document, discarding every other authored field on the location.
+--   2. Its per-location EXCEPTION handler caught a failure after the place row was
+--      inserted but before the world's back-link was written, logged it, counted an
+--      error, and continued. The function was called in a single transaction, but
+--      the handler swallowed the error rather than aborting, so the run completed
+--      leaving place rows with origin_world_id set and no libraryAssetId pointing
+--      back at them. That is the orphan shape: canonical children that the world's
+--      collections do not reference.
+--
+-- It also replaced the whole document on conflict, which could overwrite
+-- authored world state on a re-run.
+--
+-- The maintained script performs the whole migration for one world inside a
+-- transaction, copies the authored location entry whole, reuses Orbis's own
+-- projection layer, and reports rather than swallowing a malformed collection.
 
-CREATE OR REPLACE FUNCTION migrate_world_locations()
-RETURNS VOID AS $migrate$
-DECLARE
-    world_rec RECORD;
-    loc_elem JSONB;
-    place_id UUID;
-    place_doc JSONB;
-    migrated_count INTEGER := 0;
-    error_count INTEGER := 0;
+DO $$
 BEGIN
-    FOR world_rec IN SELECT id, name FROM library_assets WHERE type = 'world' LOOP
-        RAISE NOTICE 'Processing world: % (%)', world_rec.name, world_rec.id;
-        
-        FOR loc_elem IN SELECT jsonb_array_elements(document->'locations') FROM library_assets WHERE id = world_rec.id LOOP
-            IF loc_elem ? 'id' AND loc_elem ? 'name' THEN
-                place_id := NULLIF(loc_elem->>'libraryAssetId', '')::UUID;
-                place_doc := jsonb_build_object(
-                    'kind', COALESCE(loc_elem->>'kind', 'region'),
-                    'parentLocationId', COALESCE(loc_elem->>'parentLocationId', '')::UUID,
-                    'description', COALESCE(loc_elem->>'description', '')
-                );
-                
-                BEGIN
-                    IF place_id IS NOT NULL THEN
-                        IF NOT EXISTS (SELECT 1 FROM library_assets WHERE id = place_id AND type = 'place' AND origin_world_id = world_rec.id) THEN
-                            RAISE NOTICE '  Location "%" (%) references missing place asset %; creating new', loc_elem->>'name', loc_elem->>'id', place_id;
-                            place_id := NULL;
-                        END IF;
-                    END IF;
-                    
-                    IF place_id IS NULL THEN
-                        place_id := gen_random_uuid();
-                        INSERT INTO library_assets (id, type, name, summary, origin_world_id, creator_user_id, source_type, content_rating, tags, visual_tone, document)
-                        VALUES (place_id, 'place', loc_elem->>'name', COALESCE(loc_elem->>'description', ''), world_rec.id, 
-                                (SELECT creator_user_id FROM library_assets WHERE id = world_rec.id),
-                                'user-created', 'sfw', '{}', 'mist', place_doc)
-                        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, summary = EXCLUDED.summary, document = EXCLUDED.document, updated_at = now();
-                        RAISE NOTICE '  Created place asset % for location "%"', place_id, loc_elem->>'name';
-                        migrated_count := migrated_count + 1;
-                    ELSE
-                        UPDATE library_assets 
-                        SET name = loc_elem->>'name', 
-                            summary = COALESCE(loc_elem->>'description', ''), 
-                            document = place_doc, 
-                            updated_at = now()
-                        WHERE id = place_id;
-                    END IF;
-                    
-                    IF (loc_elem->>'libraryAssetId') IS DISTINCT FROM place_id::TEXT THEN
-                        UPDATE library_assets 
-                        SET document = jsonb_set(document, '{locations}', (
-                            SELECT jsonb_agg(
-                                CASE WHEN item->>'id' = (loc_elem->>'id') 
-                                THEN jsonb_set(item, '{libraryAssetId}', to_jsonb(place_id::TEXT)) 
-                                ELSE item END
-                            ) FROM jsonb_array_elements(document->'locations') AS item
-                        )
-                        WHERE id = world_rec.id;
-                    END IF;
-                    
-                EXCEPTION WHEN OTHERS THEN
-                    RAISE NOTICE '  ERROR for location "%" (%): %', loc_elem->>'name', loc_elem->>'id', SQLERRM;
-                    error_count := error_count + 1;
-                END;
-            ELSE
-                RAISE NOTICE '  Skipping invalid location: missing id or name';
-            END IF;
-        END LOOP;
-        
-        RAISE NOTICE 'World % done', world_rec.name;
-    END LOOP;
-    
-    RAISE NOTICE '=== Migration complete ===';
-    RAISE NOTICE 'Total locations migrated: %', migrated_count;
-    RAISE NOTICE 'Total errors: %', error_count;
-END;
-$migrate$ LANGUAGE plpgsql;
-
-SELECT migrate_world_locations();
+  RAISE EXCEPTION
+    'migrate-world-locations.sql has been retired. Run: node migrate-world-locations.mjs (--dry-run to preview).';
+END
+$$;

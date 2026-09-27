@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createPool } from './db.js';
+import { rebuildWorldProjection, syncWorldEmbeddedEntities } from './world-entity-sync.js';
 import { prepareWorldBackup, type PreparedBackupAsset } from './world-backup-import.js';
 import type { WorldVisibility } from './world-access.js';
 
@@ -76,6 +77,19 @@ try {
     for (const asset of prepared.assets) {
       if (asset === world) continue;
       await insertAsset(asset, ownerUserId, worldId);
+    }
+    // The backup supplies the world document and its children as two parallel
+    // copies. Link them through the shared sync so neither side is missing the
+    // other's ids, which is what keeps the two representations from drifting.
+    const stored = await client.query('SELECT document, content_rating FROM library_assets WHERE id = $1', [worldId]);
+    const worldDocument = stored.rows[0]?.document as Record<string, unknown> | undefined;
+    if (worldDocument) {
+      const sync = await syncWorldEmbeddedEntities(client, worldId, ownerUserId, worldDocument, String(stored.rows[0].content_rating ?? 'sfw'), {
+        allowLegacyNameMatch: true,
+        strict: true,
+      });
+      await rebuildWorldProjection(client, worldId, { dropUnlinked: false });
+      console.log(`Projection: ${sync.created} linked, ${sync.updated} refreshed, ${sync.linked} back-links written.`);
     }
     await client.query('COMMIT');
     console.log(`Import complete: ${prepared.assets.length} assets inserted into private Orbis ownership for Discord ${ownerDiscordId}.`);

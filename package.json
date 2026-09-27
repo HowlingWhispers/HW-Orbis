@@ -13,6 +13,7 @@
     "import:bitterroot": "node dist-server/import-bitterroot.js",
     "import:world-backup": "node dist-server/import-world-backup.js",
     "migrate:world-entities": "node migrate-world-entities.mjs",
+    "migrate:world-locations": "node migrate-world-locations.mjs",
     "link:world-children": "node link-unprojected-world-children.mjs",
     "check:world-integrity": "node check-world-integrity.mjs",
     "repair:world-duplicates": "node repair-world-entity-duplicates.mjs",

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { DatabaseClient, DatabaseExecutor, DatabasePool } from './db.js';
 import {
+  describeMalformedCollections,
+  findMalformedCollections,
   isRecord,
   isWorldCollectionType,
   jsonSemanticallyEqual,
@@ -236,6 +238,29 @@ function childDocumentWithStableEntryId(type: string, id: string, document: Reco
   return { ...document, worldEntryId };
 }
 
+/**
+ * Reject a world document whose collections are present but not lists.
+ *
+ * `documentSchema` accepts any JSON value, so a collection could reach
+ * PostgreSQL as the string "[]". The world then read as having no such
+ * children while every save was refused as ambiguous. Absent collections stay
+ * legitimate — a world that has not authored any species is valid — so only a
+ * present-but-unusable value is rejected. Nothing is coerced: guessing at the
+ * author's intent is how the malformed value survived unnoticed in the first
+ * place.
+ */
+export function assertWorldDocumentCollections(type: string, document: unknown) {
+  if (type !== 'world') return;
+  const problems = findMalformedCollections(document);
+  if (!problems.length) return;
+  throw new AssetWriteError(
+    400,
+    `That world has a collection that is not a list (${describeMalformedCollections(problems)}). `
+    + 'Make it a list, or remove the field if the world has no such records. Orbis will not guess which you meant.',
+    problems.map((problem) => ({ path: [problem.key], message: `expected an array, received ${problem.actual}` })),
+  );
+}
+
 /** The single create path. Editor saves and Coda operations both land here. */
 export async function insertAsset(
   pool: DatabasePool,
@@ -269,6 +294,7 @@ export async function insertAsset(
     const document = asset.originWorldId
       ? childDocumentWithStableEntryId(asset.type, id, baseDocument)
       : baseDocument;
+    assertWorldDocumentCollections(asset.type, document);
     const inserted = await client.query(
       `INSERT INTO library_assets (id,type,name,summary,origin_world_id,creator_user_id,source_type,content_rating,tags,visual_tone,document)
        VALUES ($1,$2,$3,$4,$5,$6,'user-created',$7,$8,$9,$10::jsonb) RETURNING *`,
@@ -371,6 +397,7 @@ export async function applyAssetUpdate(
       (identityBlock as Record<string, unknown>).name = nextAsset.name;
     }
     if (existing.type === 'world') nextAsset.document = normalizeWorldDocument(nextAsset.document);
+    assertWorldDocumentCollections(String(existing.type), nextAsset.document);
     if (existing.type === 'persona') {
       const existingPersonaSettings = isRecord(existingDocument.personaSettings) ? existingDocument.personaSettings : {};
       nextAsset.document = normalizePersonaDocument(nextAsset.document, source === 'coda' ? existingPersonaSettings : undefined);

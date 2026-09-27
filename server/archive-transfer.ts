@@ -6,6 +6,7 @@ import { parseTransferArchiveForImport, type ImportTransferArchive } from './arc
 import { ensureSuperAdminAccess, refreshSessionAccess, requireCreator, SUPER_ADMIN_DISCORD_ID } from './auth.js';
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
+import { assertWorldDocumentCollections, AssetWriteError } from './asset-writes.js';
 import type { SettingsStore } from './settings.js';
 import { rebuildWorldProjection, syncWorldEmbeddedEntities, WorldEntitySyncError } from './world-entity-sync.js';
 
@@ -334,6 +335,9 @@ export function createArchiveTransferRouter(config: AppConfig, pool: DatabasePoo
 
       const ordered = [...archive.records].sort((left, right) => Number(right.type === 'world') - Number(left.type === 'world'));
       for (const record of ordered) {
+        // Same structural boundary as the editor write path, so an archive cannot
+        // reintroduce a collection that is not a list.
+        assertWorldDocumentCollections(record.type, record.document);
         await client.query(
           `INSERT INTO library_assets (
              id, type, name, summary, origin_world_id, creator_user_id, source_type, source_asset_id,

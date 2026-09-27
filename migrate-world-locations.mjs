@@ -1,144 +1,68 @@
 #!/usr/bin/env node
 /**
- * Migration script to promote embedded world locations to linked library place assets.
- * Run once after deploying the library location sync feature.
+ * Promote embedded world locations to canonical, linked `place` rows.
+ *
+ * All of the logic lives in server/migrate-world-locations.ts so it can be
+ * tested without a database. Each world is migrated in its own transaction, so a
+ * failure rolls that world back completely instead of leaving a place row
+ * committed without the world's back-link.
+ *
+ *   DATABASE_URL=... node migrate-world-locations.mjs [--dry-run] [worldId]
+ *
+ * With no worldId every world is processed. The migration is idempotent: a
+ * location that already carries a libraryAssetId is left alone.
  */
 
 import pg from 'pg';
-import { randomUUID } from 'node:crypto';
+import { migrateWorldLocations } from './dist-server/migrate-world-locations.js';
 
 const { Pool } = pg;
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL is required. Refusing to guess a database.');
+  process.exit(1);
+}
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres@localhost:5432/orbis';
+const dryRun = process.argv.includes('--dry-run');
+const onlyWorldId = process.argv.slice(2).find((argument) => !argument.startsWith('--'));
 
 const pool = new Pool({ connectionString: DATABASE_URL });
+let failed = false;
 
-async function migrateWorld(worldId) {
-  const client = await pool.connect();
-  try {
-    const worldResult = await client.query('SELECT document FROM library_assets WHERE id = $1 AND type = $2', [worldId, 'world']);
-    if (!worldResult.rowCount) {
-      console.log(`World ${worldId} not found`);
-      return { migrated: 0, errors: [] };
-    }
+try {
+  const worlds = onlyWorldId
+    ? (await pool.query('SELECT id, name FROM library_assets WHERE type = \'world\' AND id = $1', [onlyWorldId]))
+    : (await pool.query("SELECT id, name FROM library_assets WHERE type = 'world' ORDER BY name"));
+  console.log(`Found ${worlds.rowCount} world(s)${dryRun ? ' (dry run — nothing will be written)' : ''}`);
 
-    const document = worldResult.rows[0].document ?? {};
-    const rawLocations = document.locations;
-    if (!Array.isArray(rawLocations) || rawLocations.length === 0) {
-      console.log(`World ${worldId}: no embedded locations`);
-      return { migrated: 0, errors: [] };
-    }
+  for (const world of worlds.rows) {
+    const client = await pool.connect();
+    try {
+      await client.query(dryRun ? 'BEGIN' : 'BEGIN');
+      const result = await migrateWorldLocations(client, String(world.id), { dryRun });
+      if (dryRun) await client.query('ROLLBACK');
+      else await client.query('COMMIT');
 
-    const locations = rawLocations
-      .map((loc, idx) => {
-        if (!loc || typeof loc.id !== 'string' || typeof loc.name !== 'string') {
-          console.warn(`World ${worldId}: location at index ${idx} missing id or name`);
-          return null;
-        }
-        return {
-          id: loc.id,
-          name: loc.name,
-          kind: loc.kind ?? 'region',
-          description: loc.description ?? '',
-          parentLocationId: loc.parentLocationId ?? null,
-          libraryAssetId: loc.libraryAssetId ?? null,
-        };
-      })
-      .filter((loc) => loc !== null);
-
-    let migrated = 0;
-    const errors = [];
-
-    for (const loc of locations) {
-      let placeId = loc.libraryAssetId;
-      const placeDocument = {
-        kind: loc.kind,
-        parentLocationId: loc.parentLocationId,
-        description: loc.description,
-      };
-
-      try {
-        if (placeId) {
-          const existing = await client.query('SELECT id FROM library_assets WHERE id = $1 AND type = $2 AND origin_world_id = $3', [placeId, 'place', worldId]);
-          if (!existing.rowCount) {
-            console.warn(`World ${worldId}: location "${loc.name}" (${loc.id}) references missing place asset ${placeId}; creating new`);
-            placeId = null;
-          }
-        }
-
-        if (!placeId) {
-          const created = await client.query(
-            `INSERT INTO library_assets (id, type, name, summary, origin_world_id, creator_user_id, source_type, content_rating, tags, visual_tone, document)
-             VALUES ($1, $2, $3, $4, $5, (SELECT creator_user_id FROM library_assets WHERE id = $5), 'user-created', 'sfw', '{}', 'mist', $6::jsonb)
-             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, summary = EXCLUDED.summary, document = EXCLUDED.document, updated_at = now()
-             RETURNING id`,
-            [randomUUID(), 'place', loc.name, loc.description ?? '', worldId, JSON.stringify(placeDocument)],
-          );
-          placeId = created.rows[0].id;
-          console.log(`World ${worldId}: location "${loc.name}" (${loc.id}) created new place asset ${placeId}`);
-          migrated++;
-        } else {
-          await client.query(
-            `UPDATE library_assets SET name = $1, summary = $2, document = $3::jsonb, updated_at = now()
-             WHERE id = $4`,
-            [loc.name, loc.description ?? '', JSON.stringify(placeDocument), placeId],
-          );
-        }
-
-        if (loc.libraryAssetId !== placeId) {
-          await client.query(
-            `UPDATE library_assets SET document = jsonb_set(document, '{locations}', (
-              SELECT jsonb_agg(
-                CASE WHEN item->>'id' = $2 THEN jsonb_set(item, '{libraryAssetId}', to_jsonb($3::text)) ELSE item END
-              ) FROM jsonb_array_elements(document->'locations') AS item
-            ) WHERE id = $1`,
-            [worldId, loc.id, placeId],
-          );
-        }
-      } catch (err) {
-        const msg = `Location "${loc.name}" (${loc.id}): ${err instanceof Error ? err.message : String(err)}`;
-        console.error(msg);
-        errors.push(msg);
+      console.log(`\n${world.name} (${world.id})`);
+      if (dryRun) {
+        console.log(`  would create/link ${result.planned ?? 0} location(s); ${result.alreadyLinked} already linked`);
+      } else {
+        console.log(`  created ${result.created}, updated ${result.updated}, linked ${result.linked}; ${result.alreadyLinked} already linked`);
       }
+      for (const issue of result.errors) {
+        console.error(`  refused: ${issue}`);
+        failed = true;
+      }
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error(`\n${world.name} (${world.id}) rolled back: ${error instanceof Error ? error.message : String(error)}`);
+      failed = true;
+    } finally {
+      client.release();
     }
-
-    console.log(`World ${worldId}: migrated ${migrated} locations, ${errors.length} errors`);
-    return { migrated, errors };
-  } finally {
-    client.release();
   }
-}
-
-async function main() {
-  console.log('Starting world location migration...');
-  
-  const worldsResult = await pool.query("SELECT id, name FROM library_assets WHERE type = 'world'");
-  console.log(`Found ${worldsResult.rowCount} worlds`);
-
-  let totalMigrated = 0;
-  const allErrors = [];
-
-  for (const world of worldsResult.rows) {
-    console.log(`\nProcessing world: ${world.name} (${world.id})`);
-    const result = await migrateWorld(world.id);
-    totalMigrated += result.migrated;
-    allErrors.push(...result.errors);
-  }
-
-  console.log(`\n=== Migration complete ===`);
-  console.log(`Total locations migrated: ${totalMigrated}`);
-  console.log(`Total errors: ${allErrors.length}`);
-  
-  if (allErrors.length > 0) {
-    console.log('Errors:');
-    allErrors.forEach(e => console.log(`  - ${e}`));
-  }
-
+} finally {
   await pool.end();
-  process.exit(allErrors.length > 0 ? 1 : 0);
 }
 
-main().catch(err => {
-  console.error('Migration failed:', err);
-  process.exit(1);
-});
+process.exit(failed ? 1 : 0);
