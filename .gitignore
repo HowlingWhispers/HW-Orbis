@@ -143,8 +143,27 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# Private one-off import payloads must never enter the public repository.
+# Private one-off import payloads must never enter the repository.
+# These carry world/player-bound content and often a Discord owner binding.
+# They belong outside Git entirely, e.g. /srv/howling-whispers/private-imports/.
 server/imports/pending/
+*-bundle.json
+*_bundle.json
+bundle*.json
+import-payload*.json
+
+# Database dumps, schema snapshots and reconstructed world exports.
+*.sql.gz
+*.dump
+backups/
+*-backup-*.sql
+*-pre-*.sql
+pg_dump*.sql
+
+# Private world exports and archive transfers.
+world-backup*.json
+archive-transfer*.json
+*-world-export.json
 
 # Local record artwork lives on disk, never in Git. The default ORBIS_MEDIA_ROOT
 # is outside the repository; this guards an in-repository root if one is set.
