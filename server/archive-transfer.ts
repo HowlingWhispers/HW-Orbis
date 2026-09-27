@@ -9,7 +9,7 @@ import type { DatabasePool } from './db.js';
 import type { SettingsStore } from './settings.js';
 import { rebuildWorldProjection, syncWorldEmbeddedEntities, WorldEntitySyncError } from './world-entity-sync.js';
 
-const assetTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
+const assetTypes = ['world', 'persona', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const sourceTypes = ['curated', 'user-created', 'imported-v2', 'copied', 'public-curated', 'legacy-import'] as const;
 const tones = ['moon', 'forest', 'ember', 'mist', 'violet', 'river'] as const;
 const statuses = ['active', 'archived', 'retired', 'sealed'] as const;
