@@ -10,6 +10,7 @@ import { apiNotFound } from './api-not-found.js';
 import { createAuthRouter } from './auth.js';
 import { createCodaAssistantRouter } from './coda-assistant.js';
 import { createCodaDiscordBridgeRouter } from './coda-discord-bridge.js';
+import { createCodaSurveillanceAdminRouter, createCodaSurveillanceIngestRouter } from './coda-surveillance.js';
 import { createChangelogRouter } from './changelog.js';
 import { processDueCodaScheduledMessages } from './coda-discord.js';
 import { createArchiveTransferRouter } from './archive-transfer.js';
@@ -63,6 +64,9 @@ app.use('/api/v1/generation', createSpeculusGenerationRouter(config, pool));
 // Machine-to-machine bridge used by Coda Core's Discord slash command. It has its
 // own bearer secret and must be mounted before the browser Origin check below.
 app.use('/api/internal/coda-discord', createCodaDiscordBridgeRouter(config, pool));
+// Big Brother ingest is machine-to-machine too. It reuses the same protected
+// bridge secret and is deliberately unavailable to browsers or normal members.
+app.use('/api/internal/coda-surveillance', createCodaSurveillanceIngestRouter(config, pool));
 
 app.use((request, response, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return next();
@@ -144,6 +148,7 @@ app.use('/api/provider-settings', createProviderSettingsRouter(config, pool));
 app.use('/api/coda-assistant', createCodaAssistantRouter(config, pool, settingsStore));
 app.use('/api/simulation-settings', createSimulationSettingsRouter(pool));
 app.use('/api/v1/changelog', createChangelogRouter(pool));
+app.use('/api/admin/big-brother', requireAdmin(config, pool, settingsStore), createCodaSurveillanceAdminRouter(pool));
 app.use('/api/admin', requireAdmin(config, pool, settingsStore), createAdminRouter(config, pool, settingsStore, adminViewPreferences));
 app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createSaveArchiveRouter(pool));
