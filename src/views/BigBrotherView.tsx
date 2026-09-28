@@ -1,10 +1,9 @@
 import {
-  Activity, Archive, Bot, ChevronLeft, ChevronRight, Clock, Database, ExternalLink,
-  Hash, History, MessageSquareText, Pin, RefreshCw, Save, Search, ShieldCheck,
+  Activity, Bot, ChevronLeft, ChevronRight, Clock, Database, ExternalLink,
+  Hash, History, MessageSquareText, Pin, Save, Search,
   Trash2, UserRound, UsersRound,
 } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { adminApi } from '../admin/api';
 import {
   bigBrotherApi,
@@ -16,7 +15,7 @@ import {
   type BigBrotherRevision,
   type BigBrotherStats,
 } from '../admin/bigBrotherApi';
-import { discordLoginPath, useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import '../styles/big-brother.css';
 
 type BigBrotherTab = 'messages' | 'memory' | 'people' | 'channels';
@@ -169,17 +168,6 @@ export function BigBrotherConsole() {
     setSearch(searchDraft.trim());
   };
 
-  const refresh = async () => {
-    setWorking(true); setError(''); setNotice('');
-    try {
-      await Promise.all([loadStats(), loadPeople(), loadChannels(), loadMessages()]);
-      if (tab === 'memory') await loadMemories();
-      setNotice('Big Brother refreshed.');
-    } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : 'Refresh failed.');
-    } finally { setWorking(false); }
-  };
-
   const showRevisions = async (messageId: string) => {
     if (revisionMessageId === messageId) {
       setRevisionMessageId(''); setRevisions([]); return;
@@ -260,23 +248,10 @@ export function BigBrotherConsole() {
   };
 
   return (
-    <>
-      <header className="bb-header">
-      <div className="bb-header__title">
-        <span className="bb-header__icon"><Archive /></span>
-        <div><span className="eyebrow">Protected administration</span><h1>Big Brother</h1><p>Discord activity, durable Coda memory and server context. DMs are excluded; deleted Discord text is redacted from the archive.</p></div>
-      </div>
-      <button className="bb-button" disabled={working} onClick={() => void refresh()}><RefreshCw size={16} /> Refresh</button>
-    </header>
-
-    <nav className="bb-admin-switch" aria-label="Orbis administration">
-      <Link to="/admin">Control room</Link>
-      <Link className="is-active" to="/admin/big-brother">Big Brother</Link>
-    </nav>
-
-    {loading && <div className="admin-loading">Opening Big Brother...</div>}
-    {error && <div className="bb-error" role="alert">{error}</div>}
-    {notice && <div className="bb-notice" role="status">{notice}</div>}
+    <div className="bb-page">
+      {loading && <div className="admin-loading">Opening Big Brother...</div>}
+      {error && <div className="bb-error" role="alert">{error}</div>}
+      {notice && <div className="bb-notice" role="status">{notice}</div>}
 
     <section className="bb-stat-grid" aria-label="Big Brother status">
       <div className="bb-stat"><span><MessageSquareText size={16} /> Archived</span><strong>{stats?.total_messages ?? 0}</strong><small>message records</small></div>
@@ -392,14 +367,6 @@ export function BigBrotherConsole() {
     </section>}
 
     {selectedRevisionMessage?.deletedAt && <div className="bb-notice">Deletion privacy is active: deleted Discord text and attachment metadata are removed from the current record and revision history.</div>}
-  </>);
-}
-
-export function BigBrotherView() {
-  const { user, loading: authLoading } = useAuth();
-  const canAdmin = Boolean(user?.permissions.canAdmin);
-  if (authLoading) return <div className="page admin-page"><div className="admin-loading">Checking administrator access...</div></div>;
-  if (!user) return <div className="page admin-page"><section className="admin-denied"><ShieldCheck /><h2>Discord sign-in required</h2><p>Sign in before entering Big Brother.</p><a className="button button--discord" href={discordLoginPath('/admin/big-brother')}>Sign in with Discord</a></section></div>;
-  if (!canAdmin) return <div className="page admin-page"><section className="admin-denied"><ShieldCheck /><h2>Administrator access required</h2><p>Big Brother is part of the protected Orbis control room.</p></section></div>;
-  return <div className="page admin-page bb-page"><BigBrotherConsole /></div>;
+    </div>
+  );
 }

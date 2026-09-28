@@ -25,7 +25,7 @@ function describeLoadFailure(section: string, reason: unknown) {
 
 export function AdminView() {
   const { user, loading: authLoading } = useAuth();
-  const [tab, setTab] = useState<AdminTab>('overview');
+  const [tab, setTab] = useState<AdminTab>(() => (new URLSearchParams(window.location.search).get('tab') === 'bigbrother' ? 'bigbrother' : 'overview'));
   const [overview, setOverview] = useState<AdminOverview>();
   const [settings, setSettings] = useState<AdminSettings>();
   const [audit, setAudit] = useState<AdminAuditEntry[]>([]);
