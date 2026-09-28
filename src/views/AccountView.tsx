@@ -1,7 +1,7 @@
 import { CheckCircle2, Download, LogOut, ShieldAlert, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
-import { deleteNovelAiSettings, getNovelAiSettings, saveNovelAiSettings, type NovelAiSettings } from '../api/provider-settings';
+import { deleteNovelAiSettings, getNovelAiSettings, saveNovelAiSettings, setNovelAiSharedUse, type NovelAiSettings } from '../api/provider-settings';
 import { downloadAccountArchive, uploadArchive } from '../api/archive-transfer';
 import { UserAvatar } from '../components/UserAvatar';
 import { useI18n } from '../i18n/I18nContext';
@@ -20,6 +20,12 @@ export function AccountView() {
   const [novelAiToken, setNovelAiToken] = useState('');
   const [providerMessage, setProviderMessage] = useState('');
   const [providerSaving, setProviderSaving] = useState(false);
+  const [sharedUse, setSharedUse] = useState(false);
+  const [sharedUseSaving, setSharedUseSaving] = useState(false);
+  const [sharedUseMessage, setSharedUseMessage] = useState('');
+  // Absent means the server has not reported the flag yet, so the tick starts
+  // off rather than flashing on before consent is actually known.
+  const [sharedUseUnavailable, setSharedUseUnavailable] = useState(false);
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferMessage, setTransferMessage] = useState('');
   const archiveInput = useRef<HTMLInputElement>(null);
@@ -35,8 +41,32 @@ export function AccountView() {
   useEffect(() => setDisplayName(user?.displayName ?? ''), [user]);
   useEffect(() => {
     if (!user) return;
-    void getNovelAiSettings().then(setProvider).catch((error) => setProviderMessage(error instanceof Error ? error.message : 'Provider settings unavailable.'));
+    void getNovelAiSettings()
+      .then((next) => {
+        setProvider(next);
+        setSharedUse(Boolean(next.sharedUse));
+        setSharedUseUnavailable(next.sharedUseAvailable === false);
+      })
+      .catch((error) => setProviderMessage(error instanceof Error ? error.message : 'Provider settings unavailable.'));
   }, [user]);
+
+  const toggleSharedUse = async (next: boolean) => {
+    setSharedUseSaving(true);
+    setSharedUseMessage('');
+    // Optimistic, and rolled back if the server refuses so the tick can never
+    // show consent that was not actually stored.
+    setSharedUse(next);
+    try {
+      const result = await setNovelAiSharedUse(next);
+      setSharedUse(result.sharedUse);
+      setSharedUseMessage(result.sharedUse ? t('Coda may now use this connection for members without a key.') : t('Coda will no longer use this connection for anyone else.'));
+    } catch (error) {
+      setSharedUse(!next);
+      setSharedUseMessage(error instanceof Error ? error.message : 'Orbis could not save that choice.');
+    } finally {
+      setSharedUseSaving(false);
+    }
+  };
 
   if (loading) return <div className="page"><div className="account-panel">{t('Opening your profile...')}</div></div>;
   if (!user) return (
@@ -109,6 +139,28 @@ export function AccountView() {
           <small>The token is encrypted in Orbis and never exposed to the browser. Speculus receives only a temporary generation grant; Coda Assistant uses the encrypted token through the Orbis API.</small>
           {providerMessage && <p className="form-message" role="status">{providerMessage}</p>}
         </form>
+
+        <div className="profile-form coda-shared-use">
+          <label className="coda-shared-use__label" htmlFor="novelai-shared-use">
+            {t('Allow my NovelAI connection to help power Discord Coda')}
+          </label>
+          <div className="coda-shared-use__row">
+            <input
+              id="novelai-shared-use"
+              type="checkbox"
+              checked={sharedUse}
+              disabled={!provider.configured || sharedUseUnavailable || sharedUseSaving}
+              onChange={(event) => void toggleSharedUse(event.target.checked)}
+            />
+            <span className="coda-shared-use__state" aria-live="polite">{sharedUseSaving ? t('Saving...') : sharedUse ? t('Enabled') : t('Off')}</span>
+          </div>
+          <small>
+            {provider.configured
+              ? t('Off by default. When this is on, your encrypted NovelAI connection may answer Discord messages from members who have no usable key of their own. Your key is never shown to anyone, including you, and the person being answered is never told whose key was used. Turn it off whenever you like; your own connection keeps working exactly as before.')
+              : t('Save a NovelAI connection above first. This is always off by default and your token is never shared or displayed.')}
+          </small>
+          {sharedUseMessage && <p className="form-message" role="status">{sharedUseMessage}</p>}
+        </div>
 
         <div className="profile-form language-setting">
           <label htmlFor="interface-language">{t('Interface language')}</label>
