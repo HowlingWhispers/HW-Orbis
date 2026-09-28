@@ -58,6 +58,41 @@ export type PublicChangelogPayload = {
 /** Newest first. Add new entries at the top. */
 export const publicChangelogEntries: PublicChangelogEntry[] = [
   {
+    version: '2026.09.28.3',
+    publishedAt: '2026-09-28T18:05:00.000Z',
+    title: 'Coda shares with only the people you name, and a clearer account page',
+    sections: [
+      {
+        id: 'coda',
+        title: 'Coda',
+        items: [
+          'Coda now answers only the Discord members you have listed by name, rather than anyone who happens to ask.',
+          'Someone has to be on your list for your connection to answer them at all. With the list empty, your connection is never used for anyone else, even if you have switched sharing on.',
+          'You can add or remove anyone whenever you like, and the list can include people who have never signed in to Orbis.',
+          'Your plan has unlimited text, so sharing costs you nothing. What it does mean is that their messages are generated from your account, so your account is what carries the rate limiting if I get busy.',
+          'The other person never sees your key, and I never tell them whose it was.',
+        ],
+      },
+      {
+        id: 'account',
+        title: 'Your account',
+        items: [
+          'The account page is now split into Profile, Coda sharing, Preferences and Your data, so each setting sits where you would look for it.',
+          'The Coda sharing tab shows how many people can currently use your connection, without needing to open it first.',
+          'Nothing you have typed into a field is lost when you move between tabs, and the message beside a setting stays with the tab you read it on.',
+        ],
+      },
+      {
+        id: 'appearance',
+        title: 'Light mode',
+        items: [
+          'Light mode no longer leaves dark panels, buttons and input boxes showing through on the account, admin, project, Coda and record pages.',
+          'Tab strips now sit properly on a light background instead of appearing as a dark band under the page heading.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2026.09.28.2',
     publishedAt: '2026-09-28T15:52:13.000Z',
     title: 'A phone layout for Speculus, and deleting a Persona you no longer want',

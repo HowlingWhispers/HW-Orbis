@@ -21,6 +21,55 @@ rendered to users. The user-facing changelog is curated separately in
 
 ---
 
+## 2026-09-28 — Coda consent scoping, account page sections, light mode
+
+**Public changelog version.** `2026.09.28.3`, again a new entry rather than an
+append to `2026.09.28.2`, for the same reason: an account that acknowledged
+`2026.09.28.2` should still be told.
+
+**Coda shared-key consent, scoped to named accounts.** The shared pool used to
+serve any Discord member with no usable key of their own, once the owner ticked
+one box. Consent is now per-person: `coda_shared_key_allowed_users`
+(migration 025) records the snowflakes an owner names, and `selectPoolMembers`
+only matches a requester some eligible owner has actually listed. The master
+tick remains but shares with nobody on its own, so an empty list is safe rather
+than merely quiet. The stored value is a bare snowflake rather than a user id,
+because the person being helped may be a guest who never linked an account.
+
+The account page copy was wrong in two rounds and both were corrected. It first
+claimed sharing "spends your own quota", which is false for an unlimited-text
+plan; the real consequence is that the owner's account absorbs rate limiting and
+provider blocks, which is what `coda-provider-failures.ts` already classifies
+and what the per-member cooldown handles. It then still described the retired
+blanket behaviour ("for members without a key") in the toggle confirmation. The
+copy is now written in Coda's own voice, which is the voice the 503 and the
+Discord prompt already use. A false cost warning is worse than no warning,
+because it undermines the true ones beside it.
+
+**Account page split into four sections.** Profile, Coda sharing, Preferences
+and Your data, as a real tablist with roving tabindex and arrow navigation.
+Panels are hidden rather than unmounted, because the credential field is a
+controlled input and unmounting would silently discard a half-pasted value.
+
+**Light mode.** Two separate faults. `theme.css` was imported ahead of eight
+other stylesheets, so rules such as `.coda-assistant textarea` tied with the
+generic light rule on specificity and won on order, leaving dark inputs across
+the Coda, record-detail and destructive sheets. Loading the overrides last fixes
+that class outright. Separately, roughly forty surfaces authored with hardcoded
+dark navy never had a light counterpart; they are now grouped by role. Overlays
+are deliberately excluded and a test says so, so a future sweep does not
+"fix" the What's New backdrop or the asset-card scrim.
+
+**Tests.** `tests/light-theme-surfaces.test.ts` resolves light values through
+the theme and asserts the import order; both were checked to fail when reverted,
+because neither CSS nor bundler order fails loudly on its own.
+
+No migration beyond 025, no new environment variable, no deployment ordering
+change. `orbis.service` restart is required for all of it, per the existing
+deployment note.
+
+---
+
 ## 2026-09-28 — Speculus 0.4.2 phone layout and Persona deletion
 
 **Public changelog version.** `2026.09.28.2`, added as a new entry rather than
