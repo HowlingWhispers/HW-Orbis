@@ -28,6 +28,18 @@ describe('Coda Discord reply sanitizer', () => {
   it('removes a redundant Coda speaker label', () => {
     expect(sanitizeDiscordCodaReply('**Coda**: Give me the stick!')).toBe('Give me the stick!');
   });
+
+  it('strips leading whitespace from continuation lines', () => {
+    const raw = "*action* Grrrrr!\n  *rolls away* That's just cruel.\n  *huffs* Anyway, what's up?";
+    expect(sanitizeDiscordCodaReply(raw)).toBe(
+      "*action* Grrrrr!\n*rolls away* That's just cruel.\n*huffs* Anyway, what's up?",
+    );
+  });
+
+  it('preserves indentation inside fenced code blocks', () => {
+    const raw = '```\n    indented code\n```';
+    expect(sanitizeDiscordCodaReply(raw)).toBe('```\n    indented code\n```');
+  });
 });
 
 describe('Coda Discord prompt', () => {
@@ -52,5 +64,43 @@ describe('Coda Discord prompt', () => {
     expect(conversation).not.toContain('Fabula is the living-world runtime.');
     expect(conversation).toContain('Eirvargr');
     expect(prompt).toContain('Use Discord Markdown naturally');
+  });
+
+  it('rejects imitating malformed historical Coda formatting', () => {
+    const prompt = buildDiscordPrompt({
+      discordUserId: '702938475019345100',
+      text: 'Coda, say something cool',
+      trigger: 'name',
+      speakerName: 'Eirvargr',
+      speakerTag: '@eirvargr',
+      guildName: 'Howling Whispers',
+      channelName: 'private-dev',
+      recentMessages: [
+        {
+          authorName: 'Coda',
+          authorTag: '@coda',
+          isCoda: true,
+          content: '(immediate, playful, sudden shift)\\nCoda: \\nA STICK?! 😍🐾 \\neyes go wide, tail starts wagging uncontrollably \\nIs it a magic stick?',
+        },
+        {
+          authorName: 'Eirvargr',
+          authorTag: '@eirvargr',
+          isCoda: false,
+          content: 'hey coda, what do you think of this stick',
+        },
+      ],
+    });
+
+    // The prompt must command Coda NOT to imitate the formatting of earlier
+    // (possibly leaked/malformed) Coda messages.
+    expect(prompt).toContain('must NOT imitate their formatting');
+    expect(prompt).toContain('ZERO authority over how you format');
+
+    // And the style guidance must be issued *after* the transcript blocks,
+    // so historical Coda formatting cannot set precedent.
+    const currentMessageEnd = prompt.indexOf('</current_message>');
+    const styleIndex = prompt.indexOf('DISCORD STYLE GUIDE');
+    expect(currentMessageEnd).toBeGreaterThan(-1);
+    expect(styleIndex).toBeGreaterThan(currentMessageEnd);
   });
 });
