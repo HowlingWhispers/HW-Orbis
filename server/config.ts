@@ -15,6 +15,14 @@ const envSchema = z.object({
   CODA_DISCORD_BOT_TOKEN: z.string().default(''),
   CODA_DISCORD_CHANNEL_IDS: z.string().default(''),
   CODA_INTERNAL_BRIDGE_SECRET: z.string().default(''),
+  // Discord Coda shared-provider pool. Both switches default to off: no shared
+  // credential is ever used until an operator enables the pool, and guests are
+  // refused until guest access is explicitly allowed.
+  CODA_DISCORD_SHARED_POOL_ENABLED: z.enum(['true', 'false']).default('false'),
+  CODA_DISCORD_GUEST_ACCESS: z.enum(['true', 'false']).default('false'),
+  CODA_DISCORD_RATE_LIMIT: z.coerce.number().int().min(1).max(600).default(12),
+  CODA_DISCORD_GUEST_RATE_LIMIT: z.coerce.number().int().min(1).max(600).default(4),
+  CODA_DISCORD_RATE_WINDOW_SECONDS: z.coerce.number().int().min(10).max(3_600).default(60),
   DISCORD_ADULT_ROLE_IDS: z.string().default(''),
   DISCORD_CREATOR_ROLE_IDS: z.string().default(''),
   DISCORD_ADMIN_ROLE_IDS: z.string().default(''),
@@ -47,6 +55,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
   return {
     ...env,
     codaDiscordChannelIds: parseRoleIds(env.CODA_DISCORD_CHANNEL_IDS),
+    codaSharedPoolEnabled: env.CODA_DISCORD_SHARED_POOL_ENABLED === 'true',
+    codaDiscordGuestAccess: env.CODA_DISCORD_GUEST_ACCESS === 'true',
     envAdultRoleIds: parseRoleIds(env.DISCORD_ADULT_ROLE_IDS),
     envCreatorRoleIds: parseRoleIds(env.DISCORD_CREATOR_ROLE_IDS),
     envAdminRoleIds: parseRoleIds(env.DISCORD_ADMIN_ROLE_IDS),

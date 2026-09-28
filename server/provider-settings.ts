@@ -3,12 +3,17 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
+import { readPoolParticipation, setPoolParticipation } from './coda-shared-key-pool.js';
+
+const migrationMissing = (error: unknown) =>
+  typeof error === 'object' && error !== null && 'code' in error && error.code === '42P01';
 
 const models = ['xialong-v1', 'glm-4-6'] as const;
 const settingsSchema = z.object({
   token: z.string().trim().min(16).max(4096),
   model: z.enum(models).default('xialong-v1'),
 });
+const sharedUseSchema = z.object({ enabled: z.boolean() }).strict();
 
 export type SealedCredential = { ciphertext: Buffer; iv: Buffer; tag: Buffer };
 
@@ -45,10 +50,44 @@ export function createProviderSettingsRouter(config: AppConfig, pool: DatabasePo
         `SELECT model, updated_at FROM user_provider_settings WHERE user_id = $1 AND provider = 'novelai'`,
         [request.session.userId],
       );
-      response.json(result.rowCount
-        ? { configured: true, model: result.rows[0].model, updatedAt: result.rows[0].updated_at }
-        : { configured: false, model: 'xialong-v1' });
+      const participation = await readPoolParticipation(pool, request.session.userId!);
+      response.json({
+        ...(result.rowCount
+          ? { configured: true, model: result.rows[0].model, updatedAt: result.rows[0].updated_at }
+          : { configured: false, model: 'xialong-v1' }),
+        // Always explicit, and reported separately from whether a key exists so
+        // the account UI can never imply that connecting a key opts you in.
+        sharedUse: participation.participating,
+        sharedUseAvailable: participation.available,
+      });
     } catch (error) { next(error); }
+  });
+
+  /**
+   * Explicit opt-in to the Discord Coda shared-provider pool.
+   *
+   * Connecting a NovelAI key never enrols it here, and revoking leaves the
+   * personal provider configuration untouched. Reads are uncached, so a change
+   * takes effect on the next request without a restart.
+   */
+  router.put('/novelai/shared-use', async (request, response, next) => {
+    try {
+      const { enabled } = sharedUseSchema.parse(request.body);
+      const hasCredential = await pool.query(
+        `SELECT 1 FROM user_provider_settings WHERE user_id = $1 AND provider = 'novelai'`,
+        [request.session.userId],
+      );
+      if (enabled && !hasCredential.rowCount) {
+        return response.status(409).json({
+          error: 'Connect a NovelAI key in Orbis before letting it help power Discord Coda.',
+        });
+      }
+      const result = await setPoolParticipation(pool, request.session.userId!, enabled);
+      response.json({ sharedUse: result.participating });
+    } catch (error) {
+      if (migrationMissing(error)) return response.status(503).json({ error: 'Discord Coda shared use is not installed yet.' });
+      next(error);
+    }
   });
 
   router.put('/novelai', async (request, response, next) => {
