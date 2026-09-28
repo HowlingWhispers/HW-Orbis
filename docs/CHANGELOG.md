@@ -23,9 +23,11 @@ rendered to users. The user-facing changelog is curated separately in
 
 ## 2026-09-28 — Coda consent scoping, account page sections, light mode
 
-**Public changelog version.** `2026.09.28.3`, again a new entry rather than an
-append to `2026.09.28.2`, for the same reason: an account that acknowledged
-`2026.09.28.2` should still be told.
+**No public changelog entry.** This work is deliberately absent from
+`server/public-changelog.ts`. An entry was drafted and withdrawn: it described
+account page organisation and light mode appearance, neither of which is part
+of the Persona and Speculus phone release the changelog was being written for.
+Recorded here only, because the developer changelog does track it.
 
 **Coda shared-key consent, scoped to named accounts.** The shared pool used to
 serve any Discord member with no usable key of their own, once the owner ticked
@@ -72,9 +74,12 @@ deployment note.
 
 ## 2026-09-28 — Speculus 0.4.2 phone layout and Persona deletion
 
-**Public changelog version.** `2026.09.28.2`, added as a new entry rather than
-appended to `2026.09.28.1`, so that an account which already acknowledged the
-earlier version is still notified. Commit references belong in this file only:
+**Public changelog version.** `2026.09.28.3`. This entry was first published as
+`2026.09.28.2` and then renumbered once the copy below was corrected against the
+shipped diffs. It is the only public entry for this release, so the superseded
+`2026.09.28.2` was removed rather than left to show the same release twice. An
+account that acknowledged the withdrawn `2026.09.28.3` is still notified, since
+`2026.09.28.3` is newer than it. Commit references belong in this file only:
 `tests/changelog.test.ts` fails the build if a hex reference of seven or more
 characters appears in the published entry copy.
 
