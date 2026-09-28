@@ -1,5 +1,5 @@
-import { CheckCircle2, Download, LogOut, ShieldAlert, Upload } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Download, HardDriveDownload, LogOut, PawPrint, ShieldAlert, SlidersHorizontal, Upload, User } from 'lucide-react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
 import { addAllowedDiscordUser, deleteNovelAiSettings, getAllowedDiscordUsers, getNovelAiSettings, removeAllowedDiscordUser, saveNovelAiSettings, setNovelAiSharedUse, type AllowedDiscordUser, type NovelAiSettings } from '../api/provider-settings';
 import { downloadAccountArchive, uploadArchive } from '../api/archive-transfer';
@@ -33,6 +33,46 @@ export function AccountView() {
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferMessage, setTransferMessage] = useState('');
   const archiveInput = useRef<HTMLInputElement>(null);
+
+  // The account page covers identity, a credential, a consent decision,
+  // device preferences and data export. Stacked in one column that is a long
+  // scroll, so it is split into tabs. The tab is mirrored into the query
+  // string so a specific control can be linked to directly.
+  const accountTabs = [
+    { id: 'profile', label: t('Profile'), Icon: User },
+    { id: 'sharing', label: t('Coda sharing'), Icon: PawPrint },
+    { id: 'preferences', label: t('Preferences'), Icon: SlidersHorizontal },
+    { id: 'data', label: t('Your data'), Icon: HardDriveDownload },
+  ] as const;
+  type AccountTabId = (typeof accountTabs)[number]['id'];
+  const [tab, setTab] = useState<AccountTabId>(() => {
+    const requested = new URLSearchParams(window.location.search).get('tab');
+    return accountTabs.some((entry) => entry.id === requested) ? requested as AccountTabId : 'profile';
+  });
+  const tabRefs = useRef<Partial<Record<AccountTabId, HTMLButtonElement | null>>>({});
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('tab') === tab) return;
+    url.searchParams.set('tab', tab);
+    window.history.replaceState(null, '', url);
+  }, [tab]);
+
+  // Standard tablist keyboard support: arrows move and activate, Home/End jump
+  // to the ends. Roving tabindex keeps a single stop in the tab sequence.
+  const onTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const order = accountTabs.map((entry) => entry.id);
+    const here = order.indexOf(tab);
+    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    const next = event.key === 'Home' ? 0
+      : event.key === 'End' ? order.length - 1
+        : step === 0 ? -1
+          : (here + step + order.length) % order.length;
+    if (next < 0) return;
+    event.preventDefault();
+    setTab(order[next]);
+    tabRefs.current[order[next]]?.focus();
+  };
 
   useSEO({
     title: 'Your Account | Orbis — Library of Howling Whispers',
@@ -160,10 +200,44 @@ export function AccountView() {
     finally { setTransferBusy(false); if (archiveInput.current) archiveInput.current.value = ''; }
   };
 
+  // Panels stay mounted and are hidden with the hidden attribute rather than
+  // unmounted. The token field is a controlled local input, so unmounting would
+  // silently discard a token mid-paste, and each inline status message belongs
+  // to the panel the reader is looking at.
+  const panel = (id: AccountTabId) => ({
+    role: 'tabpanel' as const,
+    id: `account-panel-${id}`,
+    'aria-labelledby': `account-tab-${id}`,
+    hidden: tab !== id,
+  });
+
   return (
     <div className="page account-page">
       <section className="account-panel">
         <div className="account-identity"><UserAvatar user={user} size={72} /><div><span className="eyebrow">{t('Signed in through Discord')}</span><h1>{user.displayName}</h1><p>@{user.discordUsername}</p></div></div>
+
+        <div className="account-tabs" role="tablist" aria-label={t('Account sections')} onKeyDown={onTabKeyDown}>
+          {accountTabs.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              ref={(node) => { tabRefs.current[id] = node; }}
+              type="button"
+              role="tab"
+              id={`account-tab-${id}`}
+              aria-controls={`account-panel-${id}`}
+              aria-selected={tab === id}
+              tabIndex={tab === id ? 0 : -1}
+              className={`account-tab ${tab === id ? 'is-active' : ''}`}
+              onClick={() => setTab(id)}
+            >
+              <Icon size={15} /> {label}
+              {id === 'sharing' && sharedUse && trustedUsers.length > 0 && (
+                <span className="account-tab__count" aria-label={t(`${trustedUsers.length} accounts can use this`)}>{trustedUsers.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div {...panel('profile')}>
         <form className="profile-form" onSubmit={save}><label htmlFor="display-name">{t('Orbis display name')}</label><div><input id="display-name" value={displayName} minLength={2} maxLength={40} onChange={(event) => setDisplayName(event.target.value)} /><button className="button button--primary" disabled={saving || displayName.trim() === user.displayName}>{saving ? t('Saving...') : t('Save name')}</button></div><small>{t('This changes the author name shown on all your creations. Ownership stays tied to your Discord ID.')}</small>{message && <p className="form-message" role="status">{message}</p>}</form>
 
         <form className="profile-form" onSubmit={saveProvider}>
@@ -181,6 +255,13 @@ export function AccountView() {
           {providerMessage && <p className="form-message" role="status">{providerMessage}</p>}
         </form>
 
+        <div className="permission-card">
+          {user.permissions.canCreate ? <CheckCircle2 /> : <ShieldAlert />}
+          <div><strong>{user.permissions.canCreate ? t('Verified creator') : t('Safe browsing access')}</strong><p>{user.permissions.canCreate ? t('You can view adult records and create new work. You can always edit records you own.') : t('You can browse SFW records and still edit records you own. Restricted cards lead to the verification guide.')}</p></div>
+        </div>
+        </div>
+
+        <div {...panel('sharing')}>
         <div className="profile-form coda-shared-use">
           <p className="coda-shared-use__warning" role="note">
             <strong>{t('🐾 Before you tick this, I would rather say it plainly.')}</strong>{' '}
@@ -248,7 +329,9 @@ export function AccountView() {
           </div>
           {sharedUseMessage && <p className="form-message" role="status">{sharedUseMessage}</p>}
         </div>
+        </div>
 
+        <div {...panel('preferences')}>
         <div className="profile-form language-setting">
           <label htmlFor="interface-language">{t('Interface language')}</label>
           <div>
@@ -279,7 +362,9 @@ export function AccountView() {
           </div>
           <small>{t('The choice is saved on this device. Auto follows your operating system setting.')}</small>
         </div>
+        </div>
 
+        <div {...panel('data')}>
         <div className="profile-form archive-transfer">
           <label>World and SPC transfers</label>
           <div>
@@ -297,12 +382,9 @@ export function AccountView() {
           <small>Downloads include your authored records, world links and permanent SPC identities. Passwords, provider tokens and Discord sessions are never included. Uploads are checksum-verified and all-or-nothing. Keep archives private and never commit an unencrypted archive to a public Git repository.</small>
           {transferMessage && <p className="form-message" role="status">{transferMessage}</p>}
         </div>
-
-        <div className="permission-card">
-          {user.permissions.canCreate ? <CheckCircle2 /> : <ShieldAlert />}
-          <div><strong>{user.permissions.canCreate ? t('Verified creator') : t('Safe browsing access')}</strong><p>{user.permissions.canCreate ? t('You can view adult records and create new work. You can always edit records you own.') : t('You can browse SFW records and still edit records you own. Restricted cards lead to the verification guide.')}</p></div>
         </div>
-        <button className="button button--ghost" onClick={() => void logout()}><LogOut size={16} /> {t('Sign out')}</button>
+
+        <button className="button button--ghost account-signout" onClick={() => void logout()}><LogOut size={16} /> {t('Sign out')}</button>
       </section>
     </div>
   );

@@ -249,6 +249,19 @@ kbd { padding: 2px 6px; border: 1px solid var(--line); border-bottom-color: rgba
 .account-identity { display: flex; align-items: center; gap: 20px; padding-bottom: 26px; border-bottom: 1px solid var(--line); }
 .account-identity h1 { margin-bottom: 2px; }
 .account-identity p { margin: 0; color: var(--faint); }
+
+/* Account sections. The strip deliberately matches .coda-subtabs so the admin
+   controls and the account controls read as the same component. */
+.account-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; border-bottom: 1px solid var(--line); }
+.account-tab { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 13px; border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; background: rgba(8, 20, 39, .55); color: var(--muted); cursor: pointer; font: 700 12px 'Nunito Sans', sans-serif; }
+.account-tab:hover { color: var(--text); border-color: var(--line-strong); }
+.account-tab.is-active { color: var(--amber-bright); border-color: rgba(217,170,112,.35); background: rgba(55,44,35,.48); }
+.account-tab:focus-visible { outline: 2px solid var(--moon); outline-offset: -2px; }
+.account-tab__count { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: rgba(217,170,112,.22); color: var(--amber-bright); font-size: 10px; }
+/* Panels stay mounted so an in-progress token paste and inline status messages
+   survive a tab switch. hidden must win over any layout display value. */
+.account-panel [role='tabpanel'][hidden] { display: none; }
+.account-signout { margin-top: 18px; }
 .profile-form { padding: 26px 0; }
 .profile-form label { display: block; margin-bottom: 8px; color: var(--moon); font-size: 13px; font-weight: 700; }
 .profile-form > div { display: flex; gap: 9px; }
