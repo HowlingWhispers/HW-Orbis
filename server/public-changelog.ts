@@ -60,21 +60,24 @@ export const publicChangelogEntries: PublicChangelogEntry[] = [
   {
     version: '2026.09.28.2',
     publishedAt: '2026-09-28T15:52:13.000Z',
-    title: 'Speculus fits a phone, and Personas you no longer want can be deleted',
+    title: 'A phone layout for Speculus, and deleting a Persona you no longer want',
     sections: [
       {
         id: 'speculus',
         title: 'Speculus',
         items: [
-          'Speculus 0.4.2 has a layout built for phones, so playing on a small screen no longer feels like a shrunk desktop.',
-          'You can start a new line while typing, instead of the input sending your message the moment you press enter.',
+          'Speculus 0.4.2 has a layout built for touch phones, where the screen is split into Main, Setup and Diagnostics tabs. A desktop browser is unchanged, including in a narrow window.',
+          'On a phone, Enter starts a new line and the Send button sends your turn, so a multi-line message no longer goes off half-written. A desktop still sends on Enter and uses Shift+Enter for a newline.',
+          'A new Back to Orbis button saves your session before it leaves. If that save does not work, it stays where it is and tells you to export instead of losing the session.',
         ],
       },
       {
         id: 'personas',
         title: 'Personas',
         items: [
-          'You can now delete a Persona you no longer want, from the place you create and edit Personas.',
+          'You can now delete a Persona you no longer want, from that Persona\'s own page.',
+          'Deleting asks you to confirm first, tells you plainly that it cannot be undone, and returns you to your Persona library once it succeeds.',
+          'If a delete does not go through, the page says so instead of letting you believe it worked.',
         ],
       },
     ],

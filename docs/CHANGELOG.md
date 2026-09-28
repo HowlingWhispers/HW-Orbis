@@ -64,11 +64,22 @@ characters appears in the published entry copy.
 - On success it navigates to `/library/persona` with `replace: true`.
 - Reuses the existing server-authorized asset deletion endpoint, so no new
   permission and no schema migration are required.
-- **Open risk, not verified:** there is no check for a running simulation, and
-  the effect of deleting a Persona that existing saves still reference is
-  unconfirmed. Saves carry the Persona inside the payload rather than through an
-  indexed column, so they are expected to keep working, but that has not been
-  demonstrated. See the follow-up note below.
+- **Effect on existing saves, now verified rather than assumed.** A save carries
+  the Persona as a snapshot inside `payload jsonb`; `speculus_saves` has no
+  `persona_id` column, `source_asset_id` carries no foreign key, and the one
+  foreign key it does hold, `world_id`, is `ON DELETE SET NULL`. So deleting a
+  Persona does not cascade, orphan or blank any save that already exists, and a
+  stored save keeps its own title because that is read from
+  `save.source.persona?.name` in the payload.
+- **The one real consequence is on re-import.** Importing an exported session
+  re-resolves `save.source.id` against `library_assets` and answers 409 with
+  "The save source record no longer exists in Orbis." A member who deletes a
+  Persona and later imports an export launched from it is refused, and must
+  relaunch instead. This is a refusal rather than a silent break, and it is the
+  behaviour to be aware of when considering a running-simulation check.
+- Both facts are pinned by `tests/persona-deletion-save-safety.test.ts` so a
+  future migration that adds a persona foreign key with a cascading delete
+  fails the build rather than quietly destroying saves.
 
 No migration, no new environment variable, and no deployment ordering change
 for either commit.
