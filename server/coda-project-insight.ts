@@ -8,6 +8,8 @@ export interface ProjectInsightSourceStatus {
   name: string;
   available: boolean;
   documentCount: number;
+  branch: string | null;
+  commit: string | null;
   lastRepositoryUpdate: string | null;
 }
 
@@ -72,14 +74,22 @@ const projects: ProjectDefinition[] = [
   },
 ];
 
+// Project Insight is intentionally an allowlist, not a recursive docs crawler.
+// These root files are normally written for project users/collaborators and are
+// the only generic files Coda is allowed to ingest from another checkout.
 const safeRootNames = new Set([
-  'readme.md', 'changelog.md', 'current_state.md', 'current-state.md', 'status.md',
-  'roadmap.md', 'project.md', 'projects.md', 'project_boundaries.md', 'repository_map.md',
+  'readme.md',
+  'changelog.md',
+  'current_state.md',
+  'current-state.md',
+  'status.md',
+  'roadmap.md',
+  'project.md',
+  'projects.md',
 ]);
 
-// Even when these live under docs/, they describe privileged infrastructure or
-// security boundaries and are not appropriate evidence for ordinary Discord members.
-const blockedPathPattern = /(?:^|\/)(?:\.git|node_modules|dist|dist-server|coverage|private|secrets?)(?:\/|$)|(?:kilo|deploy|deployment|administration|authentication|api[_-]?contract|credential|secret|runbook|migration|server[_-]?ops|incident)/i;
+// This is the one cross-project overview maintained explicitly for Discord Coda.
+const orbisMemberSafeExtras = ['docs/CODA_PROJECT_KNOWLEDGE.md'];
 
 const projectQuestionPattern = /\b(?:project|roadmap|plan|planned|feature|release|development|developing|status|implemented|implementation|multiplayer|orbis|speculus|fabula|mouseion|studium|howling whispers|world forge|runtime|simulator|library|engine|architecture|milestone|changelog|what changed|working on)\b/i;
 
@@ -97,49 +107,55 @@ function resolveProjectRoot(project: ProjectDefinition) {
       if (!existsSync(candidate) || !statSync(candidate).isDirectory()) continue;
       if (existsSync(path.join(candidate, '.git')) || project.id === 'orbis') return candidate;
     } catch {
-      // Try the next allowlisted candidate.
+      // Try the next explicitly allowlisted checkout.
     }
   }
   return null;
 }
 
-function gitLastUpdate(root: string) {
+function gitValue(root: string, args: string[]) {
   try {
-    return execFileSync('git', ['-C', root, 'log', '-1', '--format=%cI'], {
-      encoding: 'utf8', timeout: 1_000, stdio: ['ignore', 'pipe', 'ignore'],
+    return execFileSync('git', ['-C', root, ...args], {
+      encoding: 'utf8',
+      timeout: 1_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
     }).trim() || null;
   } catch {
     return null;
   }
 }
 
+function repositoryMetadata(root: string) {
+  return {
+    branch: gitValue(root, ['branch', '--show-current']),
+    commit: gitValue(root, ['rev-parse', '--short=12', 'HEAD']),
+    updatedAt: gitValue(root, ['log', '-1', '--format=%cI']),
+  };
+}
+
 function safeRead(root: string, absolutePath: string) {
   const relative = path.relative(root, absolutePath).replace(/\\/g, '/');
   if (!relative || relative.startsWith('../') || path.isAbsolute(relative)) return null;
-  if (blockedPathPattern.test(relative)) return null;
   try {
     const stat = statSync(absolutePath);
     if (!stat.isFile() || stat.size > MAX_FILE_BYTES) return null;
     const text = readFileSync(absolutePath, 'utf8');
-    // Strip fenced code from the knowledge index. Project questions need the
-    // documented facts, not executable snippets or copied configuration examples.
+    // Project questions need documented facts, not runnable snippets or copied
+    // configuration examples. This also reduces the chance of echoing secrets
+    // accidentally pasted into a code block.
     return text.replace(/```[\s\S]*?```/g, '[code example omitted]').trim();
   } catch {
     return null;
   }
 }
 
-function walkDocs(root: string, directory: string, output: string[], depth = 0) {
-  if (depth > 5 || !existsSync(directory)) return;
-  let entries: ReturnType<typeof readdirSync>;
-  try { entries = readdirSync(directory, { withFileTypes: true }); }
-  catch { return; }
-  for (const entry of entries) {
-    const absolute = path.join(directory, entry.name);
-    const relative = path.relative(root, absolute).replace(/\\/g, '/');
-    if (blockedPathPattern.test(relative)) continue;
-    if (entry.isDirectory()) walkDocs(root, absolute, output, depth + 1);
-    else if (entry.isFile() && /\.md$/i.test(entry.name)) output.push(absolute);
+function rootMemberSafeFiles(root: string) {
+  try {
+    return readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && safeRootNames.has(entry.name.toLowerCase()))
+      .map((entry) => path.join(root, entry.name));
+  } catch {
+    return [];
   }
 }
 
@@ -148,37 +164,54 @@ function indexProject(project: ProjectDefinition) {
   if (!root) {
     return {
       documents: [] as IndexedDocument[],
-      status: { id: project.id, name: project.name, available: false, documentCount: 0, lastRepositoryUpdate: null } satisfies ProjectInsightSourceStatus,
+      status: {
+        id: project.id,
+        name: project.name,
+        available: false,
+        documentCount: 0,
+        branch: null,
+        commit: null,
+        lastRepositoryUpdate: null,
+      } satisfies ProjectInsightSourceStatus,
     };
   }
 
-  const repositoryUpdatedAt = gitLastUpdate(root);
-  const files: string[] = [];
-  for (const name of safeRootNames) {
-    const candidate = path.join(root, name);
-    if (existsSync(candidate)) files.push(candidate);
-    // Most repositories use uppercase conventional names. Check that spelling too.
-    const upper = path.join(root, name.toUpperCase());
-    if (upper !== candidate && existsSync(upper)) files.push(upper);
-  }
-  walkDocs(root, path.join(root, 'docs'), files);
-
-  // Orbis's project pages are intentionally member-facing even though their source
-  // data lives under src/. This one file is an explicit exception to the docs-only rule.
+  const metadata = repositoryMetadata(root);
+  const files = rootMemberSafeFiles(root);
   if (project.id === 'orbis') {
-    const publicProjectRegistry = path.join(root, 'src', 'data', 'projects.ts');
-    if (existsSync(publicProjectRegistry)) files.push(publicProjectRegistry);
+    for (const relative of orbisMemberSafeExtras) {
+      const candidate = path.join(root, relative);
+      if (existsSync(candidate)) files.push(candidate);
+    }
   }
 
   const seen = new Set<string>();
   const documents: IndexedDocument[] = [];
   for (const file of files) {
     const relativePath = path.relative(root, file).replace(/\\/g, '/');
-    if (seen.has(relativePath) || blockedPathPattern.test(relativePath)) continue;
+    if (seen.has(relativePath)) continue;
     seen.add(relativePath);
     const text = safeRead(root, file);
     if (!text) continue;
-    documents.push({ projectId: project.id, projectName: project.name, relativePath, text, repositoryUpdatedAt });
+    documents.push({
+      projectId: project.id,
+      projectName: project.name,
+      relativePath,
+      text,
+      repositoryUpdatedAt: metadata.updatedAt,
+    });
+  }
+
+  // Git freshness is useful evidence, but only branch/SHA/time are exposed. Commit
+  // bodies, diffs, server paths and remote URLs are deliberately not sent to members.
+  if (metadata.branch || metadata.commit || metadata.updatedAt) {
+    documents.push({
+      projectId: project.id,
+      projectName: project.name,
+      relativePath: '[repository status]',
+      text: `Server checkout metadata: branch ${metadata.branch ?? 'unknown'}, commit ${metadata.commit ?? 'unknown'}, last repository update ${metadata.updatedAt ?? 'unknown'}.`,
+      repositoryUpdatedAt: metadata.updatedAt,
+    });
   }
 
   return {
@@ -188,7 +221,9 @@ function indexProject(project: ProjectDefinition) {
       name: project.name,
       available: true,
       documentCount: documents.length,
-      lastRepositoryUpdate: repositoryUpdatedAt,
+      branch: metadata.branch,
+      commit: metadata.commit,
+      lastRepositoryUpdate: metadata.updatedAt,
     } satisfies ProjectInsightSourceStatus,
   };
 }
@@ -236,9 +271,9 @@ function scoreChunk(question: string, queryTokens: string[], document: IndexedDo
     const matches = lower.split(token).length - 1;
     score += Math.min(matches, 6) * 2;
   }
-  if (/readme|current[_-]?state|status|roadmap|changelog|projects\.ts/i.test(document.relativePath)) score += 2;
+  if (/readme|current[_-]?state|status|roadmap|changelog|coda_project_knowledge/i.test(document.relativePath)) score += 3;
   if (/changelog/i.test(document.relativePath) && /changed|new|latest|recent|update/i.test(lowerQuestion)) score += 8;
-  if (/roadmap|project|projects\.ts/i.test(document.relativePath) && /plan|roadmap|future|milestone/i.test(lowerQuestion)) score += 6;
+  if (/roadmap|project|coda_project_knowledge/i.test(document.relativePath) && /plan|roadmap|future|milestone/i.test(lowerQuestion)) score += 6;
   return score;
 }
 
