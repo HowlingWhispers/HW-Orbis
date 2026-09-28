@@ -7,8 +7,12 @@ import {
 } from '../admin/api';
 import { CODA_COMPOSED_MAX_LENGTH, CODA_MESSAGE_MAX_LENGTH, codaMessagePartCount } from '../admin/codaMessage';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
+import { BigBrotherConsole } from '../views/BigBrotherView';
 
-type AdminTab = 'overview' | 'discord' | 'coda' | 'access' | 'system';
+type AdminTab = 'overview' | 'discord' | 'coda' | 'access' | 'system' | 'bigbrother';
+const ADMIN_TAB_LABELS: Record<AdminTab, string> = {
+  overview: 'Overview', discord: 'Server Settings', coda: 'Coda', access: 'Permissions', system: 'System', bigbrother: 'Big Brother',
+};
 type EditableSettings = Pick<AdminSettings, 'guildId' | 'adultRoleIds' | 'creatorRoleIds' | 'adminRoleIds' | 'inviteUrl'>;
 
 const splitIds = (value: string) => [...new Set(value.split(/[\s,]+/).map((id) => id.trim()).filter(Boolean))];
@@ -71,7 +75,7 @@ export function AdminView() {
   return (
     <AdminFrame>
       <nav className="admin-tabs" aria-label="Orbis administration sections">
-        {(['overview', 'discord', 'coda', 'access', 'system'] as AdminTab[]).map((item) => <button key={item} className={tab === item ? 'is-active' : ''} onClick={() => setTab(item)}>{item}</button>)}
+        {(['overview', 'discord', 'coda', 'access', 'system', 'bigbrother'] as AdminTab[]).map((item) => <button key={item} className={tab === item ? 'is-active' : ''} onClick={() => setTab(item)}>{ADMIN_TAB_LABELS[item]}</button>)}
       </nav>
       {loading && <div className="admin-loading">Opening the control room...</div>}
       {error && <AdminDenied title="Control room unavailable" body={error} action={<button className="button button--ghost" onClick={() => void load()}>Try again</button>} />}
@@ -82,6 +86,7 @@ export function AdminView() {
         {tab === 'coda' && <CodaDiscordPanel />}
         {tab === 'access' && <AccessPanel settings={settings} />}
         {tab === 'system' && <SystemPanel overview={overview} settings={settings} />}
+        {tab === 'bigbrother' && <BigBrotherConsole />}
       </>}
     </AdminFrame>
   );

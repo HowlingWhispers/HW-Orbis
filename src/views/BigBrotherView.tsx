@@ -49,8 +49,8 @@ function displayPerson(person: Pick<BigBrotherPerson, 'authorName' | 'authorUser
   return person.authorName || person.authorUsername || person.authorId;
 }
 
-export function BigBrotherView() {
-  const { user, loading: authLoading } = useAuth();
+export function BigBrotherConsole() {
+  const { user } = useAuth();
   const canAdmin = Boolean(user?.permissions.canAdmin);
   const [tab, setTab] = useState<BigBrotherTab>('messages');
   const [stats, setStats] = useState<BigBrotherStats>();
@@ -259,12 +259,9 @@ export function BigBrotherView() {
     } finally { setWorking(false); }
   };
 
-  if (authLoading) return <div className="page admin-page"><div className="admin-loading">Checking administrator access...</div></div>;
-  if (!user) return <div className="page admin-page"><section className="admin-denied"><ShieldCheck /><h2>Discord sign-in required</h2><p>Sign in before entering Big Brother.</p><a className="button button--discord" href={discordLoginPath('/admin/big-brother')}>Sign in with Discord</a></section></div>;
-  if (!canAdmin) return <div className="page admin-page"><section className="admin-denied"><ShieldCheck /><h2>Administrator access required</h2><p>Big Brother is part of the protected Orbis control room.</p></section></div>;
-
-  return <div className="page admin-page bb-page">
-    <header className="bb-header">
+  return (
+    <>
+      <header className="bb-header">
       <div className="bb-header__title">
         <span className="bb-header__icon"><Archive /></span>
         <div><span className="eyebrow">Protected administration</span><h1>Big Brother</h1><p>Discord activity, durable Coda memory and server context. DMs are excluded; deleted Discord text is redacted from the archive.</p></div>
@@ -395,5 +392,14 @@ export function BigBrotherView() {
     </section>}
 
     {selectedRevisionMessage?.deletedAt && <div className="bb-notice">Deletion privacy is active: deleted Discord text and attachment metadata are removed from the current record and revision history.</div>}
-  </div>;
+  </>);
+}
+
+export function BigBrotherView() {
+  const { user, loading: authLoading } = useAuth();
+  const canAdmin = Boolean(user?.permissions.canAdmin);
+  if (authLoading) return <div className="page admin-page"><div className="admin-loading">Checking administrator access...</div></div>;
+  if (!user) return <div className="page admin-page"><section className="admin-denied"><ShieldCheck /><h2>Discord sign-in required</h2><p>Sign in before entering Big Brother.</p><a className="button button--discord" href={discordLoginPath('/admin/big-brother')}>Sign in with Discord</a></section></div>;
+  if (!canAdmin) return <div className="page admin-page"><section className="admin-denied"><ShieldCheck /><h2>Administrator access required</h2><p>Big Brother is part of the protected Orbis control room.</p></section></div>;
+  return <div className="page admin-page bb-page"><BigBrotherConsole /></div>;
 }
