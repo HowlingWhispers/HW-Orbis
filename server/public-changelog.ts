@@ -58,6 +58,28 @@ export type PublicChangelogPayload = {
 /** Newest first. Add new entries at the top. */
 export const publicChangelogEntries: PublicChangelogEntry[] = [
   {
+    version: '2026.09.28.2',
+    publishedAt: '2026-09-28T15:52:13.000Z',
+    title: 'Speculus fits a phone, and Personas you no longer want can be deleted',
+    sections: [
+      {
+        id: 'speculus',
+        title: 'Speculus',
+        items: [
+          'Speculus 0.4.2 has a layout built for phones, so playing on a small screen no longer feels like a shrunk desktop.',
+          'You can start a new line while typing, instead of the input sending your message the moment you press enter.',
+        ],
+      },
+      {
+        id: 'personas',
+        title: 'Personas',
+        items: [
+          'You can now delete a Persona you no longer want, from the place you create and edit Personas.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2026.09.28.1',
     publishedAt: '2026-09-28T00:00:00.000Z',
     title: 'One source of truth for Places, and a Persona for every simulation',

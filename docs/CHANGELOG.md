@@ -21,10 +21,59 @@ rendered to users. The user-facing changelog is curated separately in
 
 ---
 
-## 2026-09-28 — Persona deletion
+## 2026-09-28 — Speculus 0.4.2 phone layout and Persona deletion
 
-- Persona record pages now offer Delete Persona with confirmation, pending state, visible errors and return to the Persona library after success.
-- Reuse the existing server-authorized asset deletion endpoint; no schema migration is required.
+**Public changelog version.** `2026.09.28.2`, added as a new entry rather than
+appended to `2026.09.28.1`, so that an account which already acknowledged the
+earlier version is still notified. Commit references belong in this file only:
+`tests/changelog.test.ts` fails the build if a hex reference of seven or more
+characters appears in the published entry copy.
+
+### HW-Speculus `f8f793a` — phone layout, newline input, version 0.4.2
+
+- Client-side only. No launch package or versioned bridge contract changes, so
+  an Orbis side does not need to ship in step.
+- `package.json` moves 0.4.1 to 0.4.2.
+- The phone layout is gated behind `usePhoneLayout` on
+  `(max-width: 780px) and (pointer: coarse), (max-width: 1000px) and
+  (max-height: 500px) and (pointer: coarse)`. The `pointer: coarse` arm is what
+  keeps desktop unchanged: a narrow desktop window does not pick up the phone
+  layout, and desktop keeps Enter-to-send with Shift+Enter for a newline.
+- On a phone, Setup and Diagnostics stop being toggled panels and become real
+  tabs alongside Main, driven by `data-phone-tab` on the layout rather than by
+  unmounting, so switching tabs keeps panel state.
+- On a phone, Enter inserts a newline and the existing Send button becomes the
+  only way to send. The Send button itself is not new; it already existed.
+- New "Back to Orbis" button on the phone tab bar. It calls `saveV2Session` and
+  `saveV2LocalAutosave` before navigating, and on a save failure it stays put,
+  returns to Main, and reports that the session must be exported instead.
+- Worth knowing: that button navigates to a hardcoded
+  `https://lib.thehowlingwhispers.com/asset/...` absolute URL rather than a
+  configured origin. Fine while the only deployment is production, but it will
+  pull a staging or local client across to production. Not changed here.
+
+### HW-Orbis `3a70d86` — Delete Persona from the record page
+
+- `src/views/AssetDetailView.tsx` gains a Delete Persona action, shown when the
+  viewer can edit and the record is a Persona.
+- Confirmation is `window.confirm` naming the Persona and stating that the
+  delete cannot be undone, not a styled dialog. Worth revisiting if the app
+  standardises on an in-page confirmation.
+- Pending state disables the button and swaps the label to "Deleting...".
+  Failures are rendered into a `role="alert"` message rather than swallowed.
+- On success it navigates to `/library/persona` with `replace: true`.
+- Reuses the existing server-authorized asset deletion endpoint, so no new
+  permission and no schema migration are required.
+- **Open risk, not verified:** there is no check for a running simulation, and
+  the effect of deleting a Persona that existing saves still reference is
+  unconfirmed. Saves carry the Persona inside the payload rather than through an
+  indexed column, so they are expected to keep working, but that has not been
+  demonstrated. See the follow-up note below.
+
+No migration, no new environment variable, and no deployment ordering change
+for either commit.
+
+)
 
 ## 2026-09-28 — Changelog system: permanent page plus account-backed notice
 
