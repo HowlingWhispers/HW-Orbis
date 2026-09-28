@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
-import { readPoolParticipation, setPoolParticipation } from './coda-shared-key-pool.js';
+import { addAllowedDiscordUser, listAllowedDiscordUsers, readPoolParticipation, removeAllowedDiscordUser, setPoolParticipation } from './coda-shared-key-pool.js';
 
 const migrationMissing = (error: unknown) =>
   typeof error === 'object' && error !== null && 'code' in error && error.code === '42P01';
@@ -14,6 +14,9 @@ const settingsSchema = z.object({
   model: z.enum(models).default('xialong-v1'),
 });
 const sharedUseSchema = z.object({ enabled: z.boolean() }).strict();
+const snowflake = z.string().trim().regex(/^[0-9]{17,20}$/, 'Use an exact Discord user ID.');
+const allowedUserSchema = z.object({ discordId: snowflake }).strict();
+const allowedUserPathSchema = z.object({ discordId: snowflake }).strict();
 
 export type SealedCredential = { ciphertext: Buffer; iv: Buffer; tag: Buffer };
 
@@ -105,6 +108,49 @@ export function createProviderSettingsRouter(config: AppConfig, pool: DatabasePo
       );
       response.json({ configured: true, model: result.rows[0].model, updatedAt: result.rows[0].updated_at });
     } catch (error) { next(error); }
+  });
+
+  /**
+   * The Discord accounts this owner trusts with their credential.
+   *
+   * Consent is scoped to named people rather than granted wholesale, so this is
+   * the control that actually decides who the owner's allowance may serve. It
+   * accepts any Discord snowflake, including an account that has never linked
+   * an Orbis user, because the person being helped may be a guest.
+   */
+  router.get('/novelai/shared-use/allowed', async (request, response, next) => {
+    try {
+      response.json(await listAllowedDiscordUsers(pool, request.session.userId!));
+    } catch (error) {
+      if (migrationMissing(error)) return response.status(503).json({ error: 'Trusted Discord users are not installed yet.', available: false });
+      next(error);
+    }
+  });
+
+  router.post('/novelai/shared-use/allowed', async (request, response, next) => {
+    try {
+      const parsed = allowedUserSchema.safeParse(request.body);
+      // A malformed snowflake is the caller's mistake, not a server failure, and
+      // must be refused rather than stored.
+      if (!parsed.success) return response.status(400).json({ error: 'Use an exact Discord user ID: 17 to 20 digits.' });
+      await addAllowedDiscordUser(pool, request.session.userId!, parsed.data.discordId);
+      response.json(await listAllowedDiscordUsers(pool, request.session.userId!));
+    } catch (error) {
+      if (migrationMissing(error)) return response.status(503).json({ error: 'Trusted Discord users are not installed yet.', available: false });
+      next(error);
+    }
+  });
+
+  router.delete('/novelai/shared-use/allowed/:discordId', async (request, response, next) => {
+    try {
+      const parsed = allowedUserPathSchema.safeParse(request.params);
+      if (!parsed.success) return response.status(400).json({ error: 'Use an exact Discord user ID: 17 to 20 digits.' });
+      await removeAllowedDiscordUser(pool, request.session.userId!, parsed.data.discordId);
+      response.json(await listAllowedDiscordUsers(pool, request.session.userId!));
+    } catch (error) {
+      if (migrationMissing(error)) return response.status(503).json({ error: 'Trusted Discord users are not installed yet.', available: false });
+      next(error);
+    }
   });
 
   router.delete('/novelai', async (request, response, next) => {

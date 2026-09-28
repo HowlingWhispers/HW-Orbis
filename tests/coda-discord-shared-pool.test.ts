@@ -48,10 +48,12 @@ type PoolState = {
   credentials: Map<string, { model: string; sealed: ReturnType<typeof sealedFor> }>;
   members: MemberState[];
   rateLimits: Map<string, number>;
+  /** owner user id -> the Discord ids that owner has named as trusted. */
+  allowed: Map<string, Set<string>>;
 };
 
 function newPoolState(): PoolState {
-  return { users: [], credentials: new Map(), members: [], rateLimits: new Map() };
+  return { users: [], credentials: new Map(), members: [], rateLimits: new Map(), allowed: new Map() };
 }
 
 function buildConfig(overrides: Record<string, string> = {}): AppConfig {
@@ -74,6 +76,13 @@ function buildConfig(overrides: Record<string, string> = {}): AppConfig {
 }
 
 const policy: PoolPolicy = { maxAttempts: 3, entitlementCooldownMinutes: 360, credentialCooldownMinutes: 60, maxConsecutiveFailures: 5 };
+
+/** Owner grants scoped consent to one Discord account. */
+function trust(state: PoolState, ownerId: string, discordId: string) {
+  const set = state.allowed.get(ownerId) ?? new Set<string>();
+  set.add(discordId);
+  state.allowed.set(ownerId, set);
+}
 
 function member(partial: Partial<MemberState> & { userId: string }): MemberState {
   return {
@@ -107,8 +116,20 @@ function fakePool(state: PoolState, log: QueryLog): DatabasePool {
           ? { rows: [{ model: found.model, token_ciphertext: found.sealed.ciphertext, token_iv: found.sealed.iv, token_tag: found.sealed.tag }], rowCount: 1 }
           : { rows: [], rowCount: 0 };
       }
+      if (sql.includes('AS allowed_count')) {
+        const found = state.members.find((m) => m.userId === v[0]);
+        return {
+          rows: found ? [{
+            owner_opt_in: found.ownerOptIn, enabled: found.enabled, revoked_at: found.revoked ? new Date() : null,
+            entitled: found.entitled, last_failure_class: found.lastFailureClass, consecutive_failures: found.consecutiveFailures,
+            allowed_count: (state.allowed.get(found.userId)?.size ?? 0),
+          }] : [],
+          rowCount: found ? 1 : 0,
+        };
+      }
       if (sql.includes('FROM coda_shared_key_members m')) {
-        log.push(`pool-select:model=${v[0]}:exclude=${v[1]}:limit=${v[2]}`);
+        const requester = v[3] as string | null;
+        log.push(`pool-select:model=${v[0]}:exclude=${v[1]}:limit=${v[2]}:requester=${requester}`);
         const excluded = v[1] as string | null;
         const limit = Number(v[2]);
         const now = Date.now();
@@ -117,6 +138,8 @@ function fakePool(state: PoolState, log: QueryLog): DatabasePool {
           .filter((m) => !m.cooldownUntil || new Date(m.cooldownUntil).getTime() <= now)
           .filter((m) => (state.credentials.get(m.userId)?.model ?? '') === String(v[0]))
           .filter((m) => !excluded || m.userId !== excluded)
+          // Scoped consent: the owner must have named this exact requester.
+          .filter((m) => Boolean(requester) && (state.allowed.get(m.userId)?.has(String(requester)) ?? false))
           .sort((a, b) => {
             const at = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
             const bt = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
@@ -158,16 +181,6 @@ function fakePool(state: PoolState, log: QueryLog): DatabasePool {
         }
         return { rows: [], rowCount: 1 };
       }
-      if (sql.includes('FROM coda_shared_key_members WHERE user_id = $1')) {
-        const found = state.members.find((m) => m.userId === v[0]);
-        return {
-          rows: found ? [{
-            owner_opt_in: found.ownerOptIn, enabled: found.enabled, revoked_at: found.revoked ? new Date() : null,
-            entitled: found.entitled, last_failure_class: found.lastFailureClass, consecutive_failures: found.consecutiveFailures,
-          }] : [],
-          rowCount: found ? 1 : 0,
-        };
-      }
       if (sql.includes('INSERT INTO coda_shared_key_members')) {
         const userId = String(v[0]);
         const optIn = Boolean(v[1]);
@@ -184,6 +197,22 @@ function fakePool(state: PoolState, log: QueryLog): DatabasePool {
         target.lastFailureClass = null;
         log.push(`set-participation:${userId}:${optIn}`);
         return { rows: [{ owner_opt_in: target.ownerOptIn, revoked_at: target.revoked ? new Date() : null }], rowCount: 1 };
+      }
+      if (sql.includes('DELETE FROM coda_shared_key_allowed_users')) {
+        const set = state.allowed.get(String(v[0]));
+        const had = set?.delete(String(v[1])) ?? false;
+        return { rows: [], rowCount: had ? 1 : 0 };
+      }
+      if (sql.includes('FROM coda_shared_key_allowed_users')) {
+        const set = state.allowed.get(String(v[0])) ?? new Set<string>();
+        state.allowed.set(String(v[0]), set);
+        return { rows: [...set].map((id) => ({ discord_user_id: id, created_at: new Date().toISOString() })), rowCount: set.size };
+      }
+      if (sql.includes('INSERT INTO coda_shared_key_allowed_users')) {
+        const set = state.allowed.get(String(v[0])) ?? new Set<string>();
+        set.add(String(v[1]));
+        state.allowed.set(String(v[0]), set);
+        return { rows: [], rowCount: 1 };
       }
       log.push(`unhandled:${sql.replace(/\s+/g, ' ').slice(0, 60)}`);
       return { rows: [], rowCount: 0 };
@@ -306,6 +335,7 @@ describe('provider selection for a linked Discord member', () => {
 
     stubProvider([success('*from the pool*')]);
     const log: QueryLog = [];
+    trust(state, MEMBER_B, LINKED_DISCORD);
     const app = bridgeApp(state, buildConfig({ CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), log);
 
     const response = await request(app)
@@ -327,6 +357,7 @@ describe('provider selection for a linked Discord member', () => {
 
     stubProvider([{ status: 400, body: ENTITLEMENT_BODY }, success('*pool answered*')]);
     const log: QueryLog = [];
+    trust(state, MEMBER_B, LINKED_DISCORD);
     const app = bridgeApp(state, buildConfig({ CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), log);
 
     const response = await request(app)
@@ -351,6 +382,7 @@ describe('provider selection for a linked Discord member', () => {
 
     stubProvider([{ status: 400, body: ENTITLEMENT_BODY }, success('*someone else answered*')]);
     const log: QueryLog = [];
+    trust(state, MEMBER_B, LINKED_DISCORD);
     const app = bridgeApp(state, buildConfig({ CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), log);
 
     await request(app)
@@ -432,6 +464,7 @@ describe('unlinked Discord guests', () => {
     state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('memberb') });
     stubProvider([success('*guest hello*')]);
     const log: QueryLog = [];
+    trust(state, MEMBER_B, GUEST_DISCORD);
     const app = bridgeApp(state, buildConfig({ CODA_DISCORD_GUEST_ACCESS: 'true', CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), log);
 
     const response = await request(app)
@@ -454,6 +487,7 @@ describe('unlinked Discord guests', () => {
     state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('memberb') });
     stubProvider([success('*hi*')]);
     const log: QueryLog = [];
+    trust(state, MEMBER_B, GUEST_DISCORD);
     const app = bridgeApp(state, buildConfig({ CODA_DISCORD_GUEST_ACCESS: 'true', CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), log);
 
     await request(app)
@@ -479,6 +513,7 @@ describe('unlinked Discord guests', () => {
     state.members.push(member({ userId: MEMBER_B }));
     state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('memberb') });
     stubProvider([success('*hi*')]);
+    trust(state, MEMBER_B, GUEST_DISCORD);
     const app = bridgeApp(state, buildConfig({ CODA_DISCORD_GUEST_ACCESS: 'true', CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), []);
 
     const response = await request(app)
@@ -505,6 +540,8 @@ describe('pool health, fairness and limits', () => {
 
     stubProvider([{ status: 400, body: ENTITLEMENT_BODY }, success('*second member answered*')]);
     const log: QueryLog = [];
+    trust(state, MEMBER_B, LINKED_DISCORD);
+    trust(state, MEMBER_C, LINKED_DISCORD);
     const app = bridgeApp(state, buildConfig({ CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), log);
 
     const response = await request(app)
@@ -521,7 +558,7 @@ describe('pool health, fairness and limits', () => {
     expect(log).toContain(`mark-used:${MEMBER_C}`);
     // The rejected member is no longer selected for the next request.
     const { selectPoolMembers: select } = await import('../server/coda-shared-key-pool');
-    const next = await select(fakePool(state, []) as never, 'xialong-v1', policy);
+    const next = await select(fakePool(state, []) as never, 'xialong-v1', policy, { requesterDiscordId: LINKED_DISCORD });
     expect(next.map((entry) => entry.userId)).toEqual([MEMBER_C]);
   });
 
@@ -547,7 +584,8 @@ describe('pool health, fairness and limits', () => {
       member({ userId: ELIGIBLE }),
     );
 
-    const selected = await selectPoolMembers(fakePool(state, []) as never, 'xialong-v1', policy);
+    trust(state, ELIGIBLE, LINKED_DISCORD);
+    const selected = await selectPoolMembers(fakePool(state, []) as never, 'xialong-v1', policy, { requesterDiscordId: LINKED_DISCORD });
     expect(selected.map((entry) => entry.userId)).toEqual([ELIGIBLE]);
   });
 
@@ -558,12 +596,14 @@ describe('pool health, fairness and limits', () => {
     state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('b') });
     state.credentials.set(MEMBER_C, { model: 'xialong-v1', sealed: sealedFor('c') });
 
-    const first = await selectPoolMembers(fakePool(state, []) as never, 'xialong-v1', policy);
+    trust(state, MEMBER_B, LINKED_DISCORD);
+    trust(state, MEMBER_C, LINKED_DISCORD);
+    const first = await selectPoolMembers(fakePool(state, []) as never, 'xialong-v1', policy, { requesterDiscordId: LINKED_DISCORD });
     expect(first[0].userId).toBe(MEMBER_C);
 
     // After C is used, B becomes the least recently used.
     state.members.find((m) => m.userId === MEMBER_C)!.lastUsedAt = '2026-09-28T12:00:00.000Z';
-    const second = await selectPoolMembers(fakePool(state, []) as never, 'xialong-v1', policy);
+    const second = await selectPoolMembers(fakePool(state, []) as never, 'xialong-v1', policy, { requesterDiscordId: LINKED_DISCORD });
     expect(second[0].userId).toBe(MEMBER_B);
   });
 
@@ -657,6 +697,7 @@ describe('rate limiting', () => {
     state.members.push(member({ userId: MEMBER_B }));
     state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('memberb') });
     stubProvider([success()]);
+    trust(state, MEMBER_B, GUEST_DISCORD);
     const app = bridgeApp(state, buildConfig({
       CODA_DISCORD_GUEST_ACCESS: 'true',
       CODA_DISCORD_SHARED_POOL_ENABLED: 'true',
@@ -680,6 +721,7 @@ describe('key material never escapes', () => {
     state.credentials.set(OWNER, { model: 'xialong-v1', sealed: sealedFor('owner') });
     state.members.push(member({ userId: MEMBER_B }));
     state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('memberb') });
+    trust(state, MEMBER_B, LINKED_DISCORD);
     stubProvider([{ status: 400, body: ENTITLEMENT_BODY }, success('*pool reply*')]);
 
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -739,15 +781,15 @@ describe('opt-in participation', () => {
     const pool = fakePool(state, log);
 
     const { readPoolParticipation, setPoolParticipation } = await import('../server/coda-shared-key-pool');
-    expect(await readPoolParticipation(pool as never, OWNER)).toEqual({ participating: false, available: true });
+    expect(await readPoolParticipation(pool as never, OWNER)).toEqual({ participating: false, allowedCount: 0, available: true });
 
     await setPoolParticipation(pool as never, OWNER, true);
-    expect(await readPoolParticipation(pool as never, OWNER)).toEqual({ participating: true, available: true });
+    expect(await readPoolParticipation(pool as never, OWNER)).toEqual({ participating: false, allowedCount: 0, available: true });
 
     // Revoking takes effect on the next read, with no restart and without
     // touching the personal provider configuration.
     await setPoolParticipation(pool as never, OWNER, false);
-    expect(await readPoolParticipation(pool as never, OWNER)).toEqual({ participating: false, available: true });
+    expect(await readPoolParticipation(pool as never, OWNER)).toEqual({ participating: false, allowedCount: 0, available: true });
     expect(state.credentials.has(OWNER)).toBe(true);
   });
 
@@ -755,8 +797,148 @@ describe('opt-in participation', () => {
     const state = newPoolState();
     state.members.push(member({ userId: MEMBER_B, ownerOptIn: false }));
     state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('b') });
-    const selected = await selectPoolMembers(fakePool(state, []) as never, 'xialong-v1', policy);
+    const selected = await selectPoolMembers(fakePool(state, []) as never, 'xialong-v1', policy, { requesterDiscordId: LINKED_DISCORD });
     expect(selected).toEqual([]);
+  });
+});
+
+describe('scoped consent to named Discord accounts', () => {
+  it('will not serve a requester the owner has not named', async () => {
+    const state = newPoolState();
+    state.users.push({ id: OWNER, discordId: LINKED_DISCORD, displayName: 'Owner' });
+    state.members.push(member({ userId: MEMBER_B }));
+    state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('b') });
+    // Nobody has been trusted yet, so the owner shares with nobody.
+    stubProvider([success()]);
+    const app = bridgeApp(state, buildConfig({ CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), []);
+
+    const response = await request(app)
+      .post('/api/internal/coda-discord')
+      .set('authorization', `Bearer ${bridgeSecret}`)
+      .send(bridgeRequest())
+      .expect(503);
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(response.body.code).toBe('coda_no_provider_available');
+  });
+
+  it('serves a requester the owner did name', async () => {
+    const state = newPoolState();
+    state.users.push({ id: OWNER, discordId: LINKED_DISCORD, displayName: 'Owner' });
+    state.members.push(member({ userId: MEMBER_B }));
+    state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('b') });
+    state.allowed.set(MEMBER_B, new Set([LINKED_DISCORD]));
+    stubProvider([success('*trusted hello*')]);
+    const log: QueryLog = [];
+    const app = bridgeApp(state, buildConfig({ CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), log);
+
+    const response = await request(app)
+      .post('/api/internal/coda-discord')
+      .set('authorization', `Bearer ${bridgeSecret}`)
+      .send(bridgeRequest())
+      .expect(200);
+
+    expect(response.body.reply).toContain('trusted hello');
+    expect(log).toContain(`mark-used:${MEMBER_B}`);
+  });
+
+  it('does not let one owner’s trust list answer a different requester', async () => {
+    const state = newPoolState();
+    state.users.push({ id: OWNER, discordId: LINKED_DISCORD, displayName: 'Owner' });
+    state.members.push(member({ userId: MEMBER_B }));
+    state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('b') });
+    // Trusted, but for somebody else entirely.
+    state.allowed.set(MEMBER_B, new Set([OTHER_DISCORD]));
+    stubProvider([success()]);
+    const log: QueryLog = [];
+    const app = bridgeApp(state, buildConfig({ CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), log);
+
+    await request(app)
+      .post('/api/internal/coda-discord')
+      .set('authorization', `Bearer ${bridgeSecret}`)
+      .send(bridgeRequest())
+      .expect(503);
+
+    expect(log).not.toContain(`mark-used:${MEMBER_B}`);
+  });
+
+  it('passes the requester into selection so the scoping is server-side, not client-side', async () => {
+    const state = newPoolState();
+    state.members.push(member({ userId: MEMBER_B }));
+    state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('b') });
+    state.allowed.set(MEMBER_B, new Set([GUEST_DISCORD]));
+    stubProvider([success('*guest served*')]);
+    const log: QueryLog = [];
+    const app = bridgeApp(state, buildConfig({
+      CODA_DISCORD_GUEST_ACCESS: 'true', CODA_DISCORD_SHARED_POOL_ENABLED: 'true',
+    }), log);
+
+    await request(app)
+      .post('/api/internal/coda-discord')
+      .set('authorization', `Bearer ${bridgeSecret}`)
+      .send(bridgeRequest({ discordUserId: GUEST_DISCORD }))
+      .expect(200);
+
+    // An unlinked guest can be trusted by snowflake, and the requester id is
+    // the thing the selector matches on.
+    expect(log.some((entry) => entry.startsWith('pool-select') && entry.includes(`requester=${GUEST_DISCORD}`))).toBe(true);
+  });
+});
+
+describe('trusted-user management', () => {
+  it('adds, lists, and removes a trusted Discord id without touching the token', async () => {
+    const state = newPoolState();
+    state.credentials.set(OWNER, { model: 'xialong-v1', sealed: sealedFor('owner') });
+    const { addAllowedDiscordUser, listAllowedDiscordUsers, removeAllowedDiscordUser, readPoolParticipation } =
+      await import('../server/coda-shared-key-pool');
+    const pool = fakePool(state, []) as never;
+
+    expect((await listAllowedDiscordUsers(pool, OWNER)).allowed).toEqual([]);
+    await addAllowedDiscordUser(pool, OWNER, LINKED_DISCORD);
+    const listed = await listAllowedDiscordUsers(pool, OWNER);
+    expect(listed.allowed.map((entry) => entry.discordId)).toEqual([LINKED_DISCORD]);
+    expect(listed).not.toHaveProperty('token');
+
+    await removeAllowedDiscordUser(pool, OWNER, LINKED_DISCORD);
+    expect((await listAllowedDiscordUsers(pool, OWNER)).allowed).toEqual([]);
+    // The personal provider configuration is untouched throughout.
+    expect(state.credentials.has(OWNER)).toBe(true);
+    void readPoolParticipation;
+  });
+
+  it('reports participation as false while the trust list is empty', async () => {
+    const state = newPoolState();
+    state.credentials.set(OWNER, { model: 'xialong-v1', sealed: sealedFor('owner') });
+    const { addAllowedDiscordUser, readPoolParticipation, setPoolParticipation } =
+      await import('../server/coda-shared-key-pool');
+    const pool = fakePool(state, []) as never;
+
+    // Ticked on, but nobody trusted: still shares with nobody.
+    await setPoolParticipation(pool, OWNER, true);
+    expect((await readPoolParticipation(pool, OWNER)).participating).toBe(false);
+
+    await addAllowedDiscordUser(pool, OWNER, LINKED_DISCORD);
+    const ready = await readPoolParticipation(pool, OWNER);
+    expect(ready.participating).toBe(true);
+    expect(ready.allowedCount).toBe(1);
+  });
+
+  it('rejects a malformed Discord id rather than storing it', async () => {
+    const { createProviderSettingsRouter } = await import('../server/provider-settings');
+    const state = newPoolState();
+    state.credentials.set(OWNER, { model: 'xialong-v1', sealed: sealedFor('owner') });
+    const app = express();
+    app.use(express.json());
+    app.use((request, _response, next) => {
+      Object.defineProperty(request, 'session', { value: { userId: OWNER }, configurable: true });
+      next();
+    });
+    app.use('/api/provider-settings', createProviderSettingsRouter(buildConfig(), fakePool(state, [])));
+
+    await request(app).post('/api/provider-settings/novelai/shared-use/allowed').send({ discordId: 'not-an-id' }).expect(400);
+    await request(app).post('/api/provider-settings/novelai/shared-use/allowed').send({ discordId: '123' }).expect(400);
+    const { listAllowedDiscordUsers: list } = await import('../server/coda-shared-key-pool');
+    expect((await list(fakePool(state, []) as never, OWNER)).allowed).toEqual([]);
   });
 });
 
@@ -810,7 +992,7 @@ describe('stored credentials are never readable through Orbis', () => {
     state.members.push(member({ userId: OWNER }));
     const participation = await readPoolParticipation(fakePool(state, []) as never, OWNER);
     expect(JSON.stringify(participation)).not.toMatch(/token|cipher|Bearer/i);
-    expect(participation).toEqual({ participating: true, available: true });
+    expect(participation).toEqual({ participating: false, allowedCount: 0, available: true });
   });
 });
 

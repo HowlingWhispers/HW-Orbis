@@ -43,19 +43,71 @@ function backoffMinutes(baseMinutes: number, consecutiveFailures: number) {
 export async function readPoolParticipation(db: DatabasePool, userId: string) {
   try {
     const result = await db.query(
-      `SELECT owner_opt_in, enabled, revoked_at, entitled, last_failure_class, consecutive_failures
-         FROM coda_shared_key_members WHERE user_id = $1 AND provider = 'novelai'`,
+      `SELECT m.owner_opt_in, m.enabled, m.revoked_at, m.entitled, m.last_failure_class, m.consecutive_failures,
+              (SELECT count(*) FROM coda_shared_key_allowed_users a WHERE a.owner_user_id = m.user_id)::int AS allowed_count
+         FROM coda_shared_key_members m WHERE m.user_id = $1 AND m.provider = 'novelai'`,
       [userId],
     );
     const row = result.rows[0];
     return {
-      participating: Boolean(row?.owner_opt_in) && Boolean(row?.enabled) && !row?.revoked_at,
+      // Consent plus at least one named account. An owner who has not named
+      // anyone shares with nobody, even with the tick on.
+      participating: Boolean(row?.owner_opt_in) && Boolean(row?.enabled) && !row?.revoked_at && Number(row?.allowed_count ?? 0) > 0,
+      allowedCount: Number(row?.allowed_count ?? 0),
       available: true,
     };
   } catch (error) {
     // A rolling deploy without migration 024 must behave as "no pool", never as
     // an error on a Coda request.
-    if (migrationMissing(error)) return { participating: false, available: false };
+    if (migrationMissing(error)) return { participating: false, allowedCount: 0, available: false };
+    throw error;
+  }
+}
+
+/** The Discord accounts an owner has named as trusted. */
+export async function listAllowedDiscordUsers(db: DatabasePool, ownerUserId: string) {
+  try {
+    const result = await db.query(
+      `SELECT discord_user_id, created_at FROM coda_shared_key_allowed_users
+        WHERE owner_user_id = $1 ORDER BY created_at DESC`,
+      [ownerUserId],
+    );
+    return {
+      allowed: (result.rows as Array<Record<string, unknown>>).map((row) => ({
+        discordId: String(row.discord_user_id),
+        addedAt: String(row.created_at),
+      })),
+      available: true,
+    };
+  } catch (error) {
+    if (migrationMissing(error)) return { allowed: [], available: false };
+    throw error;
+  }
+}
+
+export async function addAllowedDiscordUser(db: DatabasePool, ownerUserId: string, discordUserId: string) {
+  try {
+    await db.query(
+      `INSERT INTO coda_shared_key_allowed_users (owner_user_id, discord_user_id) VALUES ($1, $2)
+       ON CONFLICT (owner_user_id, discord_user_id) DO NOTHING`,
+      [ownerUserId, discordUserId],
+    );
+    return { added: true };
+  } catch (error) {
+    if (migrationMissing(error)) return { added: false };
+    throw error;
+  }
+}
+
+export async function removeAllowedDiscordUser(db: DatabasePool, ownerUserId: string, discordUserId: string) {
+  try {
+    const result = await db.query(
+      `DELETE FROM coda_shared_key_allowed_users WHERE owner_user_id = $1 AND discord_user_id = $2`,
+      [ownerUserId, discordUserId],
+    );
+    return { removed: Boolean(result.rowCount) };
+  } catch (error) {
+    if (migrationMissing(error)) return { removed: false };
     throw error;
   }
 }
@@ -95,8 +147,9 @@ export async function selectPoolMembers(
   db: DatabasePool,
   model: string,
   policy: PoolPolicy,
-  excludeUserId?: string,
+  options: { excludeUserId?: string; requesterDiscordId?: string } = {},
 ): Promise<PoolMember[]> {
+  const { excludeUserId, requesterDiscordId } = options;
   try {
     const result = await db.query(
       `SELECT m.user_id::text AS user_id, p.model, p.token_ciphertext, p.token_iv, p.token_tag
@@ -113,9 +166,16 @@ export async function selectPoolMembers(
           -- for. Eligibility is never inferred from merely having a key.
           AND p.model = $1
           AND ($2::uuid IS NULL OR m.user_id <> $2::uuid)
+          -- Scoped consent: this owner has to have named the requester. Consent
+          -- is never a blanket yes, so an unlisted requester simply has no
+          -- eligible member and gets the friendly unavailable reply.
+          AND EXISTS (
+            SELECT 1 FROM coda_shared_key_allowed_users a
+             WHERE a.owner_user_id = m.user_id AND a.discord_user_id = $4::text
+          )
         ORDER BY m.last_used_at ASC NULLS FIRST, m.id ASC
         LIMIT $3`,
-      [model, excludeUserId ?? null, policy.maxAttempts],
+      [model, excludeUserId ?? null, policy.maxAttempts, requesterDiscordId ?? null],
     );
     return (result.rows as Array<Record<string, unknown>>).map((row) => ({
       userId: String(row.user_id),

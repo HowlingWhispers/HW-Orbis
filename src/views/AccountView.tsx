@@ -1,7 +1,7 @@
 import { CheckCircle2, Download, LogOut, ShieldAlert, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
-import { deleteNovelAiSettings, getNovelAiSettings, saveNovelAiSettings, setNovelAiSharedUse, type NovelAiSettings } from '../api/provider-settings';
+import { addAllowedDiscordUser, deleteNovelAiSettings, getAllowedDiscordUsers, getNovelAiSettings, removeAllowedDiscordUser, saveNovelAiSettings, setNovelAiSharedUse, type AllowedDiscordUser, type NovelAiSettings } from '../api/provider-settings';
 import { downloadAccountArchive, uploadArchive } from '../api/archive-transfer';
 import { UserAvatar } from '../components/UserAvatar';
 import { useI18n } from '../i18n/I18nContext';
@@ -26,6 +26,10 @@ export function AccountView() {
   // Absent means the server has not reported the flag yet, so the tick starts
   // off rather than flashing on before consent is actually known.
   const [sharedUseUnavailable, setSharedUseUnavailable] = useState(false);
+  const [trustedUsers, setTrustedUsers] = useState<AllowedDiscordUser[]>([]);
+  const [trustedIdDraft, setTrustedIdDraft] = useState('');
+  const [trustedSaving, setTrustedSaving] = useState(false);
+  const [trustedMessage, setTrustedMessage] = useState('');
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferMessage, setTransferMessage] = useState('');
   const archiveInput = useRef<HTMLInputElement>(null);
@@ -48,7 +52,44 @@ export function AccountView() {
         setSharedUseUnavailable(next.sharedUseAvailable === false);
       })
       .catch((error) => setProviderMessage(error instanceof Error ? error.message : 'Provider settings unavailable.'));
+    void getAllowedDiscordUsers()
+      .then((next) => { setTrustedUsers(next.allowed); if (next.available === false) setTrustedMessage(t('Trusted Discord users are not installed yet.')); })
+      .catch(() => setTrustedUsers([]));
   }, [user]);
+
+  const addTrustedUser = async () => {
+    const discordId = trustedIdDraft.trim();
+    if (!/^[0-9]{17,20}$/.test(discordId)) {
+      setTrustedMessage(t('Use an exact Discord user ID: 17 to 20 digits.'));
+      return;
+    }
+    setTrustedSaving(true);
+    setTrustedMessage('');
+    try {
+      const next = await addAllowedDiscordUser(discordId);
+      setTrustedUsers(next.allowed);
+      setTrustedIdDraft('');
+      setTrustedMessage(t('That account may now be answered by your connection.'));
+    } catch (error) {
+      setTrustedMessage(error instanceof Error ? error.message : 'Orbis could not save that account.');
+    } finally {
+      setTrustedSaving(false);
+    }
+  };
+
+  const dropTrustedUser = async (discordId: string) => {
+    setTrustedSaving(true);
+    setTrustedMessage('');
+    try {
+      const next = await removeAllowedDiscordUser(discordId);
+      setTrustedUsers(next.allowed);
+      setTrustedMessage(t('That account can no longer be answered by your connection.'));
+    } catch (error) {
+      setTrustedMessage(error instanceof Error ? error.message : 'Orbis could not remove that account.');
+    } finally {
+      setTrustedSaving(false);
+    }
+  };
 
   const toggleSharedUse = async (next: boolean) => {
     setSharedUseSaving(true);
@@ -141,6 +182,10 @@ export function AccountView() {
         </form>
 
         <div className="profile-form coda-shared-use">
+          <p className="coda-shared-use__warning" role="note">
+            <strong>{t('Please read this before ticking the box.')}</strong>{' '}
+            {t('While this is on, the people you list below will have Discord messages answered by your paid NovelAI subscription. That spends your own quota, and it happens on every request they make that Coda cannot answer themselves. They are never shown your key, and they are never told that yours was used. Add only Discord IDs you actually trust, and remove anyone at any time.')}
+          </p>
           <label className="coda-shared-use__label" htmlFor="novelai-shared-use">
             {t('Allow my NovelAI connection to help power Discord Coda')}
           </label>
@@ -156,9 +201,51 @@ export function AccountView() {
           </div>
           <small>
             {provider.configured
-              ? t('Off by default. When this is on, your encrypted NovelAI connection may answer Discord messages from members who have no usable key of their own. Your key is never shown to anyone, including you, and the person being answered is never told whose key was used. Turn it off whenever you like; your own connection keeps working exactly as before.')
-              : t('Save a NovelAI connection above first. This is always off by default and your token is never shared or displayed.')}
+              ? t('Off by default, and on its own it still shares with nobody. Your connection only answers the Discord accounts you add below.')
+              : t('Save a NovelAI connection above first. Your token is never shared or displayed, not even to you.')}
           </small>
+
+          <div className="coda-shared-use__trusted">
+            <span className="coda-shared-use__label">{t('Discord accounts you trust')}</span>
+            <form
+              className="coda-shared-use__add"
+              onSubmit={(event) => { event.preventDefault(); void addTrustedUser(); }}
+            >
+              <input
+                aria-label={t('Discord user ID')}
+                value={trustedIdDraft}
+                onChange={(event) => setTrustedIdDraft(event.target.value)}
+                placeholder="123456789012345678"
+                inputMode="numeric"
+                pattern="[0-9]{17,20}"
+                maxLength={20}
+                disabled={!provider.configured || trustedSaving}
+              />
+              <button className="button" type="submit" disabled={!provider.configured || trustedSaving || !/^[0-9]{17,20}$/.test(trustedIdDraft.trim())}>
+                {trustedSaving ? t('Adding...') : t('Trust this account')}
+              </button>
+            </form>
+            {trustedMessage && <p className="form-message" role="status">{trustedMessage}</p>}
+            {trustedUsers.length === 0
+              ? <small>{t('Nobody yet. With this list empty, your connection is never used for anyone else.')}</small>
+              : (
+                <ul className="coda-shared-use__list">
+                  {trustedUsers.map((entry) => (
+                    <li key={entry.discordId}>
+                      <code>{entry.discordId}</code>
+                      <button
+                        className="button button--ghost"
+                        type="button"
+                        disabled={trustedSaving}
+                        onClick={() => void dropTrustedUser(entry.discordId)}
+                      >
+                        {t('Remove')}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </div>
           {sharedUseMessage && <p className="form-message" role="status">{sharedUseMessage}</p>}
         </div>
 

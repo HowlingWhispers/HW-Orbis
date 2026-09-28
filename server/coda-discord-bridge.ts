@@ -359,7 +359,10 @@ export function createCodaDiscordBridgeRouter(config: AppConfig, pool: DatabaseP
 
       // 2. The shared pool, bounded to a few members and never fanned out.
       if (config.codaSharedPoolEnabled) {
-        const members = await selectPoolMembers(pool, codaDiscordWorkloadModel, poolPolicy, linked ? linkedUserId : undefined);
+        const members = await selectPoolMembers(pool, codaDiscordWorkloadModel, poolPolicy, {
+          excludeUserId: linkedUserId ?? undefined,
+          requesterDiscordId: discordUserId,
+        });
         for (const member of members) {
           const candidate: Candidate = {
             userId: member.userId,

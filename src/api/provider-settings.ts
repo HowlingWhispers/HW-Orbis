@@ -31,9 +31,39 @@ export async function deleteNovelAiSettings() {
   return readSettingsResponse(await fetch('/api/provider-settings/novelai', { method: 'DELETE', credentials: 'include' }));
 }
 
+export type AllowedDiscordUser = { discordId: string; addedAt: string };
+export type AllowedDiscordUsers = { allowed: AllowedDiscordUser[]; available?: boolean };
+
+async function readAllowedResponse(response: Response): Promise<AllowedDiscordUsers> {
+  const data = await response.json() as AllowedDiscordUsers & { error?: string };
+  if (!response.ok) throw new Error(data.error ?? 'Orbis could not read your trusted users.');
+  return data;
+}
+
+/** The Discord accounts this owner permits to be served by their credential. */
+export async function getAllowedDiscordUsers() {
+  return readAllowedResponse(await fetch('/api/provider-settings/novelai/shared-use/allowed', {
+    credentials: 'include', headers: { Accept: 'application/json' },
+  }));
+}
+
+export async function addAllowedDiscordUser(discordId: string) {
+  return readAllowedResponse(await fetch('/api/provider-settings/novelai/shared-use/allowed', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ discordId }),
+  }));
+}
+
+export async function removeAllowedDiscordUser(discordId: string) {
+  return readAllowedResponse(await fetch(`/api/provider-settings/novelai/shared-use/allowed/${encodeURIComponent(discordId)}`, {
+    method: 'DELETE', credentials: 'include', headers: { Accept: 'application/json' },
+  }));
+}
+
 /**
- * Explicit consent to let this connection serve Discord Coda for other people.
- * Off by default and revocable at any time, which never removes the token.
+ * Master consent for the shared pool. The tick alone shares with nobody: a
+ * credential only serves the accounts named in the trusted-user list above.
  */
 export async function setNovelAiSharedUse(enabled: boolean) {
   const response = await fetch('/api/provider-settings/novelai/shared-use', {
