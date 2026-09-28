@@ -1,10 +1,10 @@
 -- Per-owner allow list for the Discord Coda shared-provider pool.
 --
 -- Consent here is deliberately narrow. A blanket opt-in means "any Discord
--- member may spend my allowance", which is a much larger thing to agree to
--- than naming the people you trust. This table records exactly that: the owner
--- of a pooled credential names the Discord accounts whose requests it may
--- answer.
+-- member may generate from my connection", which is a much larger thing to
+-- agree to than naming the people you trust. This table records exactly that:
+-- the owner of a pooled credential names the Discord accounts whose requests it
+-- may answer.
 --
 -- Stores Discord snowflakes only. No credential material, and no Orbis account
 -- data beyond the owner's own user id, which already owns the row.

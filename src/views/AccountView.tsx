@@ -184,7 +184,7 @@ export function AccountView() {
         <div className="profile-form coda-shared-use">
           <p className="coda-shared-use__warning" role="note">
             <strong>{t('Please read this before ticking the box.')}</strong>{' '}
-            {t('While this is on, the people you list below will have Discord messages answered by your paid NovelAI subscription. That spends your own quota, and it happens on every request they make that Coda cannot answer themselves. They are never shown your key, and they are never told that yours was used. Add only Discord IDs you actually trust, and remove anyone at any time.')}
+            {t('While this is on, the people you list below will have their Discord messages answered using your NovelAI connection. Your plan has unlimited text, so this does not cost you anything, but the requests are made from your account — which means your account is what absorbs any rate limiting or provider block. They are never shown your key, and they are never told that yours was used. Add only Discord IDs you actually trust, and remove anyone at any time.')}
           </p>
           <label className="coda-shared-use__label" htmlFor="novelai-shared-use">
             {t('Allow my NovelAI connection to help power Discord Coda')}

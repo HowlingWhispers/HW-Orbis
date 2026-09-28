@@ -114,9 +114,9 @@ export function createProviderSettingsRouter(config: AppConfig, pool: DatabasePo
    * The Discord accounts this owner trusts with their credential.
    *
    * Consent is scoped to named people rather than granted wholesale, so this is
-   * the control that actually decides who the owner's allowance may serve. It
-   * accepts any Discord snowflake, including an account that has never linked
-   * an Orbis user, because the person being helped may be a guest.
+   * the control that actually decides whose requests the owner's connection may
+   * answer. It accepts any Discord snowflake, including an account that has
+   * never linked an Orbis user, because the person being helped may be a guest.
    */
   router.get('/novelai/shared-use/allowed', async (request, response, next) => {
     try {
