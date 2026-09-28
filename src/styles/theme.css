@@ -170,6 +170,60 @@ body::after {
   border-color: rgba(151, 103, 55, .35);
 }
 
+/* Tab strips and admin surfaces.
+   These are authored with dark values inside their own stylesheets, so light
+   mode needs an explicit pass. Without it a tab strip renders as a dark band
+   inside a white panel, which is the most visible kind of leak because the
+   strip sits directly under the identity header. */
+:root[data-theme='light'] .account-tab,
+:root[data-theme='light'] .coda-subtabs button,
+:root[data-theme='light'] .coda-member-results button,
+:root[data-theme='light'] .admin-tabs {
+  background: rgba(255, 252, 247, .72);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+:root[data-theme='light'] .account-tab.is-active,
+:root[data-theme='light'] .coda-subtabs button.is-active,
+:root[data-theme='light'] .coda-subtabs button:hover,
+:root[data-theme='light'] .admin-tabs button.is-active {
+  background: rgba(174, 127, 76, .14);
+  border-color: rgba(151, 103, 55, .35);
+  color: var(--amber-bright);
+}
+
+:root[data-theme='light'] .admin-tabs button:hover {
+  background: rgba(84, 61, 38, .05);
+  color: var(--text);
+}
+
+/* Panel and card surfaces that were never given a light counterpart. */
+:root[data-theme='light'] .admin-section {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+:root[data-theme='light'] .status-card,
+:root[data-theme='light'] .capability-card,
+:root[data-theme='light'] .audit-list > div,
+:root[data-theme='light'] .coda-status-grid article,
+:root[data-theme='light'] .coda-template-list article,
+:root[data-theme='light'] .coda-scheduled-list article,
+:root[data-theme='light'] .coda-message-history article,
+:root[data-theme='light'] .coda-console__preview {
+  background: rgba(255, 252, 247, .72);
+  border-color: var(--line);
+}
+
+/* The trust-list rows sit inside the account panel and carry their own dark
+   surface, so they need the same pass as the panels above. */
+:root[data-theme='light'] .coda-shared-use__list li,
+:root[data-theme='light'] .coda-shared-use__add input {
+  background: rgba(255, 252, 247, .72);
+  border-color: var(--line);
+}
+
 .theme-setting__options {
   display: grid !important;
   grid-template-columns: repeat(3, minmax(0, 1fr));
