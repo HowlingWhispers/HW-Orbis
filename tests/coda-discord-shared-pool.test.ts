@@ -774,6 +774,46 @@ describe('rate-limit store durability', () => {
   });
 });
 
+describe('stored credentials are never readable through Orbis', () => {
+  it('never returns key material from the provider settings endpoints, not even to the owner', async () => {
+    const { createProviderSettingsRouter } = await import('../server/provider-settings');
+    const state = newPoolState();
+    state.users.push({ id: OWNER, discordId: LINKED_DISCORD, displayName: 'Owner' });
+    const secretToken = `${'t'.repeat(40)}`;
+    state.credentials.set(OWNER, { model: 'xialong-v1', sealed: sealCredential(secretToken, credentialKey(encryptionKey)) });
+
+    const app = express();
+    app.use(express.json());
+    app.use((request, _response, next) => {
+      Object.defineProperty(request, 'session', { value: { userId: OWNER }, configurable: true });
+      next();
+    });
+    app.use('/api/provider-settings', createProviderSettingsRouter(buildConfig(), fakePool(state, [])));
+
+    const current = await request(app).get('/api/provider-settings/novelai').expect(200);
+    const shared = await request(app).put('/api/provider-settings/novelai/shared-use').send({ enabled: true }).expect(200);
+    const serialized = JSON.stringify(current.body) + JSON.stringify(shared.body);
+
+    // The strongest guarantee available: the stored token is not retrievable by
+    // anyone through the API, its owner included. There is no read-back path.
+    expect(serialized).not.toContain(secretToken);
+    expect(serialized).not.toMatch(/token|ciphertext|Bearer|decrypted/i);
+    // Presence and participation are still reported, so the UI can work.
+    expect(current.body.configured).toBe(true);
+    expect(current.body.model).toBe('xialong-v1');
+  });
+
+  it('exposes no key material on the pool membership surface', async () => {
+    const { readPoolParticipation } = await import('../server/coda-shared-key-pool');
+    const state = newPoolState();
+    state.credentials.set(OWNER, { model: 'xialong-v1', sealed: sealedFor('owner') });
+    state.members.push(member({ userId: OWNER }));
+    const participation = await readPoolParticipation(fakePool(state, []) as never, OWNER);
+    expect(JSON.stringify(participation)).not.toMatch(/token|cipher|Bearer/i);
+    expect(participation).toEqual({ participating: true, available: true });
+  });
+});
+
 describe('ordinary Orbis inference keeps requiring the member’s own key', () => {
   it('never reaches the shared pool from the in-Orbis assistant', async () => {
     const { readFileSync } = await import('node:fs');
