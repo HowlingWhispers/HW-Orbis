@@ -1,4 +1,4 @@
-import { LogIn, Menu, Search, Settings, SlidersHorizontal, X, MessageSquare, Sparkles, ScrollText } from 'lucide-react';
+import { Archive, LogIn, Menu, Search, Settings, SlidersHorizontal, X, MessageSquare, Sparkles, ScrollText } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { libraryNavigation } from '../app/library-nav';
@@ -94,7 +94,10 @@ export function AppShell() {
            </a>
            <div className="api-lamp"><span /> <small>{t('Development archive')}</small></div>
             <NavLink className="sidebar__settings" to="/changelog"><ScrollText size={17} /> {t('Changelog')}</NavLink>
-            {user?.permissions.canAdmin && <NavLink className="sidebar__settings" to="/admin"><SlidersHorizontal size={17} /> {t('Administration')}</NavLink>}
+            {user?.permissions.canAdmin && <>
+              <NavLink className="sidebar__settings" to="/admin"><SlidersHorizontal size={17} /> {t('Administration')}</NavLink>
+              <NavLink className="sidebar__settings" to="/admin/big-brother"><Archive size={17} /> Big Brother</NavLink>
+            </>}
            <NavLink className="sidebar__settings" to="/account"><Settings size={17} /> {t('Account')}</NavLink>
          </div>
       </aside>
