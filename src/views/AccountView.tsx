@@ -69,7 +69,7 @@ export function AccountView() {
       const next = await addAllowedDiscordUser(discordId);
       setTrustedUsers(next.allowed);
       setTrustedIdDraft('');
-      setTrustedMessage(t('That account may now be answered by your connection.'));
+      setTrustedMessage(t('🐾 Got it. I can answer them now, and only them.'));
     } catch (error) {
       setTrustedMessage(error instanceof Error ? error.message : 'Orbis could not save that account.');
     } finally {
@@ -83,7 +83,7 @@ export function AccountView() {
     try {
       const next = await removeAllowedDiscordUser(discordId);
       setTrustedUsers(next.allowed);
-      setTrustedMessage(t('That account can no longer be answered by your connection.'));
+      setTrustedMessage(t('Dropped. I will not answer them on your connection again.'));
     } catch (error) {
       setTrustedMessage(error instanceof Error ? error.message : 'Orbis could not remove that account.');
     } finally {
@@ -100,7 +100,7 @@ export function AccountView() {
     try {
       const result = await setNovelAiSharedUse(next);
       setSharedUse(result.sharedUse);
-      setSharedUseMessage(result.sharedUse ? t('Coda may now use this connection for members without a key.') : t('Coda will no longer use this connection for anyone else.'));
+      setSharedUseMessage(result.sharedUse ? t('🐾 Got it. I can answer the accounts on your list now, and nobody else.') : t('Done. I will not use your connection for anyone else. Your own replies are exactly as they were.'));
     } catch (error) {
       setSharedUse(!next);
       setSharedUseMessage(error instanceof Error ? error.message : 'Orbis could not save that choice.');
@@ -183,11 +183,11 @@ export function AccountView() {
 
         <div className="profile-form coda-shared-use">
           <p className="coda-shared-use__warning" role="note">
-            <strong>{t('Please read this before ticking the box.')}</strong>{' '}
-            {t('While this is on, the people you list below will have their Discord messages answered using your NovelAI connection. Your plan has unlimited text, so this does not cost you anything, but the requests are made from your account — which means your account is what absorbs any rate limiting or provider block. They are never shown your key, and they are never told that yours was used. Add only Discord IDs you actually trust, and remove anyone at any time.')}
+            <strong>{t('🐾 Before you tick this, I would rather say it plainly.')}</strong>{' '}
+            {t('The people you list below will have their Discord messages answered through your NovelAI connection. Your plan has unlimited text, so this costs you nothing — but the requests come from your account, which means your account is what eats the rate limiting if I get busy. They never see your key, and I never tell them whose it was. Only add people you actually trust, and you can drop any of them again whenever you like.')}
           </p>
           <label className="coda-shared-use__label" htmlFor="novelai-shared-use">
-            {t('Allow my NovelAI connection to help power Discord Coda')}
+            {t('Allow me to answer Discord messages using your NovelAI connection')}
           </label>
           <div className="coda-shared-use__row">
             <input
@@ -201,12 +201,12 @@ export function AccountView() {
           </div>
           <small>
             {provider.configured
-              ? t('Off by default, and on its own it still shares with nobody. Your connection only answers the Discord accounts you add below.')
-              : t('Save a NovelAI connection above first. Your token is never shared or displayed, not even to you.')}
+              ? t('I am off by default, and even ticked on I answer nobody until you name someone below. Your connection only ever speaks for the accounts you have added.')
+              : t('Save a NovelAI connection up top first, then I can be switched on. I never show your token to anyone, not even to you.')}
           </small>
 
           <div className="coda-shared-use__trusted">
-            <span className="coda-shared-use__label">{t('Discord accounts you trust')}</span>
+            <span className="coda-shared-use__label">{t('Discord accounts I am allowed to answer')}</span>
             <form
               className="coda-shared-use__add"
               onSubmit={(event) => { event.preventDefault(); void addTrustedUser(); }}
@@ -227,7 +227,7 @@ export function AccountView() {
             </form>
             {trustedMessage && <p className="form-message" role="status">{trustedMessage}</p>}
             {trustedUsers.length === 0
-              ? <small>{t('Nobody yet. With this list empty, your connection is never used for anyone else.')}</small>
+              ? <small>{t('Nobody yet! While this list is empty I will not use your connection for a single soul.')}</small>
               : (
                 <ul className="coda-shared-use__list">
                   {trustedUsers.map((entry) => (
