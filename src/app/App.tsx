@@ -4,6 +4,7 @@ import { AccountView } from '../views/AccountView';
 import { AdminView } from '../views/AdminView';
 import { AssetDetailView } from '../views/AssetDetailView';
 import { AssetEditorView } from '../views/AssetEditorView';
+import { BigBrotherView } from '../views/BigBrotherView';
 import { CodaWorkspaceView } from '../views/CodaWorkspaceView';
 import { ChangelogView } from '../views/ChangelogView';
 import { CollectionView } from '../views/CollectionView';
@@ -33,6 +34,7 @@ export function App() {
         <Route path="account" element={<AccountView />} />
         <Route path="verification" element={<VerificationView />} />
         <Route path="admin" element={<AdminView />} />
+        <Route path="admin/big-brother" element={<BigBrotherView />} />
         <Route path="library" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFoundView />} />
       </Route>
