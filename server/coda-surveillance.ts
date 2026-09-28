@@ -106,10 +106,13 @@ async function recordEdit(pool: DatabasePool, body: SurveillanceEvent) {
       [body.messageId],
     );
     if (current.rowCount) {
+      const previous = current.rows[0] as { content?: string; attachments?: unknown };
+      // An edit revision stores the version that was replaced. That makes the
+      // history useful without pretending the new text was the old revision.
       await client.query(
         `INSERT INTO coda_surveillance_revisions (discord_message_id, event_type, content, attachments)
          VALUES ($1, 'edit', $2, $3::jsonb)`,
-        [body.messageId, body.content, JSON.stringify(body.attachments)],
+        [body.messageId, previous.content ?? '', JSON.stringify(previous.attachments ?? [])],
       );
       await client.query(
         `UPDATE coda_surveillance_messages
@@ -138,10 +141,12 @@ async function recordEdit(pool: DatabasePool, body: SurveillanceEvent) {
           body.createdAt ?? new Date().toISOString(), body.editedAt ?? null,
         ],
       );
+      // We never saw the pre-edit text, so record only that an edited message
+      // entered the archive; do not fabricate an earlier version.
       await client.query(
         `INSERT INTO coda_surveillance_revisions (discord_message_id, event_type, content, attachments)
-         VALUES ($1, 'edit', $2, $3::jsonb)`,
-        [body.messageId, body.content, JSON.stringify(body.attachments)],
+         VALUES ($1, 'edit', '', '[]'::jsonb)`,
+        [body.messageId],
       );
     }
     // Exact-message memories are invalid once their quoted source changes.
@@ -160,15 +165,19 @@ async function recordDelete(pool: DatabasePool, body: SurveillanceEvent) {
   try {
     await client.query('BEGIN');
     const current = await client.query(
-      `SELECT content, attachments FROM coda_surveillance_messages WHERE discord_message_id = $1 FOR UPDATE`,
+      `SELECT 1 FROM coda_surveillance_messages WHERE discord_message_id = $1 FOR UPDATE`,
       [body.messageId],
     );
-    const previous = current.rows[0] as { content?: string; attachments?: unknown } | undefined;
+
+    // Discord deletion means deletion here too. Remove every stored revision so
+    // deleted text cannot still be recovered from the admin history table.
+    await client.query(`DELETE FROM coda_surveillance_revisions WHERE discord_message_id = $1`, [body.messageId]);
     await client.query(
       `INSERT INTO coda_surveillance_revisions (discord_message_id, event_type, content, attachments)
-       VALUES ($1, 'delete', $2, $3::jsonb)`,
-      [body.messageId, previous?.content ?? '', JSON.stringify(previous?.attachments ?? [])],
+       VALUES ($1, 'delete', '', '[]'::jsonb)`,
+      [body.messageId],
     );
+
     if (current.rowCount) {
       await client.query(
         `UPDATE coda_surveillance_messages
