@@ -21,6 +21,11 @@ rendered to users. The user-facing changelog is curated separately in
 
 ---
 
+## 2026-09-28 — Persona deletion
+
+- Persona record pages now offer Delete Persona with confirmation, pending state, visible errors and return to the Persona library after success.
+- Reuse the existing server-authorized asset deletion endpoint; no schema migration is required.
+
 ## 2026-09-28 — Changelog system: permanent page plus account-backed notice
 
 **Problem.** Release notes lived only in a one-off milestone document written

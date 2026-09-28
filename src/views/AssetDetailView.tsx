@@ -123,6 +123,20 @@ export function AssetDetailView() {
     }
   };
 
+  const deletePersona = async () => {
+    if (!canEdit || asset.type !== 'persona' || deleting) return;
+    if (!window.confirm(`Permanently delete Persona "${asset.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await libraryApi.deleteAsset(asset.id);
+      navigate('/library/persona', { replace: true });
+    } catch (reason) {
+      setDeleteError(reason instanceof Error ? reason.message : 'Orbis could not delete this Persona.');
+      setDeleting(false);
+    }
+  };
+
   const deleteWorld = async () => {
     if (!canEdit || asset.type !== 'world' || deleting || !deleteImpact) return;
     const expected = `DELETE ${asset.name}`;
@@ -219,6 +233,7 @@ export function AssetDetailView() {
             {asset.type === 'world' && <Link className="button button--secondary" to={`/asset/${asset.id}/saves`}><Archive size={16} /> Save Archive</Link>}
             {canEdit && <button className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : asset.type === 'world' ? 'Download world' : 'Download SPC'}</button>}
             {canTransfer && <button className="button button--secondary" type="button" disabled={transferring} onClick={openTransfer}><ArrowRightLeft size={16} /> Transfer to user</button>}
+            {canEdit && asset.type === 'persona' && <button className="button button--danger" disabled={deleting} onClick={() => void deletePersona()}><Trash2 size={16} /> {deleting ? 'Deleting...' : 'Delete Persona'}</button>}
             {canEdit && asset.type === 'world' && <button className="button button--danger" disabled={deleting} onClick={() => void reviewDeleteWorld()}><Trash2 size={16} /> {deleting ? 'Checking...' : 'Delete World'}</button>}
           </div>
           {launchError && <p className="form-message" role="alert">{launchError} {launchError.includes('Account settings') && <Link to="/account">Open Account</Link>}</p>}
