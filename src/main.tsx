@@ -18,7 +18,6 @@ import './styles/project-pages.css';
 import './styles/sidebar-scroll.css';
 import './styles/world-forge.css';
 import './styles/world-create.css';
-import './styles/theme.css';
 import './styles/record-detail.css';
 import './styles/collection-actions.css';
 import './styles/destructive.css';
@@ -27,6 +26,12 @@ import './styles/coda-file-editor.css';
 import './styles/coda-workspace.css';
 import './styles/coda-admin.css';
 import './styles/changelog.css';
+// Last on purpose. This file carries the light-mode overrides, and the sheets
+// above contain rules such as `.coda-assistant textarea` that tie with the
+// generic `:root[data-theme='light'] textarea` rule on specificity. Equal
+// specificity is settled by order, so loading the overrides before those sheets
+// silently left dark inputs standing in light mode.
+import './styles/theme.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

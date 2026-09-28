@@ -224,6 +224,104 @@ body::after {
   border-color: var(--line);
 }
 
+/* Remaining authored-dark surfaces.
+   Grouped by role rather than by source file, because the same surface appears
+   in several of them and one rule per group is easier to keep correct than one
+   per declaration. Overlays are deliberately absent: the What's New backdrop,
+   the sidebar scrim, the asset-card scrim and its type/pin pills sit on top of
+   artwork or dim the page, and stay dark in both themes on purpose. */
+:root[data-theme='light'] .collection-header,
+:root[data-theme='light'] .collection-search,
+:root[data-theme='light'] .select-control,
+:root[data-theme='light'] .quiet-note,
+:root[data-theme='light'] .verification-steps > div,
+:root[data-theme='light'] .structured-group,
+:root[data-theme='light'] .structured-repeater__item,
+:root[data-theme='light'] .document-cards > .document-content,
+:root[data-theme='light'] .admin-header,
+:root[data-theme='light'] .editor-header,
+:root[data-theme='light'] .icon-button {
+  background: rgba(255, 252, 247, .72);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+/* Coda surfaces: launcher, assistant, workspace, file assistant, console. */
+:root[data-theme='light'] .coda-launcher,
+:root[data-theme='light'] .coda-assistant,
+:root[data-theme='light'] .coda-file-assistant,
+:root[data-theme='light'] .coda-workspace-hero,
+:root[data-theme='light'] .coda-workspace-panel,
+:root[data-theme='light'] .coda-workbench,
+:root[data-theme='light'] .coda-workspace-proposal,
+:root[data-theme='light'] .coda-proposal,
+:root[data-theme='light'] .coda-world-search,
+:root[data-theme='light'] .coda-workbench-composer,
+:root[data-theme='light'] .coda-console__preview,
+:root[data-theme='light'] .coda-template-list article > div button {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+/* The avatar marks are small filled discs, so they need a light fill rather
+   than the dark one they use on the dark surfaces above. */
+:root[data-theme='light'] .coda-assistant__mark,
+:root[data-theme='light'] .coda-workspace-hero__mark {
+  background: rgba(174, 127, 76, .16);
+  color: var(--amber-bright);
+}
+
+/* Project and record surfaces. */
+:root[data-theme='light'] .project-hero,
+:root[data-theme='light'] .project-eta,
+:root[data-theme='light'] .project-phase,
+:root[data-theme='light'] .project-later,
+:root[data-theme='light'] .project-release-panel,
+:root[data-theme='light'] .project-feature-grid > div,
+:root[data-theme='light'] .project-update-columns > div,
+:root[data-theme='light'] .project-countdown__unit,
+:root[data-theme='light'] .project-development-update,
+:root[data-theme='light'] .document-content > .document-section,
+:root[data-theme='light'] .document-record-card,
+:root[data-theme='light'] .document-list li,
+:root[data-theme='light'] .world-json-import {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+/* Hover and selected states need their own pass, otherwise the dark hover
+   colour still shows against the now-light card. */
+:root[data-theme='light'] .project-eta:hover,
+:root[data-theme='light'] .project-eta:focus-visible,
+:root[data-theme='light'] .icon-button:hover {
+  background: rgba(174, 127, 76, .12);
+  border-color: rgba(151, 103, 55, .35);
+  color: var(--text);
+}
+
+/* Preformatted blocks keep a filled tone distinct from their surroundings, so
+   code still reads as code, but a light one rather than the near-black of the
+   dark theme. The border does the rest of the separation. */
+:root[data-theme='light'] .coda-field-preview pre,
+:root[data-theme='light'] .coda-workspace-patch pre,
+:root[data-theme='light'] .coda-workspace-proposal pre,
+:root[data-theme='light'] .world-delete-review__backup,
+:root[data-theme='light'] .asset-images__gallery li {
+  background: #ece3d5;
+  border-color: var(--line);
+  color: var(--text);
+}
+
+/* The destructive review is a warning, so it keeps its red identity but on a
+   light fill. */
+:root[data-theme='light'] .world-delete-review {
+  background: rgba(140, 52, 52, .08);
+  border-color: rgba(140, 52, 52, .28);
+  color: var(--text);
+}
+
 .theme-setting__options {
   display: grid !important;
   grid-template-columns: repeat(3, minmax(0, 1fr));
