@@ -9,6 +9,7 @@ import { findNavigationItem } from '../app/library-nav';
 import { AssetImageGallery } from '../components/AssetImageGallery';
 import { PersonaPicker } from '../components/PersonaPicker';
 import { ErrorState, LoadingState } from '../components/StatePanel';
+import { WorldPortal } from '../components/WorldPortal';
 import { useLibraryData } from '../hooks/useLibraryData';
 import { useSEO } from '../hooks/useSEO';
 import { assetImageUrl, coverAltText, coverObjectPosition } from '../lib/asset-images';
@@ -309,12 +310,16 @@ export function AssetDetailView() {
       <AssetImageGallery images={asset.images ?? []} />
       <div className="detail-layout">
         <section className="record-panel">
-          <div className="record-panel__heading">
-            <span className="eyebrow">Archive record</span>
-            <h2>Authored details</h2>
-            <p>Canon, relationships and structured notes held by Orbis. Internal source keys stay protected.</p>
-          </div>
-          <DocumentContent document={asset.document} />
+          {asset.type === 'world'
+            ? <WorldPortal document={asset.document} worldName={asset.name} summary={asset.summary} />
+            : <>
+              <div className="record-panel__heading">
+                <span className="eyebrow">Archive record</span>
+                <h2>Authored details</h2>
+                <p>Canon, relationships and structured notes held by Orbis. Internal source keys stay protected.</p>
+              </div>
+              <DocumentContent document={asset.document} />
+            </>}
         </section>
         <aside className="metadata-panel">
           <h2>Record details</h2>
