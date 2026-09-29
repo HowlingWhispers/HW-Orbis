@@ -1,5 +1,6 @@
 import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput, SimulationPersona, SimulationPlace, WorldChildCreate, WorldChildren, WorldChildUpdate } from './contracts';
 import { LibraryApiError } from './contracts';
+import { consumeSimulationLaunchSetup } from './simulation-launch-setup';
 import type { AssetImage, AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
 
 export class HttpLibraryApi implements LibraryApi {
@@ -138,9 +139,18 @@ export class HttpLibraryApi implements LibraryApi {
   }
 
   async simulateAsset(id: string, personaId: string, startingPlaceId?: string) {
+    const setup = consumeSimulationLaunchSetup();
     const response = await fetch(`${this.baseUrl}/v1/library/assets/${encodeURIComponent(id)}/simulate`, {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ personaId, ...(startingPlaceId ? { startingPlaceId } : {}) }),
+      body: JSON.stringify({
+        personaId,
+        ...(startingPlaceId ? { startingPlaceId } : {}),
+        ...(setup ? {
+          tone: setup.tone,
+          focusTags: setup.focusTags,
+          direction: setup.direction,
+        } : {}),
+      }),
     });
     const data = await response.json() as { launchUrl?: string; expiresAt?: number; error?: string; settingsPath?: string };
     if (!response.ok || !data.launchUrl || !data.expiresAt) throw new LibraryApiError(data.error ?? `Simulation launch failed with status ${response.status}.`, response.status);
