@@ -85,11 +85,13 @@
 }
 
 .world-delete-review__confirm strong { color: #ffc9c9; }
+.world-delete-review__confirm small { color: var(--faint); line-height: 1.45; }
 
-.world-delete-review__confirm input {
+.world-delete-review__confirm input,
+.world-delete-review__confirm select,
+.world-delete-review__confirm textarea {
   width: 100%;
   min-height: 42px;
-  padding: 0 11px;
   border: 1px solid rgba(224, 108, 108, .35);
   border-radius: 8px;
   outline: none;
@@ -98,7 +100,15 @@
   font: 13px 'Nunito Sans', system-ui, sans-serif;
 }
 
-.world-delete-review__confirm input:focus {
+.world-delete-review__confirm input,
+.world-delete-review__confirm select { padding: 0 11px; }
+.world-delete-review__confirm textarea { min-height: 96px; padding: 10px 11px; resize: vertical; line-height: 1.5; }
+.world-delete-review__confirm select { cursor: pointer; }
+.world-delete-review__confirm option { background: var(--bg-deep); color: var(--text); }
+
+.world-delete-review__confirm input:focus,
+.world-delete-review__confirm select:focus,
+.world-delete-review__confirm textarea:focus {
   border-color: rgba(246, 143, 143, .75);
   box-shadow: 0 0 0 3px rgba(224, 108, 108, .08);
 }
