@@ -39,4 +39,10 @@ describe('Persona deletion', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Traveler' })).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Delete Persona' })).toBeNull();
   });
+  it('does not offer Speculus launch from a Persona record', async () => {
+    open();
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Traveler' })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Simulate' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Simulate from here' })).toBeNull();
+  });
 });
