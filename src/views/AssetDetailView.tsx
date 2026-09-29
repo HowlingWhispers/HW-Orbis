@@ -299,7 +299,7 @@ export function AssetDetailView() {
               <button type="button" className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : 'Download world backup'}</button>
             </div>
             <label className="world-delete-review__confirm">
-              <span>Type <strong>DELETE ${asset.name}</strong> to confirm.</span>
+              <span>Type <strong>DELETE {asset.name}</strong> to confirm.</span>
               <input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
             </label>
             <button type="button" className="button button--danger" disabled={deleting || deleteConfirmation !== `DELETE ${asset.name}`} onClick={() => void deleteWorld()}><Trash2 size={16} /> {deleting ? 'Deleting permanently...' : 'Permanently delete world'}</button>
