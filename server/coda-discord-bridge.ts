@@ -110,6 +110,17 @@ export function sanitizeDiscordCodaReply(raw: string) {
   return text.trim();
 }
 
+/**
+ * Provider completions sometimes echo the cue that ended our prompt. That cue
+ * is only a leading speaker label, not leaked scaffold, so remove it before the
+ * stricter Discord sanitizer runs. A CODA REPLY marker anywhere later in the
+ * completion is still treated as a prompt leak and truncated normally.
+ */
+export function sanitizeDiscordCodaProviderReply(raw: string) {
+  const withoutLeadingCue = raw.replace(/^\s*(?:\*\*)?CODA REPLY(?:\*\*)?\s*:\s*/i, '');
+  return sanitizeDiscordCodaReply(withoutLeadingCue);
+}
+
 function bridgeAuthorized(config: AppConfig, authorization: string | undefined) {
   if (!config.CODA_INTERNAL_BRIDGE_SECRET) return false;
   return authorization === `Bearer ${config.CODA_INTERNAL_BRIDGE_SECRET}`;
@@ -314,12 +325,12 @@ export function createCodaDiscordBridgeRouter(config: AppConfig, pool: DatabaseP
         attempted = true;
         const outcome = await callNovelAi(config, candidate.credential, candidate.model, prompt);
         if (outcome.ok) {
-          const reply = sanitizeDiscordCodaReply(outcome.text);
+          const reply = sanitizeDiscordCodaProviderReply(outcome.text);
           if (reply) {
             candidate.reply = reply;
             return { kind: 'success', reply };
           }
-          const empty: FailureOutcome = { kind: 'failure', failure: { status: 200, failureClass: 'unknown_upstream', reason: 'empty completion' } };
+          const empty: FailureOutcome = { kind: 'failure', failure: { status: 200, failureClass: 'unknown_upstream', reason: 'sanitizer removed completion' } };
           lastOutcome = empty;
           return empty;
         }
