@@ -14,6 +14,9 @@ const document = {
   places: [
     { name: 'Hollowmere', kind: 'settlement', description: 'A market settlement with roads into the surrounding wilds.' },
     { name: 'Whispering Woods', kind: 'region', description: 'A misted forest threaded with old paths.' },
+    { name: 'Splitpine Reach', kind: 'region', description: 'Rough country beyond the settled road.' },
+    { name: 'Ranger Station', kind: 'outpost', description: 'A remote station watching the surrounding country.' },
+    { name: 'Brackenjaw Enclave', kind: 'settlement', description: 'An established enclave in the wider world.' },
   ],
   species: [
     { name: 'Foxfolk', description: 'Anthropomorphic fox peoples.' },
@@ -46,6 +49,6 @@ describe('world portal', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search Places' }), { target: { value: 'whisper' } });
     expect(screen.queryByText('Hollowmere')).not.toBeInTheDocument();
     expect(screen.getByText('Whispering Woods')).toBeVisible();
-    expect(screen.getByText('1/2')).toBeVisible();
+    expect(screen.getByText('1/5')).toBeVisible();
   });
 });
