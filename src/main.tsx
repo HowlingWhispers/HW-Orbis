@@ -19,6 +19,7 @@ import './styles/sidebar-scroll.css';
 import './styles/world-forge.css';
 import './styles/world-create.css';
 import './styles/record-detail.css';
+import './styles/world-portal.css';
 import './styles/collection-actions.css';
 import './styles/destructive.css';
 import './styles/coda-assistant.css';
