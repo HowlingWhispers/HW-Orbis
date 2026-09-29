@@ -10,6 +10,7 @@ import { apiNotFound } from './api-not-found.js';
 import { createAuthRouter } from './auth.js';
 import { createCodaAssistantRouter } from './coda-assistant.js';
 import { createCodaDiscordBridgeRouter } from './coda-discord-bridge.js';
+import { createCodaDiscordImageRouter } from './coda-discord-image.js';
 import { createCodaSurveillanceAdminRouter, createCodaSurveillanceIngestRouter } from './coda-surveillance.js';
 import { createChangelogRouter } from './changelog.js';
 import { processDueCodaScheduledMessages } from './coda-discord.js';
@@ -64,6 +65,9 @@ app.use('/api/v1/generation', createSpeculusGenerationRouter(config, pool));
 // Machine-to-machine bridge used by Coda Core's Discord slash command. It has its
 // own bearer secret and must be mounted before the browser Origin check below.
 app.use('/api/internal/coda-discord', createCodaDiscordBridgeRouter(config, pool));
+// Coda image generation uses the requester's own encrypted NovelAI credential.
+// The route is Coda-only by design and never exposes a general image proxy.
+app.use('/api/internal/coda-discord-image', createCodaDiscordImageRouter(config, pool));
 // Big Brother ingest is machine-to-machine too. It reuses the same protected
 // bridge secret and is deliberately unavailable to browsers or normal members.
 app.use('/api/internal/coda-surveillance', createCodaSurveillanceIngestRouter(config, pool));
