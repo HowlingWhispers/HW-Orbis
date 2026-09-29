@@ -11,7 +11,12 @@ import { generationErrors, providerErrorCode, rejectedParameter, safeFinishReaso
 import { bitterrootDirectTravelFromHollowmere } from './bitterroot-travel-canon.js';
 
 const launchableTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
-const launchSchema = z.object({ personaId: z.string().uuid() }).strict();
+const launchSchema = z.object({
+  personaId: z.string().uuid(),
+  // Optional only for compatibility with older Orbis clients. The current UI
+  // always supplies an explicit canonical Place anchor.
+  startingPlaceId: z.string().uuid().optional(),
+}).strict();
 const modelNames = ['xialong-v1', 'glm-4-6'] as const;
 const generationSchema = z.object({
   launchId: z.string().uuid(),
@@ -107,7 +112,6 @@ function familyReferencedCharacterRows(family: Record<string, unknown>, rows: Re
   });
 }
 
-
 export function simulationNavigationData(row: Record<string, unknown>, bitterroot = false) {
   if (row.type !== 'place') return {};
   const document = asRecord(row.document);
@@ -122,6 +126,32 @@ export function simulationNavigationData(row: Record<string, unknown>, bitterroo
     ...(kind ? { kind } : {}),
     ...(parentLocationId ? { parentLocationId } : {}),
     ...(travelFromHollowmere ? { travelFromHollowmere } : {}),
+  };
+}
+
+function simulationWorldId(row: Record<string, unknown>) {
+  if (row.type === 'world') return String(row.id);
+  return row.origin_world_id ? String(row.origin_world_id) : undefined;
+}
+
+export function isStartingPlaceInSimulationScope(primary: Record<string, unknown>, place: Record<string, unknown>) {
+  if (place.type !== 'place') return false;
+  if (primary.type === 'place' && String(primary.id) === String(place.id)) return true;
+  const worldId = simulationWorldId(primary);
+  return Boolean(worldId && place.origin_world_id && String(place.origin_world_id) === worldId);
+}
+
+function simulationPlaceOption(row: Record<string, unknown>, targetId: string) {
+  const document = asRecord(row.document);
+  const kind = stringValue(document.kind);
+  const parentLocationId = stringValue(document.parentLocationId);
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    summary: String(row.summary ?? ''),
+    ...(kind ? { kind } : {}),
+    ...(parentLocationId ? { parentLocationId } : {}),
+    isTarget: String(row.id) === targetId,
   };
 }
 
@@ -229,6 +259,51 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
     } catch (error) { next(error); }
   });
 
+  router.get('/assets/:id/simulation-places', async (request, response, next) => {
+    try {
+      if (!await requireLaunchUser(request, config, pool, settingsStore)) return response.status(401).json({ error: 'Sign in with Discord to choose a starting Place.' });
+      const assetResult = await pool.query(
+        `SELECT a.*, origin.document AS origin_world_document,
+                origin.creator_user_id AS origin_world_creator_user_id
+         FROM library_assets a
+         LEFT JOIN library_assets origin ON origin.id = a.origin_world_id
+         WHERE a.id = $1 AND a.type = ANY($2::text[])`,
+        [request.params.id, launchableTypes],
+      );
+      if (!assetResult.rowCount) return response.status(404).json({ error: 'Record not found.' });
+      const asset = assetResult.rows[0];
+      const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
+      if (!canDirectViewAssetRow(asset, request.session.userId, isSuperAdmin)) return response.status(404).json({ error: 'Record not found.' });
+      const ownsAsset = asset.creator_user_id === request.session.userId;
+      if (asset.content_rating === 'adult' && !request.session.access?.canViewAdult && !ownsAsset) {
+        return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
+      }
+
+      const worldId = simulationWorldId(asset);
+      let rows: Record<string, unknown>[] = [];
+      if (worldId) {
+        const placesResult = await pool.query(
+          `SELECT place.*, origin.document AS origin_world_document,
+                  origin.creator_user_id AS origin_world_creator_user_id
+           FROM library_assets place
+           LEFT JOIN library_assets origin ON origin.id = place.origin_world_id
+           WHERE place.type = 'place' AND place.origin_world_id = $1
+           ORDER BY CASE WHEN place.id = $2 THEN 0 ELSE 1 END, place.name ASC`,
+          [worldId, asset.id],
+        );
+        rows = placesResult.rows;
+      } else if (asset.type === 'place') {
+        rows = [asset];
+      }
+
+      const items = rows
+        .filter((row) => canDirectViewAssetRow(row, request.session.userId, isSuperAdmin))
+        .filter((row) => !isAdultRestrictedAssetRow(row, request.session.userId, request.session.access?.canViewAdult === true))
+        .map((row) => simulationPlaceOption(row, String(asset.id)));
+      response.json({ items });
+    } catch (error) { next(error); }
+  });
+
   router.post('/assets/:id/simulate', async (request, response, next) => {
     try {
       if (!await requireLaunchUser(request, config, pool, settingsStore)) return response.status(401).json({ error: 'Sign in with Discord to simulate a record.' });
@@ -269,6 +344,28 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
       }
 
+      let startingPlace: Record<string, unknown> | undefined;
+      if (parsedBody.data.startingPlaceId) {
+        const startingPlaceResult = await pool.query(
+          `SELECT place.*, origin.document AS origin_world_document,
+                  origin.creator_user_id AS origin_world_creator_user_id
+           FROM library_assets place
+           LEFT JOIN library_assets origin ON origin.id = place.origin_world_id
+           WHERE place.id = $1 AND place.type = 'place'`,
+          [parsedBody.data.startingPlaceId],
+        );
+        if (!startingPlaceResult.rowCount) return response.status(404).json({ error: 'Starting Place not found.' });
+        const candidate = startingPlaceResult.rows[0];
+        if (!canDirectViewAssetRow(candidate, request.session.userId, isSuperAdmin)) return response.status(404).json({ error: 'Starting Place not found.' });
+        if (isAdultRestrictedAssetRow(candidate, request.session.userId, request.session.access?.canViewAdult === true)) {
+          return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
+        }
+        if (!isStartingPlaceInSimulationScope(asset, candidate)) {
+          return response.status(400).json({ error: 'Choose a starting Place from the same world as the record you are simulating.' });
+        }
+        startingPlace = candidate;
+      }
+
       const [providerResult, relatedResult] = await Promise.all([
         pool.query(`SELECT model FROM user_provider_settings WHERE user_id = $1 AND provider = 'novelai'`, [request.session.userId]),
         pool.query(
@@ -291,14 +388,17 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const primaryAsset = asset.type === 'place'
         ? { ...simulationAsset(asset), data: { ...asRecord(asset.document), ...simulationNavigationData(asset, isBitterroot) } }
         : simulationAsset(asset);
-      const scopedRelatedRows = asset.type === 'family'
+      const baseScopedRelatedRows = asset.type === 'family'
         ? familyReferencedCharacterRows(asset, relatedResult.rows)
         : relatedResult.rows;
+      const scopedRelatedRows = startingPlace && String(startingPlace.id) !== String(asset.id)
+        ? [startingPlace, ...baseScopedRelatedRows.filter((row) => String(row.id) !== String(startingPlace.id))]
+        : baseScopedRelatedRows;
       const relatedAssets = scopedRelatedRows.map((row) => {
         const packaged = simulationAsset(row, false);
         return row.type === 'place' ? { ...packaged, data: simulationNavigationData(row, isBitterroot) } : packaged;
       });
-      const initialLocationId = resolveInitialLocationId(asset, scopedRelatedRows);
+      const initialLocationId = startingPlace ? String(startingPlace.id) : resolveInitialLocationId(asset, scopedRelatedRows);
       const card = characterCard(asset);
       const catalog = await catalogueIdentity(pool, asset);
       const packageBody = {

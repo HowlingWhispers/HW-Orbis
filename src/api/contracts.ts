@@ -67,6 +67,15 @@ export interface SimulationPersona {
   owned: boolean;
 }
 
+export interface SimulationPlace {
+  id: string;
+  name: string;
+  summary: string;
+  kind?: string;
+  parentLocationId?: string;
+  isTarget: boolean;
+}
+
 export interface LibraryApi {
   getOverview(signal?: AbortSignal): Promise<LibraryOverview>;
   listAssets(query?: AssetQuery, signal?: AbortSignal): Promise<AssetListResponse>;
@@ -83,7 +92,8 @@ export interface LibraryApi {
   searchOwnershipTransferTargets(id: string, search: string): Promise<OwnershipTransferTarget[]>;
   transferWorldOwnership(id: string, input: { targetUserId: string; confirmName: string }): Promise<OwnershipTransferResult>;
   listSimulationPersonas(signal?: AbortSignal): Promise<SimulationPersona[]>;
-  simulateAsset(id: string, personaId: string): Promise<{ launchUrl: string; expiresAt: number }>;
+  listSimulationPlaces(id: string, signal?: AbortSignal): Promise<SimulationPlace[]>;
+  simulateAsset(id: string, personaId: string, startingPlaceId?: string): Promise<{ launchUrl: string; expiresAt: number }>;
   listAssetImages(assetId: string, signal?: AbortSignal): Promise<AssetImage[]>;
   uploadAssetImage(assetId: string, input: AssetImageUploadInput): Promise<AssetImage>;
   addExternalAssetImage(assetId: string, input: AssetImageExternalInput): Promise<AssetImage>;

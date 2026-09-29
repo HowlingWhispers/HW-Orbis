@@ -1,4 +1,4 @@
-import type { LibraryApi, OwnershipTransferResult, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput, WorldChildCreate, WorldChildren, WorldChildProjection, WorldChildUpdate } from './contracts';
+import type { LibraryApi, OwnershipTransferResult, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput, SimulationPlace, WorldChildCreate, WorldChildren, WorldChildProjection, WorldChildUpdate } from './contracts';
 import type { AssetImage, AssetListResponse, AssetQuery, LibraryAssetCreate, LibraryOverview } from '../types/library';
 import type { LibraryAssetUpdate } from '../types/library';
 import { assetTypes } from '../types/library';
@@ -146,7 +146,28 @@ export class FixtureLibraryApi implements LibraryApi {
     return [];
   }
 
-  async simulateAsset(_id: string, _personaId: string): Promise<{ launchUrl: string; expiresAt: number }> {
+  async listSimulationPlaces(id: string): Promise<SimulationPlace[]> {
+    await pause();
+    const target = fixtures.find((item) => item.id === id);
+    if (!target) return [];
+    const worldId = target.type === 'world' ? target.id : target.originWorldId;
+    return fixtures
+      .filter((item) => item.type === 'place' && (worldId ? item.originWorldId === worldId : item.id === target.id))
+      .sort((a, b) => (a.id === target.id ? -1 : b.id === target.id ? 1 : a.name.localeCompare(b.name)))
+      .map((item) => {
+        const document = item.document ?? {};
+        return {
+          id: item.id,
+          name: item.name,
+          summary: item.summary,
+          kind: typeof document.kind === 'string' ? document.kind : undefined,
+          parentLocationId: typeof document.parentLocationId === 'string' ? document.parentLocationId : undefined,
+          isTarget: item.id === target.id,
+        };
+      });
+  }
+
+  async simulateAsset(_id: string, _personaId: string, _startingPlaceId?: string): Promise<{ launchUrl: string; expiresAt: number }> {
     throw new Error('Speculus launches require the live Orbis API.');
   }
 

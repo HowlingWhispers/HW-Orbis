@@ -97,10 +97,10 @@ export function AssetDetailView() {
     setPersonaPickerOpen(true);
   };
 
-  const simulate = async (personaId: string) => {
+  const simulate = async (personaId: string, startingPlaceId: string) => {
     setLaunching(true); setLaunchError('');
     try {
-      const launch = await libraryApi.simulateAsset(asset.id, personaId);
+      const launch = await libraryApi.simulateAsset(asset.id, personaId, startingPlaceId);
       window.location.assign(launch.launchUrl);
     } catch (reason) {
       setLaunchError(reason instanceof Error ? reason.message : 'Speculus could not start.');
@@ -229,7 +229,7 @@ export function AssetDetailView() {
             {canEdit
               ? <Link className="button button--primary" to={`/asset/${asset.id}/edit`}><Pencil size={16} /> Edit record</Link>
               : <button className="button button--disabled" disabled title="Only the owner can edit this record"><Pencil size={16} /> Owner protected</button>}
-            <button className="button button--secondary" disabled={launching} onClick={openPersonaPicker}><Sparkles size={16} /> Simulate</button>
+            <button className="button button--secondary" disabled={launching} onClick={openPersonaPicker}><Sparkles size={16} /> {asset.type === 'place' ? 'Simulate from here' : 'Simulate'}</button>
             {asset.type === 'world' && <Link className="button button--secondary" to={`/asset/${asset.id}/saves`}><Archive size={16} /> Save Archive</Link>}
             {canEdit && <button className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : asset.type === 'world' ? 'Download world' : 'Download SPC'}</button>}
             {canTransfer && <button className="button button--secondary" type="button" disabled={transferring} onClick={openTransfer}><ArrowRightLeft size={16} /> Transfer to user</button>}
@@ -242,11 +242,13 @@ export function AssetDetailView() {
           {transferError && <p className="form-message" role="alert">{transferError}</p>}
 
           {personaPickerOpen && <PersonaPicker
+            targetId={asset.id}
             targetName={asset.name}
+            initialPlaceId={asset.type === 'place' ? asset.id : undefined}
             busy={launching}
             error={launchError}
             onCancel={() => { if (!launching) { setPersonaPickerOpen(false); setLaunchError(''); } }}
-            onSelect={(personaId) => void simulate(personaId)}
+            onSelect={(personaId, startingPlaceId) => void simulate(personaId, startingPlaceId)}
           />}
 
           {transferOpen && canTransfer && <section className="world-delete-review" role="dialog" aria-modal="true" aria-labelledby="world-transfer-title">
