@@ -89,9 +89,11 @@ export function AssetDetailView() {
   const Icon = category?.icon;
   const canEdit = user && asset.canEdit === true;
   const canTransfer = asset.type === 'world' && asset.isOwner === true;
+  const canSimulate = asset.type !== 'persona';
   const coverUrl = assetImageUrl(asset.coverImage);
 
   const openPersonaPicker = () => {
+    if (!canSimulate) return;
     if (!user) { navigate('/account'); return; }
     setLaunchError('');
     setPersonaPickerOpen(true);
@@ -229,7 +231,7 @@ export function AssetDetailView() {
             {canEdit
               ? <Link className="button button--primary" to={`/asset/${asset.id}/edit`}><Pencil size={16} /> Edit record</Link>
               : <button className="button button--disabled" disabled title="Only the owner can edit this record"><Pencil size={16} /> Owner protected</button>}
-            <button className="button button--secondary" disabled={launching} onClick={openPersonaPicker}><Sparkles size={16} /> {asset.type === 'place' ? 'Simulate from here' : 'Simulate'}</button>
+            {canSimulate && <button className="button button--secondary" disabled={launching} onClick={openPersonaPicker}><Sparkles size={16} /> {asset.type === 'place' ? 'Simulate from here' : 'Simulate'}</button>}
             {asset.type === 'world' && <Link className="button button--secondary" to={`/asset/${asset.id}/saves`}><Archive size={16} /> Save Archive</Link>}
             {canEdit && <button className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : asset.type === 'world' ? 'Download world' : 'Download SPC'}</button>}
             {canTransfer && <button className="button button--secondary" type="button" disabled={transferring} onClick={openTransfer}><ArrowRightLeft size={16} /> Transfer to user</button>}
@@ -241,7 +243,7 @@ export function AssetDetailView() {
           {downloadError && <p className="form-message" role="alert">{downloadError}</p>}
           {transferError && <p className="form-message" role="alert">{transferError}</p>}
 
-          {personaPickerOpen && <PersonaPicker
+          {canSimulate && personaPickerOpen && <PersonaPicker
             targetId={asset.id}
             targetName={asset.name}
             initialPlaceId={asset.type === 'place' ? asset.id : undefined}
@@ -297,7 +299,7 @@ export function AssetDetailView() {
               <button type="button" className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : 'Download world backup'}</button>
             </div>
             <label className="world-delete-review__confirm">
-              <span>Type <strong>DELETE {asset.name}</strong> to confirm.</span>
+              <span>Type <strong>DELETE ${asset.name}</strong> to confirm.</span>
               <input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
             </label>
             <button type="button" className="button button--danger" disabled={deleting || deleteConfirmation !== `DELETE ${asset.name}`} onClick={() => void deleteWorld()}><Trash2 size={16} /> {deleting ? 'Deleting permanently...' : 'Permanently delete world'}</button>
