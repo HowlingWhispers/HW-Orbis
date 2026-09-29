@@ -11,11 +11,16 @@ import { generationErrors, providerErrorCode, rejectedParameter, safeFinishReaso
 import { bitterrootDirectTravelFromHollowmere } from './bitterroot-travel-canon.js';
 
 const launchableTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
+const simulationTones = ['world-default', 'family-friendly', 'mature', 'adult-erotic'] as const;
+type SimulationTone = typeof simulationTones[number];
 const launchSchema = z.object({
   personaId: z.string().uuid(),
   // Optional only for compatibility with older Orbis clients. The current UI
   // always supplies an explicit canonical Place anchor.
   startingPlaceId: z.string().uuid().optional(),
+  tone: z.enum(simulationTones).default('world-default'),
+  focusTags: z.array(z.string().trim().min(1).max(40)).max(12).default([]),
+  direction: z.string().trim().max(4000).default(''),
 }).strict();
 const modelNames = ['xialong-v1', 'glm-4-6'] as const;
 const generationSchema = z.object({
@@ -183,6 +188,46 @@ function characterCard(row: Record<string, unknown>) {
   };
 }
 
+export function simulationPersonaAge(row: Record<string, unknown>) {
+  const identity = asRecord(asRecord(row.document).identity);
+  const rawAge = identity.age;
+  if (typeof rawAge === 'number' && Number.isFinite(rawAge) && rawAge >= 0) return rawAge;
+  if (typeof rawAge !== 'string') return undefined;
+  const match = rawAge.trim().match(/^(\d+(?:\.\d+)?)/);
+  if (!match) return undefined;
+  const age = Number(match[1]);
+  return Number.isFinite(age) && age >= 0 ? age : undefined;
+}
+
+export function simulationPersonaAdultToneEligible(row: Record<string, unknown>, canViewAdult: boolean) {
+  const age = simulationPersonaAge(row);
+  return canViewAdult && age !== undefined && age >= 18;
+}
+
+export function buildSimulationLaunchDirection(input: { tone: SimulationTone; focusTags: string[]; direction: string }) {
+  const toneInstructions: Record<SimulationTone, string> = {
+    'world-default': 'Follow the authored world and character canon without adding a special content filter.',
+    'family-friendly': 'Keep foregrounded content suitable for general audiences. Avoid sexual content, graphic violence, and explicit adult material.',
+    mature: 'Serious adult themes, stronger language, and non-sexual violence may be foregrounded when appropriate. Do not generate explicit sexual content.',
+    'adult-erotic': 'Adult erotic and intimate content may be foregrounded when requested, but sexual content may involve adults only. Never sexualize minors or place minors inside sexual activity.',
+  };
+  const toneLabels: Record<SimulationTone, string> = {
+    'world-default': 'World default',
+    'family-friendly': 'Family-friendly',
+    mature: 'Mature',
+    'adult-erotic': 'Adult / erotic (18+)',
+  };
+  if (input.tone === 'world-default' && input.focusTags.length === 0 && !input.direction.trim()) return '';
+  return [
+    'SESSION DIRECTION / LAUNCH-ONLY / NOT CANON',
+    'This is temporary steering for this simulation session. It may shape tone, pacing, emphasis, and what kinds of events are foregrounded, but it does not rewrite Orbis canon, physical state, character knowledge, relationships, or permissions.',
+    `Content tone: ${toneLabels[input.tone]}.`,
+    toneInstructions[input.tone],
+    input.focusTags.length ? `Focus tags: ${input.focusTags.join(', ')}.` : '',
+    input.direction.trim() ? `User direction:\n${input.direction.trim()}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 const personaCoreKeys = ['appearance', 'personality', 'background', 'speech', 'preferences', 'skills', 'notes'] as const;
 const personaIdentityKeys = ['displayName', 'species', 'age', 'pronouns', 'description'] as const;
 
@@ -246,15 +291,21 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
          WHERE type = 'persona'
          ORDER BY name ASC`,
       );
+      const canViewAdult = request.session.access?.canViewAdult === true;
       const items = result.rows
         .filter((row) => canUsePersonaAssetRow(row, request.session.userId))
-        .filter((row) => !isAdultRestrictedAssetRow(row, request.session.userId, request.session.access?.canViewAdult === true))
-        .map((row) => ({
-          id: String(row.id),
-          name: String(row.name),
-          summary: String(row.summary ?? ''),
-          owned: row.creator_user_id === request.session.userId,
-        }));
+        .filter((row) => !isAdultRestrictedAssetRow(row, request.session.userId, canViewAdult))
+        .map((row) => {
+          const age = simulationPersonaAge(row);
+          return {
+            id: String(row.id),
+            name: String(row.name),
+            summary: String(row.summary ?? ''),
+            owned: row.creator_user_id === request.session.userId,
+            ...(age !== undefined ? { age } : {}),
+            adultToneEligible: simulationPersonaAdultToneEligible(row, canViewAdult),
+          };
+        });
       response.json({ items });
     } catch (error) { next(error); }
   });
@@ -309,7 +360,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       if (!await requireLaunchUser(request, config, pool, settingsStore)) return response.status(401).json({ error: 'Sign in with Discord to simulate a record.' });
       if (!config.SPECULUS_BRIDGE_SECRET) return response.status(503).json({ error: 'The Speculus bridge is not configured.' });
       const parsedBody = launchSchema.safeParse(request.body);
-      if (!parsedBody.success) return response.status(400).json({ error: 'Choose a valid Persona before starting Speculus.' });
+      if (!parsedBody.success) return response.status(400).json({ error: 'Simulation setup is invalid.' });
 
       const assetResult = await pool.query(
         `SELECT a.*, origin.document AS origin_world_document,
@@ -342,6 +393,14 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       if (!mayUsePersona && !isSuperAdmin) return response.status(403).json({ error: 'This Persona is not shared for use.' });
       if (isAdultRestrictedAssetRow(persona, request.session.userId, request.session.access?.canViewAdult === true)) {
         return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
+      }
+      if (parsedBody.data.tone === 'adult-erotic') {
+        if (request.session.access?.canViewAdult !== true) {
+          return response.status(403).json({ error: '18+ verification is required for Adult / erotic simulation tone.', verificationPath: '/verification' });
+        }
+        if (!simulationPersonaAdultToneEligible(persona, true)) {
+          return response.status(400).json({ error: 'Adult / erotic simulation tone requires a Persona whose age is explicitly 18 or older.' });
+        }
       }
 
       let startingPlace: Record<string, unknown> | undefined;
@@ -401,6 +460,8 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const initialLocationId = startingPlace ? String(startingPlace.id) : resolveInitialLocationId(asset, scopedRelatedRows);
       const card = characterCard(asset);
       const catalog = await catalogueIdentity(pool, asset);
+      const baseScene = card?.scenario || String(asset.summary ?? '');
+      const launchDirection = buildSimulationLaunchDirection(parsedBody.data);
       const packageBody = {
         // V3 currently uses the isolated V2-compatible bridge contract.
         version: 2,
@@ -414,7 +475,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         relatedAssets,
         character: card,
         persona: simulationPersona(persona),
-        scene: card?.scenario || String(asset.summary ?? ''),
+        scene: [baseScene, launchDirection].filter(Boolean).join('\n\n'),
         contextBlocks: scopedRelatedRows.slice(0, 20).map((row) => ({
           id: String(row.id),
           title: String(row.name),
