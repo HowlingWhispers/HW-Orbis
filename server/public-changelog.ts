@@ -58,6 +58,23 @@ export type PublicChangelogPayload = {
 /** Newest first. Add new entries at the top. */
 export const publicChangelogEntries: PublicChangelogEntry[] = [
   {
+    version: '2026.09.29.2',
+    publishedAt: '2026-09-29T19:03:00.000Z',
+    title: 'A smaller, more flexible Speculus launch setup',
+    sections: [
+      {
+        id: 'speculus',
+        title: 'Speculus',
+        items: [
+          'Persona and starting Place choices now use compact dropdown menus instead of long radio-button lists.',
+          'A launch can now choose World default, Family-friendly, Mature, or Adult / erotic tone, plus optional focus tags and a short direction prompt.',
+          'Tone, tags and direction apply only to that simulation session and do not rewrite the world or character canon.',
+          'Adult / erotic tone is only available with 18+ access and a Persona whose authored age is explicitly 18 or older.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2026.09.29.1',
     publishedAt: '2026-09-29T16:19:00.000Z',
     title: 'Choose where a Speculus simulation begins',
