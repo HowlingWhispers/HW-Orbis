@@ -90,11 +90,11 @@ export function SaveArchiveView() {
     finally { setBusy(''); }
   };
 
-  const openSource = async (save: ArchivedSave, personaId: string) => {
+  const openSource = async (save: ArchivedSave, personaId: string, startingPlaceId: string) => {
     if (save.compatibility !== 'ready' || busy) return;
     setBusy(save.id); setError('');
     try {
-      const launch = await libraryApi.simulateAsset(save.sourceAssetId, personaId);
+      const launch = await libraryApi.simulateAsset(save.sourceAssetId, personaId, startingPlaceId);
       window.location.assign(launch.launchUrl);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Speculus could not start from this save source.');
@@ -130,11 +130,13 @@ export function SaveArchiveView() {
     {error && <p className="form-message" role="alert">{error}</p>}
 
     {launchSave && <PersonaPicker
+      targetId={launchSave.sourceAssetId}
       targetName={launchSave.sourceName}
+      initialPlaceId={launchSave.locationId ?? undefined}
       busy={busy === launchSave.id}
       error={error}
       onCancel={() => { if (!busy) { setLaunchSave(null); setError(''); } }}
-      onSelect={(personaId) => void openSource(launchSave, personaId)}
+      onSelect={(personaId, startingPlaceId) => void openSource(launchSave, personaId, startingPlaceId)}
     />}
 
     {activeShelf === 'fabula' ? <section className="save-archive__empty save-archive__future">
