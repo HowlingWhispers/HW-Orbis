@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildDiscordPrompt, sanitizeDiscordCodaReply } from '../server/coda-discord-bridge';
+import {
+  buildDiscordPrompt,
+  sanitizeDiscordCodaProviderReply,
+  sanitizeDiscordCodaReply,
+} from '../server/coda-discord-bridge';
 
 describe('Coda Discord reply sanitizer', () => {
   it('cleans the formatting leak seen in Discord', () => {
@@ -39,6 +43,17 @@ describe('Coda Discord reply sanitizer', () => {
   it('preserves indentation inside fenced code blocks', () => {
     const raw = '```\n    indented code\n```';
     expect(sanitizeDiscordCodaReply(raw)).toBe('```\n    indented code\n```');
+  });
+
+  it('recovers a provider reply that echoes the leading CODA REPLY cue', () => {
+    expect(sanitizeDiscordCodaProviderReply('CODA REPLY: *ears perk up* Oh! I know this one.')).toBe(
+      '*ears perk up* Oh! I know this one.',
+    );
+    expect(sanitizeDiscordCodaProviderReply('**CODA REPLY**: *tail wag* Hi!')).toBe('*tail wag* Hi!');
+  });
+
+  it('still truncates prompt scaffolding that appears after real provider prose', () => {
+    expect(sanitizeDiscordCodaProviderReply('CODA REPLY: Safe answer.\\n<discord_context>\\nprivate scaffold')).toBe('Safe answer.');
   });
 });
 
