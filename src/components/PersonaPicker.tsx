@@ -91,7 +91,7 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
     {!loading && personas.length === 0 && !loadError && <p role="status">No Personas are available. Create one or ask its owner to share it for use.</p>}
     {personas.length > 0 && <label className="world-delete-review__confirm">
       <span><strong>Player Persona</strong></span>
-      <select disabled={busy} value={selectedPersonaId} onChange={(event) => setSelectedPersonaId(event.target.value)}>
+      <select aria-label="Player Persona" disabled={busy} value={selectedPersonaId} onChange={(event) => setSelectedPersonaId(event.target.value)}>
         <option value="">Choose a Persona...</option>
         {personas.map((persona) => <option key={persona.id} value={persona.id}>
           {persona.name}{persona.owned ? ' · Yours' : ' · Shared'}{persona.age !== undefined ? ` · age ${persona.age}` : ''}
@@ -103,7 +103,7 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
     {!loading && places.length === 0 && !loadError && <p role="status">No starting Places are available. Add a Place to this world before starting Speculus.</p>}
     {places.length > 0 && <label className="world-delete-review__confirm">
       <span><strong>Starting Place</strong></span>
-      <select disabled={busy} value={selectedPlaceId} onChange={(event) => setSelectedPlaceId(event.target.value)}>
+      <select aria-label="Starting Place" disabled={busy} value={selectedPlaceId} onChange={(event) => setSelectedPlaceId(event.target.value)}>
         <option value="">Choose a starting Place...</option>
         {places.map((place) => <option key={place.id} value={place.id}>
           {place.name}{place.isTarget ? ' · This Place' : ''}{place.kind ? ` · ${place.kind.replaceAll('-', ' ')}` : ''}
@@ -114,7 +114,7 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
 
     <label className="world-delete-review__confirm">
       <span><strong>Content / tone</strong></span>
-      <select disabled={busy || !selectedPersonaId} value={tone} onChange={(event) => setTone(event.target.value as SimulationTone)}>
+      <select aria-label="Content / tone" disabled={busy || !selectedPersonaId} value={tone} onChange={(event) => setTone(event.target.value as SimulationTone)}>
         {toneOptions.map((option) => <option key={option.value} value={option.value} disabled={option.value === 'adult-erotic' && !selectedPersona?.adultToneEligible}>
           {option.label}{option.value === 'adult-erotic' && selectedPersona && !selectedPersona.adultToneEligible ? ' · unavailable for this Persona' : ''}
         </option>)}
