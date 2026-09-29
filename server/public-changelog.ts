@@ -58,6 +58,41 @@ export type PublicChangelogPayload = {
 /** Newest first. Add new entries at the top. */
 export const publicChangelogEntries: PublicChangelogEntry[] = [
   {
+    version: '2026.09.29.3',
+    publishedAt: '2026-09-29T22:20:00.000Z',
+    title: 'World portals, steadier Speculus prose, and more useful Coda tools',
+    sections: [
+      {
+        id: 'orbis',
+        title: 'Orbis',
+        items: [
+          'Large world records now open as browsable world portals with an overview, category tabs, compact summaries, expandable sections, and search for larger collections instead of one very long document column.',
+          'The world portal is driven by the world record itself, so the same browsing layout can be used by other large worlds without hard-coding one setting.',
+          'Persona records no longer offer a Simulate action, keeping Personas as the player identity chosen when a real simulation target is launched.',
+          'Coda project and world answers now use spoiler-safe reference knowledge and are instructed not to claim that a check, save, link, report, or other action happened unless the runtime actually confirms it.',
+        ],
+      },
+      {
+        id: 'speculus',
+        title: 'Speculus',
+        items: [
+          'Speculus V3 now detects and repairs malformed roleplay formatting so action and dialogue stay readable instead of collapsing into broken mixed prose.',
+          'The format guard covers nested and alternating action/dialogue patterns while preserving the response cue and the launch authorization already supplied by Orbis.',
+        ],
+      },
+      {
+        id: 'coda',
+        title: 'Coda',
+        items: [
+          'Coda gained Discord tools for narrative probability rolls, Coda image generation, and channel summaries.',
+          'Members can file bug reports and project ideas directly through Coda without spending an AI request; the resulting forum post records the submission and keeps the discussion in the appropriate forum.',
+          'When Coda creates an idea forum post for a member, she now adds that submitter to the thread so follow-up replies can reach them, and says so only when Discord confirms the join.',
+          'Coda has stronger project grounding for adult-control questions, minor-protection boundaries, spoiler-safe world knowledge, and the difference between describing an action and actually performing one.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2026.09.29.2',
     publishedAt: '2026-09-29T19:03:00.000Z',
     title: 'A smaller, more flexible Speculus launch setup',
