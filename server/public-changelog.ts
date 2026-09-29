@@ -58,6 +58,21 @@ export type PublicChangelogPayload = {
 /** Newest first. Add new entries at the top. */
 export const publicChangelogEntries: PublicChangelogEntry[] = [
   {
+    version: '2026.09.29.1',
+    publishedAt: '2026-09-29T16:19:00.000Z',
+    title: 'Choose where a Speculus simulation begins',
+    sections: [
+      {
+        id: 'speculus',
+        title: 'Speculus',
+        items: [
+          'Starting a simulation now lets you choose both your Persona and the Place where the scene begins.',
+          'Launching a Place selects it automatically, and opening an archived save keeps its saved location selected when available.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2026.09.28.3',
     publishedAt: '2026-09-28T18:05:00.000Z',
     title: 'A phone layout for Speculus, and deleting a Persona you no longer want',
