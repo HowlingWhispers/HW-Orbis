@@ -60,11 +60,21 @@ export interface OwnershipTransferResult {
   transferredTo: OwnershipTransferTarget;
 }
 
+export type SimulationTone = 'world-default' | 'family-friendly' | 'mature' | 'adult-erotic';
+
+export interface SimulationLaunchSetup {
+  tone: SimulationTone;
+  focusTags: string[];
+  direction: string;
+}
+
 export interface SimulationPersona {
   id: string;
   name: string;
   summary: string;
   owned: boolean;
+  age?: number;
+  adultToneEligible: boolean;
 }
 
 export interface SimulationPlace {
