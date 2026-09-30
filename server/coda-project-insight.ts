@@ -91,7 +91,11 @@ const safeRootNames = new Set([
 // This is the one cross-project overview maintained explicitly for Discord Coda.
 const orbisMemberSafeExtras = ['docs/CODA_PROJECT_KNOWLEDGE.md'];
 
-const projectQuestionPattern = /\b(?:project|roadmap|plan|planned|feature|release|development|developing|status|implemented|implementation|multiplayer|orbis|speculus|fabula|mouseion|studium|howling whispers|world forge|runtime|simulator|library|engine|architecture|milestone|changelog|what changed|working on)\b/i;
+// Keep ordinary banter cheap, but ground support-shaped questions even when the
+// member does not name a project explicitly. These are recurring product topics
+// where guessing has previously produced false answers in Discord.
+const projectQuestionPattern = /\b(?:project|roadmap|plan|planned|feature|release|development|developing|status|implemented|implementation|multiplayer|orbis|speculus|fabula|mouseion|studium|howling whispers|world forge|runtime|simulator|simulation|library|engine|architecture|milestone|changelog|what changed|working on)\b/i;
+const projectSupportPattern = /\b(?:save|saves|saved|save archive|playthrough|session|resume|continue|adult|18\+|18 plus|erotic|persona|greyed|grayed|disabled|discord invite|invite link|server link|mobile|phone|touch|ui|interface|bug|issue|current state|available|availability)\b/i;
 
 const stopWords = new Set([
   'about', 'after', 'again', 'also', 'been', 'being', 'could', 'does', 'have', 'into', 'just',
@@ -278,7 +282,7 @@ function scoreChunk(question: string, queryTokens: string[], document: IndexedDo
 }
 
 export function isProjectInsightQuestion(question: string) {
-  return projectQuestionPattern.test(question);
+  return projectQuestionPattern.test(question) || projectSupportPattern.test(question);
 }
 
 export function buildProjectInsight(question: string) {
