@@ -40,6 +40,7 @@ describe('world ownership transfer', () => {
           avatar_url: null,
         }] };
       }
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     });
 
@@ -80,6 +81,7 @@ describe('world ownership transfer', () => {
         expect(params).toEqual([worldId, 'Everglow', ownerId, targetId, ownerId, 169]);
         return { rowCount: 1, rows: [] };
       }
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     });
     const release = vi.fn();
@@ -118,6 +120,7 @@ describe('world ownership transfer', () => {
         }] };
       }
       if (sql.includes('foreign_count')) return { rowCount: 1, rows: [{ child_count: 169, foreign_count: 1 }] };
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     });
     const release = vi.fn();

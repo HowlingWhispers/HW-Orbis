@@ -136,6 +136,15 @@ export interface AdminCodaStatus {
   guild: { id: string; name: string } | null;
 }
 
+export interface AdminAdultOverrideAccount {
+  id: string;
+  display_name: string;
+  discord_username: string;
+  adult_access_override: boolean;
+  updated_at: string;
+  history: { granted: boolean; changedAt: string; changedBy: string | null; note: string | null }[] | null;
+}
+
 export interface AdminAuditEntry {
   id: string;
   settingKey: string;
@@ -187,6 +196,15 @@ export const adminApi = {
   overview: () => request<AdminOverview>('/overview'),
   settings: () => request<{ settings: AdminSettings; roleResolution: { available: boolean; reason: string } }>('/settings'),
   audit: () => request<{ items: AdminAuditEntry[] }>('/audit'),
+  adultOverrides: (query?: string) =>
+    request<{ superAdmin: { discordId: string; note: string } | null; accounts: AdminAdultOverrideAccount[] }>(
+      '/adult-overrides' + (query ? '?query=' + encodeURIComponent(query) : ''),
+    ),
+  setAdultOverride: (userId: string, granted: boolean, note?: string) =>
+    request<{ account: { id: string; display_name: string; adult_access_override: boolean } }>(
+      '/adult-overrides/' + encodeURIComponent(userId),
+      { method: 'PATCH', body: JSON.stringify({ granted, ...(note ? { note } : {}) }) },
+    ),
   codaChannels: () => request<AdminCodaChannelState>('/coda/channels'),
   codaMessages: (limit = 50) => request<{ items: AdminCodaMessage[] }>('/coda/messages?limit=' + encodeURIComponent(String(limit))),
   sendCodaMessage: (input: { channelId: string; content: string; replyTo?: string }) =>

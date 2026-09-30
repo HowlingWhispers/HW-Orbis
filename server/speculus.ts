@@ -289,7 +289,7 @@ function extractNovelAiFinishReason(value: unknown): string | undefined {
 async function requireLaunchUser(request: Request, config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
   if (!request.session.userId) return false;
   const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
-  if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore);
+  if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, pool);
   return true;
 }
 

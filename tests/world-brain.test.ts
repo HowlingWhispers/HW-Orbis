@@ -31,6 +31,7 @@ describe('World Brain revisions', () => {
         id: revisionId, kind: 'custom', revision_number: 1, source: 'ONE WORLD BRAIN', notes: 'first',
         created_at: '2026-09-18T10:00:00.000Z', published_at: '2026-09-18T10:00:00.000Z',
       }] };
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     });
     const response = await request(appFor({ query } as unknown as DatabasePool))
@@ -48,6 +49,7 @@ describe('World Brain revisions', () => {
         created_at: '2026-09-18T11:00:00.000Z', published_at: '2026-09-18T11:00:00.000Z',
       }] };
       if (sql.includes('INSERT INTO world_brain_bindings')) return { rowCount: 1, rows: [] };
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     });
     const response = await request(appFor({ query } as unknown as DatabasePool))
@@ -61,6 +63,7 @@ describe('World Brain revisions', () => {
     const query = vi.fn(async (sql: string) => {
       if (sql.startsWith('SELECT id, type')) return { rowCount: 1, rows: [{ id: worldId, type: 'world', creator_user_id: userId }] };
       if (sql.includes('SELECT id FROM world_brain_revisions')) return { rowCount: 0, rows: [] };
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     });
     await request(appFor({ query } as unknown as DatabasePool))

@@ -5,6 +5,12 @@ export interface SessionAccess {
   canViewAdult: boolean;
   canCreate: boolean;
   canAdmin: boolean;
+  /**
+   * Set when adult viewing was granted by a super-admin override rather than by
+   * a Discord role. The UI shows this so an operator can tell a granted account
+   * apart from one that genuinely holds an Adult Access role.
+   */
+  adultAccessOverride?: boolean;
   checkedAt: number;
   verifiedAt?: number;
   membershipMissingAt?: number;

@@ -83,6 +83,7 @@ describe('Speculus security bridge', () => {
         asset_created_at: updatedAt, status: 'active',
       }] };
       if (sql.includes('INSERT INTO generation_grants')) return { rowCount: 1, rows: [] };
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     }) } as unknown as DatabasePool;
     const app = express(); app.use(express.json()); withSession(app);
@@ -133,7 +134,11 @@ describe('Speculus security bridge', () => {
     app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
 
     await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).send({}).expect(400);
-    expect(pool.query).not.toHaveBeenCalled();
+    // The access path reads the caller's own adult grant, so this is no longer
+    // "no query at all" but the invariant that actually matters: nothing about
+    // the requested asset or Persona may be touched before validation rejects.
+    const queries = (pool.query as ReturnType<typeof vi.fn>).mock.calls.map(([sql]) => String(sql));
+    expect(queries.filter((sql) => /library_assets|persona/i.test(sql))).toEqual([]);
   });
 
   it('lists only owned and directly shared allowUse Personas', async () => {
@@ -144,6 +149,7 @@ describe('Speculus security bridge', () => {
         { id: '77777777-7777-4777-8777-777777777777', type: 'persona', name: 'View only', summary: '', creator_user_id: 'other', content_rating: 'sfw', document: { personaSettings: { visibility: 'public', allowUse: false } } },
         { id: '88888888-8888-4888-8888-888888888888', type: 'persona', name: 'Private', summary: '', creator_user_id: 'other', content_rating: 'sfw', document: {} },
       ] };
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     }) } as unknown as DatabasePool;
     const app = express(); app.use(express.json()); withSession(app);
@@ -158,6 +164,7 @@ describe('Speculus security bridge', () => {
 
   it('validates target access separately before looking up the selected Persona', async () => {
     const pool = { query: vi.fn(async (sql: string) => {
+      if (sql.startsWith('SELECT adult_access_override')) return { rowCount: 1, rows: [{ adult_access_override: false }] };
       if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [{
         id: assetId, type: 'character', name: 'Private target', creator_user_id: 'other', content_rating: 'sfw',
         origin_world_document: { worldSettings: { visibility: 'private' } }, origin_world_creator_user_id: 'other',
@@ -168,7 +175,11 @@ describe('Speculus security bridge', () => {
     app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
 
     await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).send({ personaId }).expect(404);
-    expect((pool.query as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    // The target is read exactly once and the Persona lookup is never reached.
+    // The other call is the access path reading the caller's own adult grant.
+    const queries = (pool.query as ReturnType<typeof vi.fn>).mock.calls.map(([sql]) => String(sql));
+    expect(queries.filter((sql) => /FROM library_assets a/.test(sql))).toHaveLength(1);
+    expect(queries.filter((sql) => /persona/i.test(sql))).toEqual([]);
   });
 
   it('validates Persona existence, allowUse, and adult access independently', async () => {
@@ -180,6 +191,7 @@ describe('Speculus security bridge', () => {
       const pool = { query: vi.fn(async (sql: string) => {
         if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [target] };
         if (sql.includes("WHERE id = $1 AND type = 'persona'")) return { rowCount: persona ? 1 : 0, rows: persona ? [persona] : [] };
+        if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
         throw new Error(`Unexpected query: ${sql}`);
       }) } as unknown as DatabasePool;
       const app = express(); app.use(express.json()); withSession(app, canViewAdult);
@@ -214,6 +226,7 @@ describe('Speculus security bridge', () => {
         token_ciphertext: sealed.ciphertext, token_iv: sealed.iv, token_tag: sealed.tag,
       }] };
       if (sql.startsWith('UPDATE generation_grants')) return { rowCount: 1, rows: [] };
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     }) } as unknown as DatabasePool;
     const app = express(); app.use(express.json()); app.use('/api/v1/generation', createSpeculusGenerationRouter(config, pool));

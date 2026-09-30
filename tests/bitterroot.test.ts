@@ -98,6 +98,7 @@ function editorApp(userId: string, creatorUserId = ownerUserId, canCreate = true
       if (sql.startsWith('UPDATE library_assets SET')) return { rows: [{ ...current, name: values?.[1], document: JSON.parse(String(values?.[7])) }], rowCount: 1 };
       if (sql.startsWith('SELECT display_name')) return { rows: [{ display_name: 'Eirvargr', avatar_url: null }], rowCount: 1 };
       if (sql.startsWith('SELECT code, classification FROM speculus_catalog_registry')) return { rows: [{ code: 'SPC-P-KD41827', classification: 'place' }], rowCount: 1 };
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     },
   } as unknown as DatabasePool;

@@ -36,6 +36,7 @@ function workingPool() {
         acknowledged = String(values?.[1] ?? '');
         return { rows: [], rowCount: 1 };
       }
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     },
   };

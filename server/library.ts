@@ -127,7 +127,7 @@ export function createLibraryRouter(
   router.use(async (request, _response, next) => {
     try {
       const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
-      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore);
+      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, pool);
       next();
     } catch (error) {
       next(error);

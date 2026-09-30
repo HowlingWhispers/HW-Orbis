@@ -6,6 +6,7 @@ import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import { DiscordMembershipRequestError, discordAuthorizeUrl, discordAvatarUrl, discordDecorationUrl, exchangeCode, getDiscordUser, getGuildMembership } from './discord.js';
 import type { SettingsStore } from './settings.js';
+import type { SessionAccess } from './types.js';
 import './types.js';
 
 export const SUPER_ADMIN_DISCORD_ID = '1544473372073791602';
@@ -30,6 +31,41 @@ const ownerAccess = () => {
   const now = Date.now();
   return { isGuildMember: true, canViewAdult: true, canCreate: true, canAdmin: true, checkedAt: now, verifiedAt: now };
 };
+
+/**
+ * OR a super-admin's per-account adult grant into an access profile.
+ *
+ * This is the ONLY place the override is applied, and it must always run after
+ * the Discord evaluation. `users.can_view_adult` is a cache that the access
+ * path overwrites wholesale on every refresh, so a grant recorded there would
+ * be erased within ACCESS_MAX_AGE_MS and the operator would see the adult tab
+ * appear once and vanish. Reading the grant from its own column on every
+ * refresh is what makes revocation immediate too: flipping it off takes effect
+ * on the target's next request rather than at their next sign-in.
+ *
+ * The cost is one primary-key lookup per refresh. That is deliberate — it is
+ * the same order as the existing ensureSuperAdminAccess read, and a cached
+ * grant would reintroduce exactly the staleness this design exists to avoid.
+ *
+ * Escalation only: this can grant adult viewing and nothing else. It never
+ * touches creation, administration, or any Discord-derived capability.
+ */
+async function withAdultAccessOverride(pool: DatabasePool, userId: string, access: SessionAccess): Promise<SessionAccess> {
+  let granted = false;
+  try {
+    const result = await pool.query('SELECT adult_access_override FROM users WHERE id = $1', [userId]);
+    granted = result?.rows?.[0]?.adult_access_override === true;
+  } catch (error) {
+    // This runs on the access path of every authenticated request, so a failed
+    // lookup must not throw its way into a 500 for the whole application.
+    // Falling back to the Discord evaluation leaves the user exactly as
+    // visible as they were before overrides existed, and it fails CLOSED: a
+    // grant is never inferred from an error.
+    console.warn('Adult access override lookup failed; continuing with Discord-derived access.', error);
+  }
+  if (!granted) return access;
+  return { ...access, canViewAdult: true, adultAccessOverride: true };
+}
 
 function publicProfile(row: Record<string, unknown>, access: { isGuildMember: boolean; canViewAdult: boolean; canCreate: boolean; canAdmin: boolean }) {
   const isSuperAdmin = String(row.discord_id ?? '') === SUPER_ADMIN_DISCORD_ID;
@@ -85,7 +121,7 @@ export async function ensureSuperAdminAccess(request: Request, pool: DatabasePoo
   return true;
 }
 
-export async function refreshSessionAccess(request: Request, config: AppConfig, settingsStore: SettingsStore, force = false) {
+async function refreshDiscordSessionAccess(request: Request, config: AppConfig, settingsStore: SettingsStore, force = false) {
   if (!request.session.userId) return;
   if (request.session.discordUserId === SUPER_ADMIN_DISCORD_ID) {
     request.session.access = ownerAccess();
@@ -133,12 +169,35 @@ export async function refreshSessionAccess(request: Request, config: AppConfig, 
   }
 }
 
+/**
+ * Refresh access from Discord, then layer the per-account adult grant on top.
+ *
+ * The override is applied in this wrapper rather than inside
+ * refreshDiscordSessionAccess so that it covers EVERY exit path: the
+ * super-admin short-circuit, the missing-token return, the still-fresh cache
+ * return, the expired-token denial, and the membership/stale-grace retention
+ * branches. Folding it into the inner function would mean auditing each of
+ * those returns by hand, and a single forgotten one would let the grant
+ * silently lapse for exactly the users it was granted to.
+ *
+ * `pool` is optional only for the settings-store-only `requireAdmin` overload,
+ * which has no database to read a grant from. Production mounts always supply
+ * it; without it the override is simply not applied.
+ */
+export async function refreshSessionAccess(request: Request, config: AppConfig, settingsStore: SettingsStore, pool?: DatabasePool, force = false) {
+  if (!request.session.userId) return;
+  await refreshDiscordSessionAccess(request, config, settingsStore, force);
+  if (pool && request.session.access) {
+    request.session.access = await withAdultAccessOverride(pool, request.session.userId, request.session.access);
+  }
+}
+
 export function requireCreator(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
   return async (request: Request, response: Response, next: NextFunction) => {
     try {
       if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to create in Orbis.' });
       const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
-      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, true);
+      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, pool, true);
       const access = request.session.access ?? { ...noAccess, checkedAt: Date.now() };
       // Super-admin retains creation for imports, restores and recovery.
       // Everyone else must actually hold a configured creator (Worldbuilding) role.
@@ -224,7 +283,14 @@ export function createAuthRouter(config: AppConfig, pool: DatabasePool, settings
       request.session.discordAccessToken = token.access_token;
       request.session.discordTokenExpiresAt = Date.now() + token.expires_in * 1000;
       const checkedAt = Date.now();
-      request.session.access = discordUser.id === SUPER_ADMIN_DISCORD_ID ? ownerAccess() : { ...evaluatedAccess, checkedAt, verifiedAt: checkedAt };
+      const signedInAccess = discordUser.id === SUPER_ADMIN_DISCORD_ID ? ownerAccess() : { ...evaluatedAccess, checkedAt, verifiedAt: checkedAt };
+      // The INSERT above deliberately omits adult_access_override, so ON
+      // CONFLICT preserves an existing grant, and RETURNING * hands it back
+      // without a second query. A returning user keeps their override across
+      // sign-in instead of losing it until the next refresh.
+      request.session.access = result.rows[0].adult_access_override === true
+        ? { ...signedInAccess, canViewAdult: true, adultAccessOverride: true }
+        : signedInAccess;
       request.session.save((error) => error ? next(error) : response.redirect(returnTo));
     } catch (error) {
       next(error);
@@ -238,7 +304,7 @@ export function createAuthRouter(config: AppConfig, pool: DatabasePool, settings
       if (!result.rowCount) return response.json({ user: null });
       request.session.discordUserId = String(result.rows[0].discord_id ?? '');
       const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
-      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore);
+      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, pool);
       const access = request.session.access ?? noAccess;
       response.json({ user: publicProfile(result.rows[0], access) });
     } catch (error) {

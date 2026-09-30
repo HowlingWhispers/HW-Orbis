@@ -392,7 +392,7 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
       }
       const body = parsedBody.data;
       const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
-      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore);
+      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, pool);
 
       let asset: AssetContext | undefined;
       if (body.assetId) {
@@ -668,7 +668,7 @@ export function createCodaAssistantRouter(config: AppConfig, pool: DatabasePool,
     try {
       if (!request.session.userId) return response.status(401).json({ error: 'Sign in to use Coda Assistant.' });
       const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
-      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore);
+      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, pool);
       const log = (entry: Omit<Parameters<typeof recordCodaLog>[2], 'requestId' | 'channel' | 'durationMs'>) =>
         recordCodaLog(pool, request.session.userId!, { requestId, channel: 'execute', durationMs: Date.now() - startedAt, ...entry });
 

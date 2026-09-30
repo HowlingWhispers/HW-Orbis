@@ -67,6 +67,7 @@ describe('world child canonical service', () => {
         }
         if (sql.includes("document->>'worldEntryId' = $1")) return { rows: parents, rowCount: parents.length };
         if (sql.startsWith('INSERT INTO library_assets')) inserts += 1;
+        if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
         throw new Error(`Unexpected query: ${sql}`);
       },
     } as unknown as DatabasePool;
@@ -101,6 +102,7 @@ describe('world child canonical service', () => {
         if (sql.startsWith('SELECT document FROM library_assets')) return { rows: [{ document: {} }], rowCount: 1 };
         if (sql.startsWith('UPDATE library_assets SET document')) return { rows: [], rowCount: 1 };
         if (sql.includes('SET dependency_count')) return { rows: [], rowCount: 1 };
+        if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
         throw new Error(`Unexpected query: ${sql}`);
       },
     } as unknown as DatabasePool;
@@ -127,6 +129,7 @@ describe('world child canonical service', () => {
         if (sql.includes("document->>'worldEntryId' = $1")) return { rows: [parent], rowCount: 1 };
         if (sql.includes("origin_world_id = $1 AND type = 'place'")) return { rows: [child, parent], rowCount: 2 };
         if (sql.startsWith('UPDATE library_assets SET')) writes += 1;
+        if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
         throw new Error(`Unexpected query: ${sql}`);
       },
     } as unknown as DatabasePool;
@@ -143,6 +146,7 @@ function routeApp(world: Record<string, unknown>, children: Record<string, unkno
     query: async (sql: string) => {
       if (sql.startsWith('SELECT id, type, creator_user_id, content_rating, document')) return { rows: [world], rowCount: 1 };
       if (sql.includes('WHERE origin_world_id = $1')) return { rows: children, rowCount: children.length };
+      if (sql.startsWith('SELECT adult_access_override FROM users')) return { rows: [{ adult_access_override: false }], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     },
   } as unknown as DatabasePool;

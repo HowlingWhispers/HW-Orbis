@@ -3,7 +3,7 @@ import { ZodError, z } from 'zod';
 import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import type { AdminViewPreferenceStore } from './admin-view-preferences.js';
-import { ensureSuperAdminAccess, refreshSessionAccess } from './auth.js';
+import { ensureSuperAdminAccess, refreshSessionAccess, SUPER_ADMIN_DISCORD_ID } from './auth.js';
 import { listCodaLogs, listCodaLogUsers } from './coda-log.js';
 import { adminSettingsSchema, SettingsLockoutError, type SettingsStore } from './settings.js';
 import {
@@ -32,7 +32,7 @@ export function requireAdmin(config: AppConfig, poolOrSettingsStore: DatabasePoo
     try {
       if (!request.session.userId) return response.status(401).json({ error: 'Sign in with Discord to administer Orbis.' });
       const isSuperAdmin = pool ? await ensureSuperAdminAccess(request, pool) : false;
-      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, true);
+      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, pool, true);
       if (!request.session.access?.canAdmin) return response.status(403).json({ error: 'Orbis administrator access is required.' });
       next();
     } catch (error) {
@@ -110,6 +110,90 @@ export function createAdminRouter(
       const requested = typeof request.query.limit === 'string' ? Number(request.query.limit) : 30;
       response.json({ items: await settingsStore.getAudit(Number.isFinite(requested) ? requested : 30) });
     } catch (error) { next(error); }
+  });
+
+  /**
+   * Per-account adult access grants.
+   *
+   * Super-admin only, and not merely because requireAdmin passed. Granting
+   * adult visibility bypasses the Discord Adult Access role that every other
+   * account is bound by, so the ability to hand out that bypass is a recovery
+   * capability, not an administrative one. A holder of the Orbis administrator
+   * role is explicitly told that administration does not grant adult access,
+   * so letting them self-serve one here would contradict the panel's own rule.
+   */
+  const requireSuperAdmin = async (request: Request, response: Response) => {
+    const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
+    if (!isSuperAdmin) {
+      response.status(403).json({ error: 'Only the Orbis super-administrator can grant adult access overrides.' });
+      return false;
+    }
+    return true;
+  };
+
+  router.get('/adult-overrides', async (request, response, next) => {
+    try {
+      if (!await requireSuperAdmin(request, response)) return;
+      const query = typeof request.query.query === 'string' ? request.query.query.trim() : '';
+      if (query) {
+        // Candidate lookup for granting. Bounded and partial-match only: this
+        // returns enough to pick an account, never the whole user table.
+        const matches = await pool.query(
+          `SELECT id, display_name, discord_username, adult_access_override, updated_at, NULL::jsonb AS history
+             FROM users
+            WHERE display_name ILIKE $1 OR discord_username ILIKE $1
+            ORDER BY display_name
+            LIMIT 25`,
+          [`%${query}%`],
+        );
+        return response.json({ superAdmin: null, accounts: matches.rows });
+      }
+      const granted = await pool.query(
+        `SELECT u.id, u.display_name, u.discord_username, u.adult_access_override, u.updated_at,
+                (SELECT json_agg(json_build_object(
+                          'granted', a.granted,
+                          'changedAt', a.changed_at,
+                          'changedBy', a.changed_by_user_id,
+                          'note', a.note
+                        ) ORDER BY a.changed_at DESC)
+                   FROM adult_access_override_audit a WHERE a.target_user_id = u.id) AS history
+           FROM users u
+          WHERE u.adult_access_override
+          ORDER BY u.display_name`,
+      );
+      response.json({
+        superAdmin: {
+          discordId: SUPER_ADMIN_DISCORD_ID,
+          note: 'The super-administrator always has adult access via ownerAccess() in server/auth.ts. This is a code-level constant, not a revocable grant, and it is listed here so the mechanism is visible rather than hidden in the source.',
+        },
+        accounts: granted.rows,
+      });
+    } catch (error) { next(error); }
+  });
+
+  router.patch('/adult-overrides/:userId', async (request, response, next) => {
+    try {
+      if (!await requireSuperAdmin(request, response)) return;
+      const userId = z.string().uuid().parse(request.params.userId);
+      const body = z.object({ granted: z.boolean(), note: z.string().max(240).optional() }).strict().parse(request.body ?? {});
+
+      const updated = await pool.query(
+        `UPDATE users SET adult_access_override = $2, updated_at = now()
+          WHERE id = $1 RETURNING id, display_name, adult_access_override`,
+        [userId, body.granted],
+      );
+      if (!updated.rowCount) return response.status(404).json({ error: 'No such Orbis account.' });
+
+      await pool.query(
+        `INSERT INTO adult_access_override_audit (target_user_id, granted, changed_by_user_id, note)
+         VALUES ($1, $2, $3, $4)`,
+        [userId, body.granted, request.session.userId ?? null, body.note?.trim() || null],
+      );
+      response.json({ account: updated.rows[0] });
+    } catch (error) {
+      if (error instanceof ZodError) return response.status(400).json({ error: 'That is not a valid adult access override.', details: error.flatten() });
+      next(error);
+    }
   });
 
   /**

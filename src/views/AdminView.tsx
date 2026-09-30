@@ -1,7 +1,7 @@
 import { Activity, BookOpen, Clock, Database, Eye, EyeOff, History, KeyRound, MessageCircle, MessageSquareText, Pencil, Power, RefreshCw, Save, Scissors, ScrollText, Search, Send, ServerCog, Settings2, ShieldCheck, Trash2, User, UsersRound, Wifi } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  adminApi, type AdminAuditEntry, type AdminCodaChannel, type AdminCodaMember, type AdminCodaMessage,
+  adminApi, type AdminAdultOverrideAccount, type AdminAuditEntry, type AdminCodaChannel, type AdminCodaMember, type AdminCodaMessage,
   type AdminCodaLog, type AdminCodaLogUser, type AdminCodaScheduled, type AdminCodaStatus, type AdminCodaTemplate, type AdminOverview,
   type AdminSettings, type AdminViewPreferences,
 } from '../admin/api';
@@ -167,7 +167,100 @@ function AdminField({ label, hint, source, children }: { label: string; hint?: s
 }
 
 function AccessPanel({ settings }: { settings: AdminSettings }) {
-  return <div className="admin-stack"><section className="admin-section"><div className="admin-section__title"><UsersRound /><div><h2>Role capability map</h2><p>Capabilities remain separate. Staff roles never become adult roles automatically.</p></div></div><div className="capability-grid"><Capability title="Orbis administration" ids={settings.adminRoleIds} extra={settings.bootstrapAdminRoleIds} note="Editable admin roles plus protected recovery roles." /><Capability title="Adult viewing" ids={settings.adultRoleIds} note="Only these roles reveal adult-rated records." /><Capability title="Creation access" ids={settings.effectiveCreatorRoleIds} note={settings.creatorUsesAdultFallback ? 'Creator access currently falls back to Adult Access roles.' : 'Creators must also hold an Adult Access role.'} /></div></section></div>;
+  return <div className="admin-stack"><section className="admin-section"><div className="admin-section__title"><UsersRound /><div><h2>Role capability map</h2><p>Capabilities remain separate. Staff roles never become adult roles automatically.</p></div></div><div className="capability-grid"><Capability title="Orbis administration" ids={settings.adminRoleIds} extra={settings.bootstrapAdminRoleIds} note="Editable admin roles plus protected recovery roles." /><Capability title="Adult viewing" ids={settings.adultRoleIds} note="Only these roles reveal adult-rated records." /><Capability title="Creation access" ids={settings.effectiveCreatorRoleIds} note={settings.creatorUsesAdultFallback ? 'Creator access currently falls back to Adult Access roles.' : 'Creators must also hold an Adult Access role.'} /></div></section><AdultOverridePanel /></div>;
+}
+
+/**
+ * Per-account adult access grants.
+ *
+ * Loaded independently of the main control room rather than through its
+ * Promise.allSettled batch: the endpoint is super-admin only, so folding it in
+ * would raise a permission notice over the entire panel for every ordinary
+ * Orbis administrator, who is correctly told here that administration does not
+ * grant adult access.
+ */
+function AdultOverridePanel() {
+  const [accounts, setAccounts] = useState<AdminAdultOverrideAccount[]>([]);
+  const [superAdmin, setSuperAdmin] = useState<{ discordId: string; note: string } | null>(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<AdminAdultOverrideAccount[] | null>(null);
+  const [note, setNote] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState('');
+  const [available, setAvailable] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await adminApi.adultOverrides();
+      setAccounts(data.accounts);
+      setSuperAdmin(data.superAdmin);
+      setAvailable(true);
+    } catch (error) {
+      setMessage(describeLoadFailure('Adult access overrides', error));
+      setAvailable(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const search = async () => {
+    if (!query.trim()) { setResults(null); return; }
+    setBusy('search');
+    try {
+      setResults((await adminApi.adultOverrides(query.trim())).accounts);
+      setMessage('');
+    } catch (error) {
+      setMessage(describeLoadFailure('Account search', error));
+    } finally { setBusy(''); }
+  };
+
+  const setGrant = async (account: AdminAdultOverrideAccount, granted: boolean) => {
+    setBusy(account.id);
+    try {
+      await adminApi.setAdultOverride(account.id, granted, note.trim() || undefined);
+      setNote('');
+      setResults(null);
+      setQuery('');
+      setMessage(`${granted ? 'Granted' : 'Revoked'} adult access for ${account.display_name}.`);
+      await load();
+    } catch (error) {
+      setMessage(describeLoadFailure('Adult access override', error));
+    } finally { setBusy(''); }
+  };
+
+  if (!available) {
+    return <section className="admin-section"><div className="admin-section__title"><ShieldCheck /><div><h2>Adult access overrides</h2></div></div><p className="admin-notice" role="status">{message}</p></section>;
+  }
+
+  return <section className="admin-section"><div className="admin-section__title"><ShieldCheck /><div><h2>Adult access overrides</h2><p>Super-administrator only. Grants adult viewing to one named account without touching Discord roles.</p></div></div>
+    {superAdmin && <div className="policy-notice">Super-administrator {superAdmin.discordId} always has adult access. {superAdmin.note}</div>}
+    <p className="admin-resolution">A grant is an escalation, not a relaxation: it can only turn adult viewing on, never revoke a Discord role, and it never affects creation or administration. Revoking takes effect on that account's next request, not at their next sign-in.</p>
+    {accounts.length === 0
+      ? <p className="admin-resolution">No account currently holds an adult access override.</p>
+      : <ul className="admin-list">{accounts.map((account) => <li key={account.id} className="admin-list__row">
+          <div><strong>{account.display_name}</strong><span className="admin-resolution">@{account.discord_username} · granted {new Date(account.updated_at).toLocaleString()}</span>
+            {account.history?.length ? <span className="admin-resolution">Last change: {account.history[0].granted ? 'granted' : 'revoked'} by {account.history[0].changedBy ?? 'unknown'} on {new Date(account.history[0].changedAt).toLocaleString()}{account.history[0].note ? ` — ${account.history[0].note}` : ''}</span> : null}
+          </div>
+          <button className="button button--ghost" disabled={busy === account.id} onClick={() => void setGrant(account, false)}><Trash2 size={16} /> Revoke</button>
+        </li>)}</ul>}
+    <div className="admin-form">
+      <AdminField label="Find an account to grant adult access" source="database" hint="Search by display name or Discord username. Grants are written to the audit log.">
+        <div className="admin-form__footer">
+          <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void search(); } }} placeholder="Search accounts" />
+          <button className="button button--primary" disabled={busy === 'search'} onClick={() => void search()}><Search size={16} /> Search</button>
+        </div>
+      </AdminField>
+      {results && results.length === 0 && <p className="admin-resolution">No account matched that search.</p>}
+      {results && results.length > 0 && <ul className="admin-list">{results.map((account) => <li key={account.id} className="admin-list__row">
+        <div><strong>{account.display_name}</strong><span className="admin-resolution">@{account.discord_username}</span></div>
+        {account.adult_access_override
+          ? <button className="button button--ghost" disabled={busy === account.id} onClick={() => void setGrant(account, false)}><Trash2 size={16} /> Revoke</button>
+          : <button className="button button--primary" disabled={busy === account.id} onClick={() => void setGrant(account, true)}><KeyRound size={16} /> Grant adult access</button>}
+      </li>)}</ul>}
+      <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional note for the audit log" maxLength={240} />
+    </div>
+    {message && <p className="admin-notice" role="status">{message}</p>}
+  </section>;
 }
 
 function Capability({ title, ids, extra = [], note }: { title: string; ids: string[]; extra?: string[]; note: string }) {
