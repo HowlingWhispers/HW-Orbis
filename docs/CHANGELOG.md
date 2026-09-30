@@ -21,6 +21,126 @@ rendered to users. The user-facing changelog is curated separately in
 
 ---
 
+## 2026-09-30 — Coda grounding, Discord reconciliation, provider diagnostics, Praxis teaser
+
+**Public changelog version.** `2026.09.30.2`, titled "A sharper Coda, a tidier
+community, and a glimpse of Praxis". The public entry deliberately describes
+member-visible outcomes only. Operational details below remain internal.
+
+### Coda grounding and action truthfulness
+
+The Coda Discord bridge and project-insight layer were tightened around a simple
+rule: recent conversation is context, not proof of current system state. Project
+questions now trigger grounding for more support-shaped topics, including saves,
+playthroughs, disabled controls, adult access, mobile behaviour, invite links and
+current feature availability. This closes a recurring failure mode where a
+recent Discord statement could be repeated as if it described the current code.
+
+Coda's member-safe project knowledge now explicitly describes the existing
+private Speculus Save Archive as supporting multiple archived saves while keeping
+a richer live playthrough dashboard as a separate future idea. The prompt also
+separates ordinary conversation from real action paths: Coda must not claim that
+something was filed, checked, sent, linked, invited or passed along unless a
+runtime path actually confirms the action. `/coda bug` and `/coda idea` remain
+the concrete submission paths.
+
+The same prompt pass clarified the boundary between lawful private adult
+roleplay and real-world illegal activity, and demoted Discord transcript context
+from authoritative evidence. `friendlyCopy()` was rewritten so provider errors
+preserve uncertainty instead of using one failed request to diagnose an entire
+account.
+
+### Coda visuals and selective auto-illustration
+
+Coda image generation now starts from a prose-authored canonical visual identity
+rather than a fixed img2img pose anchor. Composition variants and anti-repeat
+guidance discourage the recurring front-facing, both-paws-raised pose while
+keeping the same character identity.
+
+HW-Coda also gained a deliberately narrow spontaneous-illustration path for
+strong visual reaction beats. The first rollout is owner-only, probabilistic and
+cooldown-limited, and excludes technical, credential, moderation, adult, illegal
+activity and other sensitive topics. Image failure is non-fatal and never turns
+a successful text response into an error.
+
+### Provider diagnostics without conversation logging
+
+HW-Orbis `9652c83` makes previously opaque Coda provider failures diagnosable.
+Empty completions now log structural facts such as model, top-level payload keys
+and choices length, and the bridge records non-retryable and exhausted outcomes.
+The non-OK provider branch logs status and model only. Raw provider response text
+is deliberately excluded because an upstream body can echo prompt or member
+conversation content.
+
+This change was promoted from a long-lived server-local debug patch into tracked
+source. The production checkout was reconciled to `main`, rebuilt, restarted and
+left clean, ending the repeated stash/pull/pop cycle around the bridge file.
+
+### Discord layout reconciliation
+
+The declarative HW-Coda layout had drifted from live Discord in both directions.
+The obsolete Archives category had already been intentionally removed live, while
+permanent development/team voice rooms existed live but were missing from the
+layout. The source was corrected rather than blindly recreating old structure:
+
+- HW-Coda `0bc87db4` narrows the archive rule to preserve useful history, canon,
+  development and recovery material without preserving obsolete Discord
+  scaffolding for its own sake.
+- HW-Coda `0c22266` removes the retired Archives category and archive index from
+  the declarative layout.
+- HW-Coda `cc096e4` adds the existing Devtalk and Team Chat voice rooms to the
+  maintained layout so audit and sync can see them.
+- The declared Lightyears Apart channel was kept as intentional structure and
+  was created by a controlled server sync under Gaming / Side Projects.
+
+The sync took its normal pre-write guild snapshot. It did not delete undeclared
+channels and did not touch the undeclared adult category or the separately
+restricted moderation channel.
+
+Two role drifts remained after sync even though their desired values were already
+correct in `server-layout.json`: Administrator colour and Member hoist. Root
+cause was Discord role hierarchy, not missing Administrator permission. Every
+managed target role was above the Coda bot role, making Discord.js
+`role.editable` false; `sync()` therefore silently skipped the role edits. The
+owner corrected those two presentation properties manually. A final read-only
+`/server-audit` returned zero differences: live Discord now matches the reviewed
+Coda layout.
+
+**Known Coda manager limitations surfaced by this pass.** `audit()` is currently
+one-directional for channels: it reports declared items that are missing or
+mismatched but does not report undeclared extras. It also does not verify
+permission-overwrite drift on sensitive channels. `sync()` silently skips
+existing roles when `role.editable` is false rather than reporting a blocked
+change. Future work should add bidirectional channel auditing, permission-drift
+checks and explicit `blocked: role_hierarchy` reporting or preflight output.
+
+### Repository/deployment workflow rule
+
+GitHub `main` is the canonical source for tracked code. Production checkouts are
+expected to be clean consumers of `main`, not hidden secondary development
+branches. Before new code work, intentional tracked server-local edits are
+reviewed and either committed/pushed or deliberately removed. Secrets, real
+`.env` files, runtime data, logs, backups and build output remain local and out
+of Git.
+
+This rule is operational rather than user-visible, but it materially reduces the
+risk of editing stale source while production is running untracked behaviour.
+
+### Praxis teaser
+
+The public changelog now hints at **Praxis** without presenting it as shipped.
+Praxis remains a separate experimental player-facing project, intentionally kept
+apart from Speculus and Fabula while it explores the seam between freeform
+narrative and authoritative game state. The changelog wording is explicitly a
+teaser, not a release announcement.
+
+No database migration and no new environment variable were introduced by this
+pass. Orbis server-side bridge changes require rebuild plus `orbis.service`
+restart; Coda layout/configuration changes require a Coda rebuild/restart before
+the running process sees the new layout.
+
+---
+
 ## 2026-09-28 — Coda consent scoping, account page sections, light mode
 
 **No public changelog entry.** This work is deliberately absent from
@@ -138,7 +258,7 @@ characters appears in the published entry copy.
 No migration, no new environment variable, and no deployment ordering change
 for either commit.
 
-)
+---
 
 ## 2026-09-28 — Changelog system: permanent page plus account-backed notice
 
