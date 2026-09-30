@@ -68,6 +68,10 @@ export interface SimulationLaunchSetup {
   direction: string;
 }
 
+export interface SimulationLaunchOptions {
+  resumeSaveId?: string;
+}
+
 export interface SimulationPersona {
   id: string;
   name: string;
@@ -103,7 +107,7 @@ export interface LibraryApi {
   transferWorldOwnership(id: string, input: { targetUserId: string; confirmName: string }): Promise<OwnershipTransferResult>;
   listSimulationPersonas(signal?: AbortSignal): Promise<SimulationPersona[]>;
   listSimulationPlaces(id: string, signal?: AbortSignal): Promise<SimulationPlace[]>;
-  simulateAsset(id: string, personaId: string, startingPlaceId?: string): Promise<{ launchUrl: string; expiresAt: number }>;
+  simulateAsset(id: string, personaId: string, startingPlaceId?: string, options?: SimulationLaunchOptions): Promise<{ launchUrl: string; expiresAt: number }>;
   listAssetImages(assetId: string, signal?: AbortSignal): Promise<AssetImage[]>;
   uploadAssetImage(assetId: string, input: AssetImageUploadInput): Promise<AssetImage>;
   addExternalAssetImage(assetId: string, input: AssetImageExternalInput): Promise<AssetImage>;
