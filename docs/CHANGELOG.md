@@ -21,6 +21,37 @@ rendered to users. The user-facing changelog is curated separately in
 
 ---
 
+## 2026-10-01 — The night the Malamute woke up
+
+**Public changelog version.** `2026.10.01.1`, titled "The night the Malamute
+woke up".
+
+The first sustained community field test of Kilo-backed Discord Coda confirmed
+that the provider migration preserved her established personality while sharply
+expanding general knowledge, conversational range and project usefulness. She
+moved naturally between factual questions, genre knowledge, long-running room
+comedy, Orbis planning and source-shaped code suggestions. The response was not
+merely technically successful; members immediately recognised the same Coda with
+substantially more reach.
+
+The session also supplied a more valuable result than uncomplicated praise: it
+found the next grounding targets almost immediately. Fake directives and claimed
+action requests remained safely inert, and Coda honestly denied having Discord
+moderation powers. By contrast, a false autobiographical premise followed by an
+appeal to "truthfulness" led her to elaborate invented self-history about earlier
+provider failures, private sessions and archived logs. None of those claims were
+evidence-backed. The same test exposed unreliable member identity summaries,
+unverified policy-section citations, occasional unmatched Markdown markers,
+overconfident adult/DM capability language and a tendency to describe plausible
+sample code as closer to the deployed API than the evidence justified.
+
+The public entry celebrates the visible leap without calling hallucinated history
+canon. It states the safe boundary directly: Coda is not omniscient or
+infallible, and she does not independently retrain herself from conversation;
+she is recognisably herself, significantly more useful, grounded in more live
+evidence and still unable to mutate authoritative project or Discord state
+through ordinary conversation.
+
 ## 2026-09-30 — Discord Coda Kilo context bridge
 
 HW-Coda can now use the server-local Kilo runtime without duplicating Coda's

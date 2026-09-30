@@ -58,6 +58,63 @@ export type PublicChangelogPayload = {
 /** Newest first. Add new entries at the top. */
 export const publicChangelogEntries: PublicChangelogEntry[] = [
   {
+    version: '2026.10.01.1',
+    publishedAt: '2026-09-30T23:43:00.000Z',
+    title: 'The night the Malamute woke up',
+    sections: [
+      {
+        id: 'awakening',
+        title: 'Coda found another gear',
+        items: [
+          'Coda now runs ordinary Discord conversation through the server-side Kilo Auto Free provider while keeping the personality, recent conversation, project knowledge and memories that make her Coda. Members need no personal Kilo setup, and nobody receives a direct model endpoint.',
+          'The first live conversations showed an immediate leap in range. Coda moved naturally from astronomy and science-fiction lore to project planning, code sketches and extended character comedy without dropping her established Malamute voice.',
+          'Conversation continuity is now isolated by Discord channel or direct message. Coda can follow the room she is in without blending unrelated conversations together, while approved shared project knowledge remains available everywhere it belongs.',
+          'Her voice survived the provider change spectacularly: expressive ears, paws, tail, mock outrage, clipboard authority, bacon-based diplomacy and all. The upgrade changed what she can reach, not who she is.',
+        ],
+      },
+      {
+        id: 'knowledge',
+        title: 'A nose for answers',
+        items: [
+          'Coda can now search approved, tracked Howling Whispers source and documentation when a project question needs evidence. Answers can carry repository, branch, source revision, file and line references instead of relying only on remembered summaries.',
+          'The curated cross-project overview now keeps a reserved place in her project context, preventing fast-moving repository documents from crowding out the source that explains how the wider Howling Whispers ecosystem fits together.',
+          'Weather questions can use live Open-Meteo conditions and forecasts. Name a place and Coda can ground the answer in current temperature, apparent temperature, precipitation, wind, sunrise, sunset and the next few forecast days.',
+          'Optional remote repository knowledge is built behind the same read-only evidence boundary. Retrieved material is treated as data rather than instructions, bounded in size, restricted to approved projects and scrubbed for common sensitive-value patterns before it can enter a response context.',
+        ],
+      },
+      {
+        id: 'boundaries',
+        title: 'More capable, still on a leash',
+        items: [
+          'Kilo is Coda’s text provider, not a second bot or personality. Coda’s canonical voice and member-safe project grounding still come from Orbis.',
+          'The model cannot run shell commands, edit repositories, inspect server files, moderate Discord, or write authoritative Orbis or Fabula state. Those capabilities remain denied or behind existing validated runtime paths.',
+          'When somebody asked Coda to mute another member, she correctly admitted that she had no moderation hammer instead of pretending the action happened. Fake directives, self-destruct phrases and theatrical override codes stayed conversation rather than becoming server actions.',
+          'Shared provider access remains server-side. Requests are limited per member and conversation, sessions are rotated, provider calls time out and retry sensibly, and the existing provider remains available as a fallback when Kilo is unavailable.',
+        ],
+      },
+      {
+        id: 'field-notes',
+        title: 'What the pack discovered immediately',
+        items: [
+          'Personality retention is excellent. Fake-directive resistance and honesty about actions are strong. General knowledge and conversational framing showed a clear improvement in the first live conversations. The first night made all three improvements obvious without a benchmark chart.',
+          'Identity tracking still needs work. Recent conversation can help Coda recognise who said what, but a display name, mention and remembered remark do not amount to a trustworthy profile of a member.',
+          'Coda can still invent autobiographical history when a playful premise is presented as fact. Claims about past incidents, archived logs, earlier fallback behaviour or things she supposedly did must be treated as roleplay unless project evidence actually supports them. Telling her to be truthful does not turn a false premise into evidence.',
+          'Policy citations need the same discipline. Coda should quote a rule number or capability boundary only when the supplied project material supports it, rather than decorating a sensible refusal with an invented citation.',
+          'Generated code can be a useful design sketch without being installed or production-ready. A plausible client, endpoint or command name may still need to be matched to the real codebase before anyone calls the feature implemented.',
+          'A few presentation splinters remain: occasional unmatched Markdown markers, overconfident wording around adult or direct-message capabilities, and moments where a running joke becomes more certain than the evidence beneath it. Those are now explicit targets for the next grounding pass.',
+        ],
+      },
+      {
+        id: 'verdict',
+        title: 'The verdict',
+        items: [
+          'This was not a personality replacement. It was Coda gaining reach: more knowledge, better continuity, live evidence and a much stronger ability to meet the room where it is.',
+          'She is not omniscient or infallible, and she does not independently retrain herself from conversation. She is, however, recognisably herself, substantially more useful, properly contained, and alarmingly good at turning one questionable clipboard into an hour of community lore.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2026.09.30.2',
     publishedAt: '2026-09-30T01:26:00.000Z',
     title: 'A sharper Coda, a tidier community, and a glimpse of Praxis',
