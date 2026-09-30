@@ -100,7 +100,7 @@ export function AssetDetailView() {
     setPersonaPickerOpen(true);
   };
 
-  const simulate = async (personaId: string, startingPlaceId: string) => {
+  const simulate = async (personaId: string, startingPlaceId?: string) => {
     setLaunching(true); setLaunchError('');
     try {
       const launch = await libraryApi.simulateAsset(asset.id, personaId, startingPlaceId);

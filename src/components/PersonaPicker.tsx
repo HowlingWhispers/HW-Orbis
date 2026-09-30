@@ -10,7 +10,7 @@ interface PersonaPickerProps {
   busy: boolean;
   error?: string;
   onCancel: () => void;
-  onSelect: (personaId: string, startingPlaceId: string) => void;
+  onSelect: (personaId: string, startingPlaceId?: string) => void;
 }
 
 const toneOptions: Array<{ value: SimulationTone; label: string; help: string }> = [
@@ -46,6 +46,12 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
         setPersonas(personaItems);
         setPlaces(placeItems);
         if (personaItems.length === 1) setSelectedPersonaId(personaItems[0].id);
+        // A world with zero Places is a valid launch: clear any Place selected
+        // for a previous target rather than carrying a stale anchor across.
+        if (placeItems.length === 0) {
+          setSelectedPlaceId('');
+          return;
+        }
         const preferredPlace = placeItems.find((place) => place.id === initialPlaceId)
           ?? placeItems.find((place) => place.isTarget)
           ?? (placeItems.length === 1 ? placeItems[0] : undefined);
@@ -68,7 +74,11 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
   }, [selectedPersona, tone]);
 
   const selectedTone = toneOptions.find((option) => option.value === tone) ?? toneOptions[0];
-  const canStart = !busy && !loading && Boolean(selectedPersonaId) && Boolean(selectedPlaceId);
+  // A canonical starting Place is only required when the world actually has
+  // Places. With none defined, the launch proceeds without a location anchor
+  // rather than substituting an unrelated one.
+  const placeRequired = places.length > 0;
+  const canStart = !busy && !loading && Boolean(selectedPersonaId) && (!placeRequired || Boolean(selectedPlaceId));
 
   const start = () => {
     if (!canStart) return;
@@ -77,7 +87,7 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
       focusTags: parseFocusTags(focusTags),
       direction: direction.trim(),
     });
-    onSelect(selectedPersonaId, selectedPlaceId);
+    onSelect(selectedPersonaId, placeRequired ? selectedPlaceId : undefined);
   };
 
   return <section className="world-delete-review" role="dialog" aria-modal="true" aria-labelledby={titleId}>
@@ -85,7 +95,9 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
       <div><span className="eyebrow">Set up simulation</span><h2 id={titleId}>Simulate {targetName}</h2></div>
       <button type="button" className="button button--secondary" disabled={busy} onClick={onCancel}>Cancel</button>
     </header>
-    <p>Choose the Persona, canonical starting Place, and launch-only tone for this Speculus session. Tone, tags and direction steer the simulation without changing Orbis canon.</p>
+    <p>{placeRequired
+      ? 'Choose the Persona, canonical starting Place, and launch-only tone for this Speculus session. Tone, tags and direction steer the simulation without changing Orbis canon.'
+      : 'Choose the Persona and launch-only tone for this Speculus session. Tone, tags and direction steer the simulation without changing Orbis canon.'}</p>
     {loading && <p role="status">Loading simulation choices...</p>}
 
     {!loading && personas.length === 0 && !loadError && <p role="status">No Personas are available. Create one or ask its owner to share it for use.</p>}
@@ -100,7 +112,7 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
       {selectedPersona?.summary && <small>{selectedPersona.summary}</small>}
     </label>}
 
-    {!loading && places.length === 0 && !loadError && <p role="status">No starting Places are available. Add a Place to this world before starting Speculus.</p>}
+    {!loading && places.length === 0 && !loadError && <p role="status">No starting Place is defined for this world. The simulation will begin without a location anchor.</p>}
     {places.length > 0 && <label className="world-delete-review__confirm">
       <span><strong>Starting Place</strong></span>
       <select aria-label="Starting Place" disabled={busy} value={selectedPlaceId} onChange={(event) => setSelectedPlaceId(event.target.value)}>

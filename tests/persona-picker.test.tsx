@@ -67,6 +67,46 @@ describe('Persona picker', () => {
     expect(screen.getByRole('option', { name: /Adult \/ erotic.*unavailable/ })).toBeDisabled();
   });
 
+  it('lets a world with zero Places launch without a location anchor', async () => {
+    vi.spyOn(libraryApi, 'listSimulationPersonas').mockResolvedValue([
+      { id: 'owned', name: 'Eirvargr', summary: 'A wandering wolf.', owned: true, age: 25, adultToneEligible: true },
+      { id: 'shared', name: 'Mara', summary: 'Shared for use.', owned: false, adultToneEligible: false },
+    ]);
+    vi.spyOn(libraryApi, 'listSimulationPlaces').mockResolvedValue([]);
+    const select = vi.fn();
+    render(<PersonaPicker targetId="world" targetName="Bitterroot" busy={false} onCancel={vi.fn()} onSelect={select} />);
+
+    expect(await screen.findByText('No starting Place is defined for this world. The simulation will begin without a location anchor.')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Starting Place' })).not.toBeInTheDocument();
+
+    const start = screen.getByRole('button', { name: 'Start simulation' });
+    expect(start).toBeDisabled();
+
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Player Persona' }), { target: { value: 'owned' } });
+    expect(start).toBeEnabled();
+    fireEvent.click(start);
+    expect(select).toHaveBeenCalledWith('owned', undefined);
+  });
+
+  it('does not carry a Place forward when a target has none to choose from', async () => {
+    vi.spyOn(libraryApi, 'listSimulationPersonas').mockResolvedValue([
+      { id: 'owned', name: 'Eirvargr', summary: '', owned: true, adultToneEligible: true },
+    ]);
+    const places = vi.spyOn(libraryApi, 'listSimulationPlaces')
+      .mockResolvedValueOnce([{ id: 'hollowmere', name: 'Hollowmere', summary: '', isTarget: true }])
+      .mockResolvedValueOnce([]);
+    const select = vi.fn();
+    const { rerender } = render(<PersonaPicker targetId="world" targetName="Bitterroot" initialPlaceId="hollowmere" busy={false} onCancel={vi.fn()} onSelect={select} />);
+    expect((await screen.findByRole('combobox', { name: 'Starting Place' }))).toHaveValue('hollowmere');
+
+    rerender(<PersonaPicker targetId="other-world" targetName="Untitled World" initialPlaceId="hollowmere" busy={false} onCancel={vi.fn()} onSelect={select} />);
+    await screen.findByText('No starting Place is defined for this world. The simulation will begin without a location anchor.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start simulation' }));
+    expect(places).toHaveBeenCalledTimes(2);
+    expect(select).toHaveBeenCalledWith('owned', undefined);
+  });
+
   it('stages tone, tags and direction as launch-only setup', async () => {
     vi.spyOn(libraryApi, 'listSimulationPersonas').mockResolvedValue([
       { id: 'adult', name: 'Eirvargr', summary: '', owned: true, age: 25, adultToneEligible: true },

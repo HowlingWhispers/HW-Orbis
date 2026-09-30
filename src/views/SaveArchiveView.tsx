@@ -111,7 +111,7 @@ export function SaveArchiveView() {
     }
   };
 
-  const openSource = async (save: ArchivedSave, personaId: string, startingPlaceId: string) => {
+  const openSource = async (save: ArchivedSave, personaId: string, startingPlaceId?: string) => {
     if (save.compatibility !== 'ready' || busy) return;
     setBusy(save.id); setError('');
     try {
