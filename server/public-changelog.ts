@@ -58,6 +58,54 @@ export type PublicChangelogPayload = {
 /** Newest first. Add new entries at the top. */
 export const publicChangelogEntries: PublicChangelogEntry[] = [
   {
+    version: '2026.09.30.2',
+    publishedAt: '2026-09-30T01:26:00.000Z',
+    title: 'A sharper Coda, a tidier community, and a glimpse of Praxis',
+    sections: [
+      {
+        id: 'coda',
+        title: 'Coda',
+        items: [
+          'Coda now recognises a wider range of real support questions as project questions, including saves, current playthroughs, adult controls, mobile behaviour, invite links, disabled options and current feature state.',
+          'Questions about saved simulations are now grounded in what Orbis actually has: multiple private archived Speculus saves are supported, while a richer live playthrough dashboard remains a separate future idea rather than something Coda pretends already exists.',
+          'Recent Discord conversation is treated as conversational context, not as authoritative proof that a feature exists, is enabled, or behaves a certain way right now.',
+          'Coda is stricter about action truthfulness. A conversational reply should no longer turn into "I filed it", "I sent it", "I checked it" or "I passed it along" unless a real action path actually ran and confirmed the result.',
+          'Real submission paths remain available through Coda for bug reports and ideas, so there is now a clearer line between chatting about something and actually recording it.',
+          'Provider failures are worded more carefully. Coda no longer uses a failed request as evidence that an entire account is fine or broken when the failure itself cannot establish that.',
+          'A limited spontaneous-illustration experiment is now running for Coda reactions. It uses cooldowns, visual-action checks and sensitive-topic exclusions so an occasional picture can punctuate a joke without turning every conversation into an image feed.',
+          'Coda artwork keeps a stable canine-beastfolk identity while deliberately varying pose, framing, expression and composition instead of repeatedly falling back to the same front-facing pose.',
+        ],
+      },
+      {
+        id: 'community',
+        title: 'Community and Discord',
+        items: [
+          'The obsolete Archives category has been retired rather than preserved as empty scaffolding.',
+          'The archive rule has been rewritten around the thing that actually matters: preserve useful history, canon, development notes and recovery material, but do not keep obsolete Discord structure merely because it once existed.',
+          'Existing voice spaces used for development and team conversation are now part of the maintained server structure instead of living outside it as invisible extras.',
+          'Lightyears Apart now has its own home under Gaming / Side Projects, alongside the broader EVE Online discussion space.',
+          'The server structure and the maintained Coda layout have been reconciled, removing the quiet drift that had accumulated between what Discord contained and what the project expected.',
+        ],
+      },
+      {
+        id: 'reliability',
+        title: 'Reliability and privacy',
+        items: [
+          'Empty provider completions can now be diagnosed more precisely when they occur, which helps separate an empty answer from a timeout, a rejected request or another upstream failure.',
+          'That diagnostic work deliberately avoids recording raw provider response bodies that could contain or echo private conversation text.',
+          'The deployment workflow has also been tightened so intentional source changes are brought back to the canonical repository instead of surviving only as hidden edits on a running server.',
+        ],
+      },
+      {
+        id: 'praxis',
+        title: 'A small look ahead',
+        items: [
+          'One new name is beginning to appear around the workshop: Praxis. It is an experimental player-facing project being kept separate from Speculus and Fabula while it takes shape, exploring the seam where freeform story starts meeting firmer game state. This is a hint, not a release. More when there is something worth showing.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2026.09.30.1',
     publishedAt: '2026-09-29T23:20:00.000Z',
     title: 'A more grounded Coda with fresher visual reactions',
