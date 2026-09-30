@@ -188,12 +188,16 @@ async function callNovelAi(
       const rawText = await upstream.text().catch(() => '');
       let body: unknown;
       try { body = rawText ? JSON.parse(rawText) : undefined; } catch { body = undefined; }
+      console.error('[coda-discord-bridge] NovelAI non-ok response:', JSON.stringify({ status: upstream.status, model }));
       return { ok: false, kind: 'failure', failure: classifyProviderFailure(upstream.status, body, rawText) };
     }
 
     const payload = await upstream.json().catch(() => undefined);
     const text = extractNovelAiText(payload);
-    if (!text.trim()) return { ok: false, kind: 'failure', failure: { status: 200, failureClass: 'unknown_upstream', reason: 'empty completion' } };
+    if (!text.trim()) {
+      console.error('[coda-discord-bridge] NovelAI empty completion:', JSON.stringify({ model, payloadKeys: Object.keys(payload || {}), choicesLength: Array.isArray((payload as Record<string, unknown> | undefined)?.choices) ? (payload as { choices: unknown[] }).choices.length : 'no choices' }));
+      return { ok: false, kind: 'failure', failure: { status: 200, failureClass: 'unknown_upstream', reason: 'empty completion' } };
+    }
     return { ok: true, text };
   } catch (error) {
     if (controller.signal.aborted) return { ok: false, kind: 'timeout' };
@@ -365,6 +369,7 @@ export function createCodaDiscordBridgeRouter(config: AppConfig, pool: DatabaseP
           const outcome = await runCandidate(candidate);
           if (outcome.kind === 'success') return replyWith(candidate);
           if (outcome.kind === 'timeout' || !isPoolFallbackEligible(outcome.failure.failureClass)) {
+            console.error('[coda-discord-bridge] personal non-retryable failure:', JSON.stringify(outcome));
             const mapped = responseFor(outcome);
             return response.status(mapped.status).json({ code: mapped.code, error: friendlyCopy(outcome) });
           }
@@ -408,6 +413,7 @@ export function createCodaDiscordBridgeRouter(config: AppConfig, pool: DatabaseP
       }
 
       const mapped = responseFor(lastOutcome);
+      console.error('[coda-discord-bridge] lastOutcome:', JSON.stringify(lastOutcome), 'attempted:', attempted);
       return response.status(mapped.status).json({ code: mapped.code, error: friendlyCopy(lastOutcome) });
     } catch (error) {
       next(error);
