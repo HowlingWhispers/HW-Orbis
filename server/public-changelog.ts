@@ -58,6 +58,31 @@ export type PublicChangelogPayload = {
 /** Newest first. Add new entries at the top. */
 export const publicChangelogEntries: PublicChangelogEntry[] = [
   {
+    version: '2026.09.30.1',
+    publishedAt: '2026-09-29T23:20:00.000Z',
+    title: 'A more grounded Coda with fresher visual reactions',
+    sections: [
+      {
+        id: 'coda',
+        title: 'Coda',
+        items: [
+          'Coda now treats recent Discord chat as conversation context instead of proof of current project behaviour, reducing confident guesses about saves, features, account state and other live details.',
+          'Coda now knows that Orbis supports multiple archived Speculus saves and distinguishes that existing archive from the separate idea of a richer current-playthrough dashboard.',
+          'Provider failures now preserve uncertainty instead of automatically claiming that nothing is wrong with an account.',
+          'Coda is stricter about real actions: she should not say that she filed, checked, sent, invited, linked or passed something along unless the actual workflow confirms it.',
+          'Coda image generation now uses a prose-based visual identity with deliberately varied pose, camera and composition guidance instead of repeatedly gravitating toward one reference-image pose.',
+        ],
+      },
+      {
+        id: 'community',
+        title: 'Community',
+        items: [
+          'Community guidance now separates lawful private adult roleplay from real-world illegal activity: private roleplay stays private, while the server and Howling Whispers tools are not for planning, encouraging or bragging about real-world crimes.',
+        ],
+      },
+    ],
+  },
+  {
     version: '2026.09.29.3',
     publishedAt: '2026-09-29T22:20:00.000Z',
     title: 'World portals, steadier Speculus prose, and more useful Coda tools',
