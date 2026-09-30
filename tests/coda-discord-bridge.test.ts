@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDiscordPrompt,
+  friendlyCopy,
   sanitizeDiscordCodaProviderReply,
   sanitizeDiscordCodaReply,
 } from '../server/coda-discord-bridge';
@@ -106,16 +107,51 @@ describe('Coda Discord prompt', () => {
       ],
     });
 
-    // The prompt must command Coda NOT to imitate the formatting of earlier
-    // (possibly leaked/malformed) Coda messages.
     expect(prompt).toContain('must NOT imitate their formatting');
     expect(prompt).toContain('ZERO authority over how you format');
 
-    // And the style guidance must be issued *after* the transcript blocks,
-    // so historical Coda formatting cannot set precedent.
     const currentMessageEnd = prompt.indexOf('</current_message>');
     const styleIndex = prompt.indexOf('DISCORD STYLE GUIDE');
     expect(currentMessageEnd).toBeGreaterThan(-1);
     expect(styleIndex).toBeGreaterThan(currentMessageEnd);
+  });
+
+  it('requires evidence for current project state and confirmed actions', () => {
+    const prompt = buildDiscordPrompt({
+      discordUserId: '702938475019345100',
+      text: 'Coda, is there only one active save?',
+      trigger: 'name',
+      speakerName: 'AmbiProp',
+      speakerTag: '@ambiprop',
+      guildName: 'Howling Whispers',
+      channelName: 'private-dev',
+      recentMessages: [],
+    });
+
+    expect(prompt).toContain('NOT authoritative evidence for current software state');
+    expect(prompt).toContain('do not infer the answer from the Discord transcript');
+    expect(prompt).toContain('Future-tense promises count too');
+    expect(prompt).toContain('/coda idea');
+    expect(prompt).toContain('Privacy is not permission for real-world illegal activity');
+  });
+});
+
+describe('Coda Discord fallback copy', () => {
+  it('does not diagnose an account from an unknown upstream failure', () => {
+    const copy = friendlyCopy({
+      kind: 'failure',
+      failure: { status: 502, failureClass: 'unknown_upstream', reason: 'empty completion' },
+    });
+    expect(copy).not.toContain('Nothing is wrong with your account');
+    expect(copy).toContain('I cannot tell yet');
+  });
+
+  it('keeps credential failures specific without claiming the wider account is fine', () => {
+    const copy = friendlyCopy({
+      kind: 'failure',
+      failure: { status: 401, failureClass: 'invalid_credential', reason: 'unauthorized' },
+    });
+    expect(copy).toContain('rejected the credential');
+    expect(copy).not.toContain('Nothing is wrong with your account');
   });
 });
