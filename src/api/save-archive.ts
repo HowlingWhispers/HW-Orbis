@@ -10,6 +10,8 @@ export interface ArchivedSave {
   sourceRevision: string;
   sourceName: string;
   title: string;
+  personaId: string | null;
+  personaName: string | null;
   characterId: string | null;
   characterName: string | null;
   locationId: string | null;
