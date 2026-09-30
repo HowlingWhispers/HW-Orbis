@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { buildProjectInsight, isProjectInsightQuestion, listProjectInsightSources } from '../server/coda-project-insight';
 
 describe('Coda Project Insight', () => {
-  it('only activates for project-shaped questions', () => {
+  it('activates for project and recurring support questions without grounding ordinary banter', () => {
     expect(isProjectInsightQuestion('Coda, what is the Fabula project plan?')).toBe(true);
+    expect(isProjectInsightQuestion('Coda, can I have more than one saved playthrough?')).toBe(true);
+    expect(isProjectInsightQuestion('Coda, why is Adult greyed out for this Persona?')).toBe(true);
+    expect(isProjectInsightQuestion('Coda, does Speculus have a mobile UI?')).toBe(true);
+    expect(isProjectInsightQuestion('Coda, where is the Discord invite link?')).toBe(true);
     expect(isProjectInsightQuestion('Coda, do you like bacon?')).toBe(false);
   });
 
