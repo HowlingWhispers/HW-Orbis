@@ -25,7 +25,7 @@ const safeEqual = (left: string, right: string) => {
 
 const safeReturnTo = (value: unknown) => typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : '/';
 
-const noAccess = { isGuildMember: false, canViewAdult: false, canCreate: true, canAdmin: false };
+const noAccess = { isGuildMember: false, canViewAdult: false, canCreate: false, canAdmin: false };
 const ownerAccess = () => {
   const now = Date.now();
   return { isGuildMember: true, canViewAdult: true, canCreate: true, canAdmin: true, checkedAt: now, verifiedAt: now };
@@ -45,7 +45,7 @@ function publicProfile(row: Record<string, unknown>, access: { isGuildMember: bo
     permissions: {
       isGuildMember: isSuperAdmin ? true : access.isGuildMember,
       canViewAdult: isSuperAdmin ? true : access.canViewAdult,
-      canCreate: true,
+      canCreate: isSuperAdmin ? true : access.canCreate,
       canAdmin: isSuperAdmin ? true : access.canAdmin,
     },
   };
@@ -140,11 +140,18 @@ export function requireCreator(config: AppConfig, pool: DatabasePool, settingsSt
       const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
       if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, true);
       const access = request.session.access ?? { ...noAccess, checkedAt: Date.now() };
-      access.canCreate = true;
+      // Super-admin retains creation for imports, restores and recovery.
+      // Everyone else must actually hold a configured creator (Worldbuilding) role.
+      if (!access.canCreate && !isSuperAdmin) {
+        return response.status(403).json({
+          error: 'Worldbuilding is limited to the Worldbuilding role in Howling Whispers. Ask an admin for the role if you want to create records.',
+          code: 'creator_role_required',
+        });
+      }
       request.session.access = access;
       await pool.query(
-        `UPDATE users SET is_guild_member = $2, can_view_adult = $3, can_create = true, can_admin = $4, access_checked_at = now(), updated_at = now() WHERE id = $1`,
-        [request.session.userId, access.isGuildMember, access.canViewAdult, access.canAdmin],
+        `UPDATE users SET is_guild_member = $2, can_view_adult = $3, can_create = $4, can_admin = $5, access_checked_at = now(), updated_at = now() WHERE id = $1`,
+        [request.session.userId, access.isGuildMember, access.canViewAdult, access.canCreate || isSuperAdmin, access.canAdmin],
       );
       next();
     } catch (error) {

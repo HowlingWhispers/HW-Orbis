@@ -26,12 +26,13 @@ export function WorldSettingsPanel({ document, onChange }: { document: JsonObjec
       <h4>Privacy</h4>
       <label className="forge-field">
         <span>World visibility</span>
-        <select value={visibility} onChange={(event) => update('visibility', event.target.value)}>
+        <select value={visibility} onChange={(event) => update('visibility', event.target.value)} disabled={visibility === 'public'}>
           <option value="private">Private · owner only</option>
           <option value="unlisted">Unlisted · direct access only</option>
           <option value="public">Public</option>
         </select>
         <small>Private worlds and all world-linked records are hidden from other users at the server API level.</small>
+        {visibility === 'public' && <small className="forge-note">Public publishing is paused while moderation is in place. This world was already public and can stay that way, or be made private — but it cannot be newly published from the server.</small>}
       </label>
       <div className="forge-toggle-row">
         <label className="forge-toggle">

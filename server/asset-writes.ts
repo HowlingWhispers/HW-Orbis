@@ -107,9 +107,48 @@ export async function canAuthorIntoWorld(db: DatabaseExecutor, worldId: string, 
   return isSuperAdmin || result.rows[0].creator_user_id === userId;
 }
 
+type VisibilityValue = 'public' | 'unlisted' | 'private';
+
+const VISIBILITY_EXPOSURE: Record<VisibilityValue, number> = { private: 0, unlisted: 1, public: 2 };
+
+function visibilityIn(document: Record<string, unknown>, key: string): VisibilityValue | undefined {
+  const block = document[key];
+  if (!isRecord(block)) return undefined;
+  const value = block.visibility;
+  return value === 'public' || value === 'unlisted' || value === 'private' ? value : undefined;
+}
+
+/**
+ * Publication lock: a record may always become more private, and may stay
+ * exactly as public as it already is, but may never be widened to public.
+ *
+ * Comparing the *effective* stored visibility matters because an unset value
+ * already reads as public for worlds (see canDirectViewAssetRow). Without that,
+ * editing an already-public world and re-saving it would be treated as a new
+ * publication and the owner would lose the ability to edit their own world.
+ */
+export function assertPublicationNotWidened(
+  type: string,
+  existingDocument: Record<string, unknown>,
+  nextDocument: Record<string, unknown>,
+  isSuperAdmin: boolean,
+): void {
+  if (isSuperAdmin) return;
+  if (type !== 'world' && type !== 'persona') return;
+  const key = type === 'world' ? 'worldSettings' : 'personaSettings';
+  // An unset value already reads as public for worlds, and private for Personas.
+  const current = visibilityIn(existingDocument, key) ?? (type === 'world' ? 'public' : 'private');
+  const next = visibilityIn(nextDocument, key) ?? current;
+  if (VISIBILITY_EXPOSURE[next] <= VISIBILITY_EXPOSURE[current]) return;
+  throw new AssetWriteError(
+    403,
+    `This record cannot be made public right now. ${current === 'private' ? 'It is currently private.' : `It is currently ${current}.`} Public publishing is paused until moderation is in place.`,
+    { code: 'publication_paused', currentVisibility: current, requestedVisibility: next },
+  );
+}
+
 /** Worlds always carry a normalized privacy block; a model or editor cannot widen it implicitly. */
-export function normalizeWorldDocument(document: Record<string, unknown>) {
-  const rawSettings = document.worldSettings;
+export function normalizeWorldDocument(document: Record<string, unknown>) {  const rawSettings = document.worldSettings;
   const settings = rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
     ? rawSettings as Record<string, unknown>
     : {};
@@ -445,7 +484,10 @@ export async function applyAssetUpdate(
     if (identityBlock && typeof identityBlock === 'object' && 'name' in (identityBlock as Record<string, unknown>)) {
       (identityBlock as Record<string, unknown>).name = nextAsset.name;
     }
-    if (existing.type === 'world') nextAsset.document = normalizeWorldDocument(nextAsset.document);
+    if (existing.type === 'world') {
+      nextAsset.document = normalizeWorldDocument(nextAsset.document);
+      assertPublicationNotWidened('world', existingDocument, nextAsset.document, identity.isSuperAdmin);
+    }
     if (existing.type === 'world' && asset.document !== undefined) {
       nextAsset.document = restoreRootOwnedCollections(existingDocument, nextAsset.document);
     }
@@ -453,6 +495,7 @@ export async function applyAssetUpdate(
     if (existing.type === 'persona') {
       const existingPersonaSettings = isRecord(existingDocument.personaSettings) ? existingDocument.personaSettings : {};
       nextAsset.document = normalizePersonaDocument(nextAsset.document, source === 'coda' ? existingPersonaSettings : undefined);
+      assertPublicationNotWidened('persona', existingDocument, nextAsset.document, identity.isSuperAdmin);
     }
 
     const changedFields: string[] = [];

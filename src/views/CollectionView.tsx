@@ -54,8 +54,9 @@ export function CollectionView({ all = false }: { all?: boolean }) {
     ? (de ? 'Jeder Datensatz aus jedem Regal, von einem ruhigen Ort aus durchsuchbar.' : 'Every record across every shelf, ready to search from one quiet place.')
     : localizedNavigation?.description ?? navigation?.description;
   const canonicalPath = all ? '/all' : `/library/${type}`;
-  const canCreateWorld = selectedType === 'world' && Boolean(user);
-  const canCreatePersona = selectedType === 'persona' && Boolean(user);
+  // Server-authoritative: mirrors requireCreator, which 403s without the role.
+  const canCreateWorld = selectedType === 'world' && Boolean(user?.permissions.canCreate);
+  const canCreatePersona = selectedType === 'persona' && Boolean(user?.permissions.canCreate);
 
   useSEO({
     title: de

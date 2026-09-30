@@ -3,33 +3,40 @@ import { decideAccess } from '../server/access';
 
 const policy = {
   adultRoleIds: new Set(['adult-role']),
-  creatorRoleIds: new Set(['adult-role', 'moderator-role']),
+  creatorRoleIds: new Set(['worldbuilding-role']),
   adminRoleIds: new Set(['admin-role']),
   bootstrapAdminRoleIds: new Set(['recovery-role']),
 };
 
 describe('Discord access policy', () => {
-  it('allows signed-in non-members to create while keeping Discord-gated access off', () => {
-    expect(decideAccess(false, ['adult-role'], policy)).toEqual({ isGuildMember: false, canViewAdult: false, canCreate: true, canAdmin: false });
+  it('never lets a non-member create', () => {
+    expect(decideAccess(false, ['adult-role'], policy)).toEqual({ isGuildMember: false, canViewAdult: false, canCreate: false, canAdmin: false });
   });
 
-  it('allows ordinary guild members to create while keeping adult content gated', () => {
-    expect(decideAccess(true, ['ordinary-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: true, canAdmin: false });
+  it('does not let an ordinary guild member create', () => {
+    expect(decideAccess(true, ['ordinary-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: false, canAdmin: false });
   });
 
-  it('allows verified adults to view and create', () => {
-    expect(decideAccess(true, ['adult-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: true, canCreate: true, canAdmin: false });
+  it('does not let an adult-access role imply creation on its own', () => {
+    expect(decideAccess(true, ['adult-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: true, canCreate: false, canAdmin: false });
   });
 
-  it('does not let a creator or staff role imply adult access', () => {
-    expect(decideAccess(true, ['moderator-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: true, canAdmin: false });
+  it('allows creation only for the configured Worldbuilding role', () => {
+    expect(decideAccess(true, ['worldbuilding-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: true, canAdmin: false });
   });
 
-  it('keeps administration separate from adult viewing', () => {
-    expect(decideAccess(true, ['admin-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: true, canAdmin: true });
+  it('keeps administration separate from adult viewing and creation', () => {
+    expect(decideAccess(true, ['admin-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: false, canAdmin: true });
   });
 
-  it('allows the protected bootstrap role to recover administration', () => {
-    expect(decideAccess(true, ['recovery-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: true, canAdmin: true });
+  it('allows the protected bootstrap role to recover administration without creating', () => {
+    expect(decideAccess(true, ['recovery-role'], policy)).toEqual({ isGuildMember: true, canViewAdult: false, canCreate: false, canAdmin: true });
+  });
+
+  it('denies creation when no creator roles are configured at all', () => {
+    // An empty creator list must deny, not fall open, or removing the role
+    // would silently reopen world creation for everyone.
+    const unconfigured = { ...policy, creatorRoleIds: new Set<string>() };
+    expect(decideAccess(true, ['ordinary-role', 'adult-role', 'admin-role'], unconfigured).canCreate).toBe(false);
   });
 });

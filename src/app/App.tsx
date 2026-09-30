@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import { AppShell } from '../components/AppShell';
 import { AccountView } from '../views/AccountView';
 import { AdminView } from '../views/AdminView';
@@ -15,6 +17,31 @@ import { ProjectView } from '../views/ProjectView';
 import { SaveArchiveView } from '../views/SaveArchiveView';
 import { VerificationView } from '../views/VerificationView';
 
+/**
+ * Mirrors the server's requireCreator gate. A hidden button is not a control:
+ * the route has to explain itself instead of rendering a form that would 403.
+ */
+function RequireCreator({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (user?.permissions.canCreate) return <>{children}</>;
+  return (
+    <div className="page">
+      <header className="collection-header__copy">
+        <span className="eyebrow">Worldbuilding</span>
+        <h1>Worldbuilding is role-gated</h1>
+        <p>
+          Creating records in Orbis is currently limited to members holding the
+          Worldbuilding role in Howling Whispers. Ask an admin for the role if you
+          want to build here.
+        </p>
+      </header>
+      <p className="collection-description">
+        Browsing, reading and running existing worlds is unaffected.
+      </p>
+    </div>
+  );
+}
+
 export function App() {
   return (
     <Routes>
@@ -22,8 +49,8 @@ export function App() {
         <Route index element={<HomeView />} />
         <Route path="all" element={<CollectionView all />} />
         <Route path="library/:type" element={<CollectionView />} />
-        <Route path="worlds/new" element={<CreateWorldView />} />
-        <Route path="personas/new" element={<CreatePersonaView />} />
+        <Route path="worlds/new" element={<RequireCreator><CreateWorldView /></RequireCreator>} />
+        <Route path="personas/new" element={<RequireCreator><CreatePersonaView /></RequireCreator>} />
         <Route path="asset/:id" element={<AssetDetailView />} />
         <Route path="asset/:id/saves" element={<SaveArchiveView />} />
         <Route path="asset/:id/edit" element={<AssetEditorView />} />

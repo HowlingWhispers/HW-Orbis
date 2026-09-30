@@ -169,7 +169,8 @@ export function PersonaEditor({ asset }: { asset: LibraryAsset }) {
           <label className="editor-field"><span>Visibility</span><select value={visibility} onChange={(event) => {
             const next = event.target.value as PersonaVisibility;
             changeSettings({ visibility: next, ...(next === 'public' ? {} : { showInLibrary: false }) });
-          }}><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></label>
+          }} disabled={visibility === 'public'}><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></label>
+          {visibility === 'public' && <p className="editor-panel__intro">Public publishing is paused while moderation is in place. This Persona was already public and can stay that way, or be made private — it cannot be newly published from the server.</p>}
           <label className="editor-toggle"><input type="checkbox" checked={visibility === 'public' && settings.showInLibrary === true} disabled={visibility !== 'public'} onChange={(event) => changeSettings({ showInLibrary: event.target.checked })} /><span>Show in public Persona library</span></label>
           <label className="editor-toggle"><input type="checkbox" checked={settings.allowUse === true} onChange={(event) => changeSettings({ allowUse: event.target.checked })} /><span>Allow other users to use this Persona</span></label>
           <label className="editor-toggle"><input type="checkbox" checked={settings.allowForking === true} onChange={(event) => changeSettings({ allowForking: event.target.checked })} /><span>Allow copy / remix</span></label>
