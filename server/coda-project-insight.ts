@@ -311,6 +311,15 @@ export function buildProjectInsight(question: string) {
   let used = 0;
   const selected: EvidenceChunk[] = [];
   const perFile = new Map<string, number>();
+  // Preserve one chunk from the deliberately curated cross-project overview.
+  // Fast-moving project READMEs can otherwise fill the evidence budget and
+  // displace the member-safe source that connects current and planned work.
+  const overview = evidence.find(item => item.projectName === 'Orbis' && item.relativePath === 'docs/CODA_PROJECT_KNOWLEDGE.md');
+  if (overview) {
+    selected.push(overview);
+    perFile.set(`${overview.projectName}:${overview.relativePath}`, 1);
+    used += overview.text.length + overview.projectName.length + overview.relativePath.length + 80;
+  }
   for (const item of evidence) {
     const key = `${item.projectName}:${item.relativePath}`;
     if ((perFile.get(key) ?? 0) >= 2) continue;

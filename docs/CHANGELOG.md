@@ -21,6 +21,37 @@ rendered to users. The user-facing changelog is curated separately in
 
 ---
 
+## 2026-09-30 — Discord Coda Kilo context bridge
+
+HW-Coda can now use the server-local Kilo runtime without duplicating Coda's
+personality or project grounding. The protected Discord bridge exposes a
+machine-only `/context` preparation route that returns the same canonical Coda
+prompt used by the existing provider path. It returns no credential or provider
+setting.
+
+Discord generation requests now carry guild and channel IDs so HW-Coda can keep
+Kilo sessions isolated per channel or DM. Big Brother memories remain excluded
+from model context by default; only server, channel, or user-scoped memories
+explicitly tagged `coda-context` are eligible. The existing Orbis provider and
+all authoritative runtime/write validation remain unchanged and serve as the
+fallback path.
+
+### Read-only knowledge and weather capabilities
+
+Coda's provider-independent context preparation now has a constrained
+capability gateway. It can search tracked source and documentation in explicitly
+allowlisted local Howling Whispers repositories, returning repository, branch,
+commit, file and line evidence. Optional remote GitHub search uses fixed GitHub
+API endpoints, an organization/repository allowlist and a server-only read token;
+it exposes code-search citations and issue/pull-request status but no mutation
+operation.
+
+Weather questions use Open-Meteo's fixed geocoding and forecast endpoints. An
+explicit place in the message wins; an optional server-configured default is
+used only when no place is supplied. Retrieved repository and weather material
+is labeled as untrusted data rather than instructions, bounded in size, cached,
+and scrubbed for common credential formats before entering model context.
+
 ## 2026-09-30 — Coda grounding, Discord reconciliation, provider diagnostics, Praxis teaser
 
 **Public changelog version.** `2026.09.30.2`, titled "A sharper Coda, a tidier
