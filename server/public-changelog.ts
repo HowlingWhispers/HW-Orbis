@@ -83,7 +83,7 @@ export const publicChangelogEntries: PublicChangelogEntry[] = [
           'The obsolete Archives category has been retired rather than preserved as empty scaffolding.',
           'The archive rule has been rewritten around the thing that actually matters: preserve useful history, canon, development notes and recovery material, but do not keep obsolete Discord structure merely because it once existed.',
           'Existing voice spaces used for development and team conversation are now part of the maintained server structure instead of living outside it as invisible extras.',
-          'Lightyears Apart now has its own home under Gaming / Side Projects, alongside the broader EVE Online discussion space.',
+          'Lightyears Apart has been retired from this server and now belongs to another community. EVE Online discussion remains under Gaming / Side Projects.',
           'The server structure and the maintained Coda layout have been reconciled, removing the quiet drift that had accumulated between what Discord contained and what the project expected.',
         ],
       },

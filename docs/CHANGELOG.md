@@ -90,8 +90,9 @@ layout. The source was corrected rather than blindly recreating old structure:
   the declarative layout.
 - HW-Coda `cc096e4` adds the existing Devtalk and Team Chat voice rooms to the
   maintained layout so audit and sync can see them.
-- The declared Lightyears Apart channel was kept as intentional structure and
-  was created by a controlled server sync under Gaming / Side Projects.
+- The Lightyears Apart channel declaration was removed. Lightyears Apart is no
+  longer part of Howling Whispers and belongs to another community, so the
+  channel is not declared and is not present in the maintained layout.
 
 The sync took its normal pre-write guild snapshot. It did not delete undeclared
 channels and did not touch the undeclared adult category or the separately
