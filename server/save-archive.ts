@@ -35,7 +35,13 @@ function compatibility(row: SaveRow) {
   return currentRevision === row.source_revision ? 'ready' : 'historical-revision-required';
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function publicSave(row: SaveRow) {
+  const source = asRecord(asRecord(row.payload).source);
+  const persona = asRecord(source.persona);
   return {
     id: String(row.id),
     worldId: row.world_id ? String(row.world_id) : null,
@@ -45,6 +51,8 @@ function publicSave(row: SaveRow) {
     sourceRevision: String(row.source_revision),
     sourceName: String(row.source_name),
     title: String(row.title),
+    personaId: typeof persona.id === 'string' && persona.id ? persona.id : null,
+    personaName: typeof persona.name === 'string' && persona.name ? persona.name : null,
     characterId: row.character_id ? String(row.character_id) : null,
     characterName: row.character_name ? String(row.character_name) : null,
     locationId: row.location_id ? String(row.location_id) : null,

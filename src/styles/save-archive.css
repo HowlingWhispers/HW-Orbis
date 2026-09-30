@@ -37,7 +37,7 @@
 }
 
 .save-archive__hero p {
-  max-width: 680px;
+  max-width: 760px;
   margin: 0;
   color: var(--text-muted);
 }
@@ -88,6 +88,65 @@
   text-transform: uppercase;
 }
 
+.save-recovery {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 1.35rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--border-subtle));
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 8% 50%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 28%),
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), var(--surface));
+  box-shadow: var(--shadow-md);
+}
+
+.save-recovery__icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border-subtle));
+  border-radius: 18px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.save-recovery__copy { min-width: 0; }
+.save-recovery__copy h2 { margin: .2rem 0 .35rem; font-size: 1.45rem; }
+.save-recovery__copy p { margin: 0; color: var(--text-muted); }
+
+.save-recovery__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .9rem;
+  margin-top: .7rem;
+  color: var(--text-muted);
+  font-size: .82rem;
+}
+
+.save-recovery__meta span:not(:last-child)::after {
+  content: '·';
+  margin-left: .9rem;
+  opacity: .55;
+}
+
+.save-recovery__safe {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  margin-top: .75rem;
+  color: var(--text-muted);
+  font-size: .76rem;
+}
+
+.save-recovery__actions {
+  display: grid;
+  min-width: 190px;
+  gap: .55rem;
+}
+
 .save-archive__empty {
   display: grid;
   justify-items: center;
@@ -133,6 +192,7 @@
   grid-template-columns: 54px 1fr;
   min-height: 190px;
   overflow: hidden;
+  scroll-margin: 7rem;
   border: 1px solid var(--border-subtle);
   border-radius: 18px;
   background: linear-gradient(105deg, var(--surface-strong), var(--surface));
@@ -140,7 +200,8 @@
   transition: transform .18s ease, border-color .18s ease;
 }
 
-.save-card:hover {
+.save-card:hover,
+.save-card:target {
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
 }
@@ -199,6 +260,7 @@
 
 .save-card__identity strong { color: var(--text); }
 .save-card__revision { margin: 0; color: var(--text-muted); font-size: .78rem; overflow-wrap: anywhere; }
+.save-card__note { margin: -.35rem 0 0; color: var(--text-muted); font-size: .8rem; }
 
 .save-card__body footer {
   display: flex;
@@ -209,6 +271,29 @@
 }
 
 .save-card__delete { margin-left: auto; }
+
+.save-archive__import {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1rem 1.15rem;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+
+.save-archive__import-copy {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  color: var(--text-muted);
+}
+
+.save-archive__import-copy > svg { flex: 0 0 auto; }
+.save-archive__import-copy strong { display: block; color: var(--text); }
+.save-archive__import-copy p { margin: .2rem 0 0; font-size: .82rem; }
+.save-archive__import-copy code { font-size: .78rem; }
 
 .world-save-archive-link {
   display: inline-flex;
@@ -225,7 +310,14 @@
 @media (max-width: 760px) {
   .save-archive__hero { align-items: start; flex-direction: column; min-height: 0; }
   .save-archive__shelves { grid-template-columns: 1fr; }
+  .save-recovery { grid-template-columns: 1fr; align-items: start; }
+  .save-recovery__icon { width: 48px; height: 48px; }
+  .save-recovery__actions { min-width: 0; grid-template-columns: 1fr; }
+  .save-recovery__meta { display: grid; gap: .3rem; }
+  .save-recovery__meta span:not(:last-child)::after { content: none; }
   .save-card { grid-template-columns: 38px 1fr; }
+  .save-card__body { padding: 1rem; }
   .save-card__body > header { flex-direction: column; }
   .save-card__delete { margin-left: 0; }
+  .save-archive__import { align-items: stretch; flex-direction: column; }
 }

@@ -18,10 +18,24 @@ const launchSchema = z.object({
   // Optional only for compatibility with older Orbis clients. The current UI
   // always supplies an explicit canonical Place anchor.
   startingPlaceId: z.string().uuid().optional(),
+  resumeSaveId: z.string().uuid().optional(),
   tone: z.enum(simulationTones).default('world-default'),
   focusTags: z.array(z.string().trim().min(1).max(40)).max(12).default([]),
   direction: z.string().trim().max(4000).default(''),
 }).strict();
+const resumeSaveSchema = z.object({
+  format: z.literal('speculus-v2-session'),
+  version: z.literal(2),
+  engine: z.literal('v2'),
+  source: z.object({
+    id: z.string().uuid(),
+    type: z.string().min(1).max(40),
+    revision: z.string().min(1).max(200),
+    persona: z.object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200) }).optional(),
+    location: z.object({ id: z.string().uuid(), revision: z.string().min(1).max(200), name: z.string().min(1).max(200) }).nullable().optional(),
+  }).passthrough(),
+  turns: z.array(z.unknown()).max(20000),
+}).passthrough();
 const modelNames = ['xialong-v1', 'glm-4-6'] as const;
 const generationSchema = z.object({
   launchId: z.string().uuid(),
@@ -379,6 +393,30 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
       }
 
+      let resumeSave: z.infer<typeof resumeSaveSchema> | undefined;
+      if (parsedBody.data.resumeSaveId) {
+        const resumeResult = await pool.query(
+          'SELECT payload FROM speculus_saves WHERE id = $1 AND user_id = $2',
+          [parsedBody.data.resumeSaveId, request.session.userId],
+        );
+        if (!resumeResult.rowCount) return response.status(404).json({ error: 'Archived save not found.' });
+        const parsedResume = resumeSaveSchema.safeParse(resumeResult.rows[0].payload);
+        if (!parsedResume.success) return response.status(409).json({ error: 'This archived save cannot be resumed by the current Speculus bridge.' });
+        resumeSave = parsedResume.data;
+        const currentRevision = new Date(String(asset.updated_at)).toISOString();
+        if (resumeSave.source.id !== String(asset.id)
+          || resumeSave.source.type !== simulationType(String(asset.type))
+          || resumeSave.source.revision !== currentRevision) {
+          return response.status(409).json({ error: 'This save belongs to a different or older revision. Review or export it instead of continuing it.' });
+        }
+        if (!resumeSave.source.persona?.id) {
+          return response.status(409).json({ error: 'This older save does not identify an Orbis Persona, so one-click Continue is unavailable.' });
+        }
+        if (resumeSave.source.persona.id !== parsedBody.data.personaId) {
+          return response.status(409).json({ error: 'The selected Persona does not match the Persona stored in this save.' });
+        }
+      }
+
       const personaResult = await pool.query(
         `SELECT id, type, name, summary, creator_user_id, content_rating, document
          FROM library_assets
@@ -404,14 +442,15 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       }
 
       let startingPlace: Record<string, unknown> | undefined;
-      if (parsedBody.data.startingPlaceId) {
+      const requestedStartingPlaceId = parsedBody.data.startingPlaceId ?? resumeSave?.source.location?.id;
+      if (requestedStartingPlaceId) {
         const startingPlaceResult = await pool.query(
           `SELECT place.*, origin.document AS origin_world_document,
                   origin.creator_user_id AS origin_world_creator_user_id
            FROM library_assets place
            LEFT JOIN library_assets origin ON origin.id = place.origin_world_id
            WHERE place.id = $1 AND place.type = 'place'`,
-          [parsedBody.data.startingPlaceId],
+          [requestedStartingPlaceId],
         );
         if (!startingPlaceResult.rowCount) return response.status(404).json({ error: 'Starting Place not found.' });
         const candidate = startingPlaceResult.rows[0];
@@ -498,7 +537,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         const bridgeResponse = await fetch(`${config.SPECULUS_BRIDGE_URL.replace(/\/$/, '')}/api/v2/launch`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${config.SPECULUS_BRIDGE_SECRET}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(packageBody),
+          body: JSON.stringify(resumeSave ? { package: packageBody, resumeSave } : packageBody),
           signal: controller.signal,
         });
         const bridgeBody = await bridgeResponse.json().catch(() => ({})) as { launchUrl?: string; error?: string };
