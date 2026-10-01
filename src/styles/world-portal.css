@@ -33,9 +33,13 @@
 .world-tabs {
   display: flex;
   gap: 7px;
+  max-width: 100%;
+  min-width: 0;
   margin: 0 -4px 22px;
   padding: 4px 4px 10px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   border-bottom: 1px solid var(--line);
 }
@@ -424,6 +428,7 @@
   color: var(--muted);
   font-size: 12px;
   line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
 .world-section__plain {
@@ -482,6 +487,6 @@
   }
 
   .world-tabs {
-    margin-right: -12px;
+    margin-inline: 0;
   }
 }
