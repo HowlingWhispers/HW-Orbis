@@ -84,6 +84,36 @@ function currentRoom(prompt: string) {
 }
 
 describe('Coda trusted room policy prompt', () => {
+  it('tells Coda to read memory words in their ordinary sense first', () => {
+    const prompt = promptFor(DEN);
+    expect(prompt).toContain('MEMORY LANGUAGE DISAMBIGUATION:');
+    expect(prompt).toContain('Do not treat every occurrence of "save", "remember", "store", "keep", "hold on to", or "forget" as a memory-management request');
+    expect(prompt).toContain('Interpret the sentence normally first');
+    expect(prompt).toContain('"Don\'t save any detail" typically means "do not omit or spare any detail". Answer it that way.');
+    expect(prompt).toContain('"Save this for later", "remember this about me", "do not save this", and "forget what I told you" are persistence requests');
+    expect(prompt).toContain('"Keep every detail in the explanation" and "hold on to this idea for the thread" are not persistence requests');
+    expect(prompt).toContain('A privacy trigger must not override ordinary reading');
+    expect(prompt).toContain('Answering "I stored nothing" when asked for the full unfiltered version is a semantic error, not caution');
+    expect(prompt).toContain('do not launch into a memory or retention lecture unprompted');
+  });
+
+  it('forbids claiming she can hear or wake in rooms she is not in', () => {
+    for (const room of [DEN, OFFICE, LAB, BUG_INITIAL, IDEA_INITIAL]) {
+      const prompt = promptFor(room);
+      expect(prompt).toContain('Never claim you can hear, read, join, or respond in other rooms');
+      expect(prompt).toContain('never say you wake everywhere');
+      expect(prompt).toContain('Rooms where Coda is not permitted are silent by design; saying otherwise is a false capability claim');
+      expect(prompt).toContain('describe this room and the general shape of your permissions rather than inventing coverage');
+    }
+  });
+
+  it('lets her join an ambient room on an obvious opening without being named', () => {
+    const prompt = promptFor(DEN, { trigger: 'ambient' });
+    expect(prompt).toContain('PLAYFUL ROOM MODE:');
+    expect(prompt).toContain('the runtime already decided this turn crossed the social threshold');
+    expect(currentRoom(prompt)).toMatchObject({ accessMode: 'ambient', behaviorMode: 'playful', ambientLevel: 'high' });
+  });
+
   it('gives the lab high-initiative experimental guidance instead of a muzzle', () => {
     const prompt = promptFor(LAB);
     expect(prompt).toContain('HIGH-INITIATIVE WORKSPACE:');
