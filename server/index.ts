@@ -11,6 +11,7 @@ import { createAuthRouter } from './auth.js';
 import { createCodaAssistantRouter } from './coda-assistant.js';
 import { createCodaDiscordBridgeRouter } from './coda-discord-bridge.js';
 import { createCodaDiscordImageRouter } from './coda-discord-image.js';
+import { createCodaOfficeReadingRouter, processOfficeReadingJobs } from './coda-office-reading.js';
 import { createCodaSurveillanceAdminRouter, createCodaSurveillanceIngestRouter } from './coda-surveillance.js';
 import { createChangelogRouter } from './changelog.js';
 import { processDueCodaScheduledMessages } from './coda-discord.js';
@@ -50,6 +51,7 @@ app.use('/api/v1/library', express.json({ limit: '16mb' }));
 // Coda intentionally enforces its own 60k-character text cap so oversized pastes
 // can return a useful assistant-specific message instead of Express's raw body error.
 app.use('/api/coda-assistant', express.json({ limit: '2mb' }));
+app.use('/api/internal/orbis-office-reading', express.json({ limit: '4mb' }));
 app.use(express.json({ limit: '256kb' }));
 app.use(session({
   name: config.SESSION_COOKIE_NAME,
@@ -71,6 +73,7 @@ app.use('/api/internal/coda-discord-image', createCodaDiscordImageRouter(config,
 // Big Brother ingest is machine-to-machine too. It reuses the same protected
 // bridge secret and is deliberately unavailable to browsers or normal members.
 app.use('/api/internal/coda-surveillance', createCodaSurveillanceIngestRouter(config, pool));
+app.use('/api/internal/orbis-office-reading', createCodaOfficeReadingRouter(config, pool));
 
 app.use((request, response, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return next();
@@ -206,6 +209,23 @@ const codaScheduler = setInterval(async () => {
 }, 30_000);
 codaScheduler.unref();
 
+let officeReadingBusy = false;
+const officeReadingScheduler = setInterval(async () => {
+  if (officeReadingBusy) return;
+  officeReadingBusy = true;
+  try {
+    for (let index = 0; index < 4; index += 1) {
+      const result = await processOfficeReadingJobs(pool);
+      if (!result.processed) break;
+    }
+  } catch (error) {
+    console.error('Orbis office reading tick failed.', error);
+  } finally {
+    officeReadingBusy = false;
+  }
+}, 5_000);
+officeReadingScheduler.unref();
+
 // Local image bytes live on disk outside the repository. Create the root on
 // boot so the first upload does not fail, and sweep files whose record rows are
 // gone (for example after a world cascade delete).
@@ -228,6 +248,7 @@ mediaSweep.unref();
 
 const shutdown = () => {
   clearInterval(codaScheduler);
+  clearInterval(officeReadingScheduler);
   clearInterval(mediaSweep);
   server.close(() => pool.end().finally(() => process.exit(0)));
 };

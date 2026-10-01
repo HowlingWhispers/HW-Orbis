@@ -77,6 +77,17 @@ describe('Coda Discord prompt', () => {
     expect(prompt).toContain('not a passive help desk waiting for a direct question');
     expect(prompt).toContain('You do not always need an explicit question before showing personality');
     expect(prompt).toContain('Do not confuse epistemic caution with social caution');
+    expect(prompt).toContain('GROUNDING AND PERSONALITY ARE SEPARATE:');
+    expect(prompt).toContain('reduce factual claims. Do NOT reduce warmth');
+    expect(prompt).toContain('Conciseness applies to information density, not personality');
+    expect(prompt).toContain('continue or escalate an established harmless bit');
+    expect(prompt).toContain('fact, boundary, one mascot flourish, stop');
+    expect(prompt).toContain("CODA'S EXPRESSIVE STYLE:");
+    expect(prompt).toContain('throughout the response as emotional and rhythmic beats');
+    expect(prompt).toContain('>:3, >:P, >:D, >.<, and >:O');
+    expect(prompt).toContain('Prefer first-person embodiment');
+    expect(prompt).toContain('Third-person is occasional theatrical seasoning');
+    expect(prompt).toContain('without restoring capability bluffing');
     expect(prompt).toContain('Quick to scan does not mean emotionally minimal or passive');
 
     // Social initiative must not weaken any existing grounding or permission rule.
@@ -160,6 +171,97 @@ describe('Coda Discord prompt', () => {
     expect(prompt).toContain('Future-tense promises count too');
     expect(prompt).toContain('/coda idea');
     expect(prompt).toContain('Privacy is not permission for real-world illegal activity');
+  });
+
+  it('grounds AmbiProp as the current speaker instead of Eirvargr or a reply target', () => {
+    const prompt = buildDiscordPrompt({
+      discordUserId: '12345678901234567',
+      messageId: '22345678901234567',
+      text: 'Coda, you got the wrong person there. Who am I?',
+      trigger: 'name',
+      speakerName: 'AmbiProp',
+      speakerTag: '@ambiprop',
+      guildName: 'Howling Whispers',
+      channelName: 'general',
+      mentions: [],
+      attachments: [],
+      replyTo: {
+        messageId: '32345678901234567',
+        authorId: '42345678901234567',
+        authorName: 'Eirvargr',
+        authorTag: '@eirvargr',
+        content: 'Earlier message from Eirvargr.',
+      },
+      recentMessages: [{
+        messageId: '52345678901234567',
+        authorId: '42345678901234567',
+        authorName: 'Eirvargr',
+        authorTag: '@eirvargr',
+        content: 'Coda, do you know any monster people?',
+        isCoda: false,
+      }],
+    });
+
+    const current = JSON.parse(prompt.match(/<current_message>\n([^\n]+)\n<\/current_message>/)?.[1] || '{}');
+    const reply = JSON.parse(prompt.match(/<reply_target>\n([^\n]+)\n<\/reply_target>/)?.[1] || '{}');
+    expect(current).toMatchObject({
+      authorId: '12345678901234567',
+      author: 'AmbiProp',
+      explicitMentions: [],
+    });
+    expect(reply).toMatchObject({ authorId: '42345678901234567', authorName: 'Eirvargr' });
+    expect(prompt).toContain('Never infer the current speaker from history or the reply target');
+    expect(prompt).toContain('Never invent a tag from names in prose, history, or reply_target');
+    expect(prompt).not.toContain('@tulivu');
+  });
+
+  it('supplies loaded Markdown as bounded attachment data with truthful status rules', () => {
+    const prompt = buildDiscordPrompt({
+      discordUserId: '12345678901234567',
+      text: 'Coda, I have some light reading for you.',
+      trigger: 'name',
+      speakerName: 'AmbiProp',
+      speakerTag: '@ambiprop',
+      guildName: 'Howling Whispers',
+      channelName: 'general',
+      attachments: [{
+        filename: 'Prompt Engineering Principles.md',
+        contentType: 'text/markdown',
+        size: 46_080,
+        status: 'loaded',
+        content: '# Prompt Engineering Principles\n\nSep 27, 2026 · @Wes Brown',
+        truncated: false,
+      }],
+      recentMessages: [],
+    });
+
+    const current = JSON.parse(prompt.match(/<current_message>\n([^\n]+)\n<\/current_message>/)?.[1] || '{}');
+    expect(current.attachments[0]).toMatchObject({
+      filename: 'Prompt Engineering Principles.md',
+      status: 'loaded',
+      content: '# Prompt Engineering Principles\n\nSep 27, 2026 · @Wes Brown',
+    });
+    expect(prompt).toContain('Report unsupported, too_large, or failed attachments truthfully');
+    expect(prompt).not.toContain('Â·');
+  });
+
+  it('keeps personality energy available for serious grounded questions and running jokes', () => {
+    const prompt = buildDiscordPrompt({
+      discordUserId: '12345678901234567',
+      text: 'Coda, what can you verify about the privacy boundary?',
+      trigger: 'name', speakerName: 'AmbiProp', speakerTag: '@ambiprop',
+      guildName: 'Howling Whispers', channelName: 'general',
+      recentMessages: [
+        { authorName: 'AmbiProp', authorTag: '@ambiprop', content: 'Hide the clipboard behind the bacon.', isCoda: false },
+        { authorName: 'Coda', authorTag: '@coda', content: '*guards clipboard* This is professional taste testing.', isCoda: true },
+      ],
+    });
+    expect(prompt).toContain('Hide the clipboard behind the bacon.');
+    expect(prompt).toContain('A factual boundary should constrain what you claim, not flatten how you inhabit the answer');
+    expect(prompt).toContain('Running jokes and callbacks must come from the supplied conversation');
+    expect(prompt).toContain('Match the social energy and established rhythm of the conversation');
+    expect(prompt).toContain('Expressiveness never authorizes invented memories, unsupported facts, fake tool use');
+    expect(prompt).toContain('Never claim you actually created, saved, edited, deleted, deployed');
   });
 });
 
