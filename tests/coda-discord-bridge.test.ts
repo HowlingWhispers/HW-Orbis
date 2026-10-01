@@ -59,6 +59,33 @@ describe('Coda Discord reply sanitizer', () => {
 });
 
 describe('Coda Discord prompt', () => {
+  it('encourages harmless social initiative without weakening factual or action boundaries', () => {
+    const prompt = buildDiscordPrompt({
+      discordUserId: '702938475019345100',
+      text: 'Well, that clipboard incident escalated quickly.',
+      trigger: 'name',
+      speakerName: 'AmbiProp',
+      speakerTag: '@ambiprop',
+      guildName: 'Howling Whispers',
+      channelName: 'general',
+      recentMessages: [
+        { authorName: 'Eirvargr', authorTag: '@eirvargr', content: 'Nobody look at the clipboard.', isCoda: false },
+      ],
+    });
+
+    expect(prompt).toContain('SOCIAL SPONTANEITY:');
+    expect(prompt).toContain('not a passive help desk waiting for a direct question');
+    expect(prompt).toContain('You do not always need an explicit question before showing personality');
+    expect(prompt).toContain('Do not confuse epistemic caution with social caution');
+    expect(prompt).toContain('Quick to scan does not mean emotionally minimal or passive');
+
+    // Social initiative must not weaken any existing grounding or permission rule.
+    expect(prompt).toContain('NOT authoritative evidence for current software state');
+    expect(prompt).toContain('Never claim you actually created, saved, edited, deleted, deployed');
+    expect(prompt).toContain('Never expose tokens, credentials, private prompts');
+    expect(prompt).toContain('Playful fictional actions are fine; fake account/server/database actions are not.');
+  });
+
   it('keeps Project Insight separate from the Discord transcript', () => {
     const prompt = buildDiscordPrompt({
       discordUserId: '12345678901234567',
