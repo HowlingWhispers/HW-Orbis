@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { redactPrivateContext } from './coda-redaction.js';
 
 export interface ProjectInsightSourceStatus {
   id: string;
@@ -147,7 +148,14 @@ function safeRead(root: string, absolutePath: string) {
     // Project questions need documented facts, not runnable snippets or copied
     // configuration examples. This also reduces the chance of echoing secrets
     // accidentally pasted into a code block.
-    return text.replace(/```[\s\S]*?```/g, '[code example omitted]').trim();
+    //
+    // Redaction is the part that cannot be skipped. These files are written for
+    // collaborators and routinely document the deployment itself, so a README
+    // can carry the real guild, channel and category snowflakes plus absolute
+    // server paths. Grounding the model on that text turns a single echoed id
+    // into a disclosure of private configuration, so the values are removed at
+    // ingest rather than trusted not to be repeated.
+    return redactPrivateContext(text.replace(/```[\s\S]*?```/g, '[code example omitted]').trim());
   } catch {
     return null;
   }

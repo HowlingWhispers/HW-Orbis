@@ -27,6 +27,9 @@ const envSchema = z.object({
   CODA_GITHUB_READ_TOKEN: z.string().default(''),
   CODA_GITHUB_ORG: z.string().regex(/^[A-Za-z0-9-]{1,39}$/).default('HowlingWhispers'),
   CODA_GITHUB_REPOSITORIES: z.string().default('HW-Orbis,HW-Coda,HW-Speculus,HW-Fabula,HW-Landing,HW-Mouseion,HW-Studium'),
+  // Comma-separated `Name=/absolute/path` entries for the local read-only
+  // repository search. Empty means "use the production server layout".
+  CODA_LOCAL_REPO_ROOTS: z.string().default(''),
   CODA_WEATHER_DEFAULT_LOCATION: z.string().max(120).default(''),
   DISCORD_ADULT_ROLE_IDS: z.string().default(''),
   DISCORD_CREATOR_ROLE_IDS: z.string().default(''),

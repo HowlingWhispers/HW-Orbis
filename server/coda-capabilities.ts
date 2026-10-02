@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { AppConfig } from './config.js';
+import { redactPrivateContext } from './coda-redaction.js';
 
 type Fetch = typeof fetch;
 type CapabilityDependencies = {
@@ -22,7 +23,17 @@ const stopWords = new Set([
   'their', 'there', 'these', 'they', 'this', 'what', 'when', 'where', 'which', 'whispers', 'with', 'would', 'your',
 ]);
 
-const localRepositories = [
+export type LocalRepository = { name: string; root: string };
+
+/**
+ * Where the production box keeps the sibling Howling Whispers checkouts.
+ *
+ * This is a deployment fact, not a product rule, so it is overridable. A test
+ * runner or a CI checkout has no `/srv/howling-whispers` at all, and a search
+ * that silently returns nothing because of where it happens to be executing is
+ * worse than one that is told where to look.
+ */
+const defaultLocalRepositories: LocalRepository[] = [
   { name: 'HW-Orbis', root: '/srv/howling-whispers/orbis' },
   { name: 'HW-Coda', root: '/srv/howling-whispers/coda' },
   { name: 'HW-Speculus', root: '/srv/howling-whispers/speculus' },
@@ -31,6 +42,27 @@ const localRepositories = [
   { name: 'HW-Mouseion', root: '/srv/howling-whispers/mouseion' },
   { name: 'HW-Studium', root: '/srv/howling-whispers/studium' },
 ];
+
+/**
+ * Resolve the search roots from `CODA_LOCAL_REPO_ROOTS`, a comma-separated list
+ * of `Name=/absolute/path` entries. An unset, empty, or unparseable value keeps
+ * the production defaults rather than disabling local search, so a typo costs
+ * nothing and never silently turns the capability off.
+ */
+export function resolveLocalRepositories(environment: NodeJS.ProcessEnv = process.env): LocalRepository[] {
+  const configured = (environment.CODA_LOCAL_REPO_ROOTS || '').trim();
+  if (!configured) return defaultLocalRepositories;
+  const parsed = configured
+    .split(',')
+    .map(entry => {
+      const separator = entry.indexOf('=');
+      return separator < 0
+        ? null
+        : { name: entry.slice(0, separator).trim(), root: entry.slice(separator + 1).trim() };
+    })
+    .filter((entry): entry is LocalRepository => Boolean(entry?.name && entry?.root));
+  return parsed.length ? parsed : defaultLocalRepositories;
+}
 
 function queryTokens(question: string) {
   return [...new Set(question.toLowerCase().match(/[a-z0-9][a-z0-9_-]{2,}/g) ?? [])]
@@ -43,11 +75,14 @@ function escapeRegex(value: string) {
 }
 
 export function sanitizeCapabilityText(value: string) {
-  return value
+  // Credential shapes first, then private configuration. Capability evidence is
+  // real repository text, so a matched line can legitimately contain a
+  // snowflake or an absolute server path just as easily as a token.
+  return redactPrivateContext(value
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[credential omitted]')
     .replace(/\b(?:github_pat_|gh[oprsu]_|sk-)[A-Za-z0-9_-]{12,}\b/gi, '[credential omitted]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+/-]{12,}={0,2}\b/gi, 'Bearer [credential omitted]')
-    .replace(/\b((?:api[_-]?key|token|password|secret|authorization)\s*[:=]\s*)[^\s,;]{8,}/gi, '$1[credential omitted]')
+    .replace(/\b((?:api[_-]?key|token|password|secret|authorization)\s*[:=]\s*)[^\s,;]{8,}/gi, '$1[credential omitted]'))
     .slice(0, 1_200);
 }
 
@@ -62,7 +97,10 @@ function repositoryMetadata(root: string) {
   return { branch: run(['branch', '--show-current']), commit: run(['rev-parse', '--short=12', 'HEAD']) };
 }
 
-export function searchLocalGithubKnowledge(question: string) {
+export function searchLocalGithubKnowledge(
+  question: string,
+  repositories: LocalRepository[] = resolveLocalRepositories(),
+) {
   if (!capabilityPattern.test(question)) return '';
   const cached = localCache.get(question);
   if (cached && cached.expires > Date.now()) return cached.value;
@@ -71,7 +109,7 @@ export function searchLocalGithubKnowledge(question: string) {
   const pattern = tokens.map(escapeRegex).join('|');
   const evidence: string[] = [];
 
-  for (const repository of localRepositories) {
+  for (const repository of repositories) {
     if (!existsSync(path.join(repository.root, '.git'))) continue;
     let output = '';
     try {

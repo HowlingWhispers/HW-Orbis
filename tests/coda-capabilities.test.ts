@@ -1,10 +1,15 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildCodaCapabilityContext,
   clearCodaCapabilityCache,
   fetchWeatherKnowledge,
   sanitizeCapabilityText,
+  resolveLocalRepositories,
   searchLocalGithubKnowledge,
   searchRemoteGithubKnowledge,
   weatherLocation,
@@ -34,13 +39,79 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 
 beforeEach(() => clearCodaCapabilityCache());
 
+/**
+ * A throwaway git repository standing in for a Howling Whispers checkout.
+ *
+ * The search is a real `git grep` against real files on disk, so the honest way
+ * to test it anywhere is to give it somewhere to look. Building a fixture here
+ * keeps the test meaningful on a CI runner with no `/srv/howling-whispers`,
+ * instead of quietly asserting nothing.
+ */
+let fixtureRoot = '';
+let fixtureRepository = { name: 'HW-Fixture', root: '' };
+
+function git(args: string[], cwd: string) {
+  return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+}
+
+beforeAll(() => {
+  fixtureRoot = mkdtempSync(path.join(tmpdir(), 'coda-capability-'));
+  const root = path.join(fixtureRoot, 'server');
+  mkdirSync(root, { recursive: true });
+  writeFileSync(path.join(root, 'fixture-capability.ts'),
+    'export function fixtureQuokkaCapability() {\n  return "quokka-capability-marker";\n}\n');
+  writeFileSync(path.join(fixtureRoot, '.env'), 'FIXTURE_TOKEN=should-never-be-cited\n');
+  git(['init', '--quiet'], fixtureRoot);
+  git(['config', 'user.email', 'fixture@example.invalid'], fixtureRoot);
+  git(['config', 'user.name', 'Fixture'], fixtureRoot);
+  git(['add', '-A'], fixtureRoot);
+  git(['commit', '--quiet', '-m', 'Add fixture capability source'], fixtureRoot);
+  fixtureRepository = { name: 'HW-Fixture', root: fixtureRoot };
+});
+
+afterAll(() => {
+  if (fixtureRoot) rmSync(fixtureRoot, { recursive: true, force: true });
+});
+
 describe('Coda read-only GitHub capability', () => {
   it('searches tracked local source with repository and commit citations', () => {
-    const result = searchLocalGithubKnowledge('Where is buildDiscordPrompt implemented in Orbis source code?');
-    expect(result).toContain('[local HW-Orbis');
-    expect(result).toContain('server/coda-discord-bridge.ts');
+    const result = searchLocalGithubKnowledge(
+      'Where is fixtureQuokkaCapability implemented in source code?',
+      [fixtureRepository],
+    );
+    expect(result).toContain('[local HW-Fixture');
+    expect(result).toContain('server/fixture-capability.ts');
+    expect(result).toContain('fixtureQuokkaCapability');
     expect(result).toContain('commit');
+    // The fixture deliberately contains a .env; citation must still skip it.
+    expect(result).not.toContain('should-never-be-cited');
     expect(result).not.toMatch(/(?:^|\/)\.env/);
+  });
+
+  it('cites the commit it actually read', () => {
+    const head = git(['rev-parse', '--short=12', 'HEAD'], fixtureRoot).trim();
+    const result = searchLocalGithubKnowledge('fixtureQuokkaCapability implementation', [fixtureRepository]);
+    expect(result).toContain(head);
+  });
+
+  it('returns nothing rather than inventing evidence when the root has no repository', () => {
+    const result = searchLocalGithubKnowledge(
+      'fixtureQuokkaCapability implementation',
+      [{ name: 'HW-Absent', root: path.join(fixtureRoot, 'not-a-checkout') }],
+    );
+    expect(result).toBe('');
+  });
+
+  it('takes its roots from configuration instead of a hardcoded server path', () => {
+    const configured = resolveLocalRepositories({ CODA_LOCAL_REPO_ROOTS: 'One=/tmp/one, Two=/tmp/two' });
+    expect(configured).toEqual([{ name: 'One', root: '/tmp/one' }, { name: 'Two', root: '/tmp/two' }]);
+  });
+
+  it('keeps the production layout when the override is absent or unusable', () => {
+    expect(resolveLocalRepositories({}).some(repository => repository.name === 'HW-Orbis')).toBe(true);
+    expect(resolveLocalRepositories({ CODA_LOCAL_REPO_ROOTS: '   ' }).some(repository => repository.name === 'HW-Orbis')).toBe(true);
+    // A malformed override must not silently disable the capability.
+    expect(resolveLocalRepositories({ CODA_LOCAL_REPO_ROOTS: 'no-separator-here' }).some(repository => repository.name === 'HW-Orbis')).toBe(true);
   });
 
   it('uses a server-side GitHub credential but never returns it in evidence', async () => {
