@@ -164,11 +164,75 @@ describe('Coda trusted room policy prompt', () => {
     expect(prompt).toContain('Do not open by restating the request or asking the user to restate it');
   });
 
-  it('forbids promising future work without a real durable job', () => {
+  it('requires authoritative runtime evidence for durable and event-driven promises', () => {
     const prompt = promptFor(LAB);
-    expect(prompt).toContain('office-reading job system');
-    expect(prompt).toContain('Never imply she will continue working in the background, finish something later, or spend time on a task after this reply');
+    expect(prompt).toContain('Distinguish imaginary background work from real runtime capabilities');
+    expect(prompt).toContain('Promise a durable job, scheduled or reserved action, event handler, or listener only when authoritative runtime context explicitly says that capability exists');
+    expect(prompt).toContain('status="office_queued" is authoritative evidence for that specific document-reading job');
+    expect(prompt).toContain('The RUNTIME CAPABILITIES block, when present, is authoritative');
+    expect(prompt).toContain('When RUNTIME CAPABILITIES reports a pending welcome that this member created, you may confirm it plainly and warmly');
+    expect(prompt).toContain('Do not turn the absence of a capability in this turn into a claim that Coda can never support event-driven behavior');
+    expect(prompt).not.toContain('Coda only keeps working between messages');
     expect(prompt).toContain('you may play along with the exaggeration in your voice, but you must still deliver real work within this reply');
+  });
+
+  it('treats a reported arrival watcher as real, and its absence as absence', () => {
+    const watching = promptFor(DEN, {
+      text: 'his name might be Kevin, welcome him warmly when he arrives',
+      runtimeCapabilities: {
+        memberWelcomeWatcher: true,
+        pendingWelcome: {
+          id: 'w-1',
+          expectedName: 'Kevin',
+          channelId: '1552809212038483982',
+          expiresAt: '2026-10-04T12:00:00.000Z',
+        },
+      },
+    });
+
+    expect(watching).toContain('RUNTIME CAPABILITIES:');
+    expect(watching).toContain('member_arrival_watcher: active');
+    expect(watching).toContain('A stored welcome exists: id w-1, destination <#1552809212038483982>');
+    expect(watching).toContain('expecting the name "Kevin"');
+    expect(watching).toContain('can truthfully say she will greet an arriving member');
+    expect(watching).toContain('She still cannot name the arriving member in advance');
+
+    const inactive = promptFor(DEN, { runtimeCapabilities: { memberWelcomeWatcher: false, pendingWelcome: null } });
+    expect(inactive).toContain('member_arrival_watcher: inactive');
+    expect(inactive).not.toContain('A stored welcome exists');
+
+    // No block at all must not accidentally grant the capability.
+    const absent = promptFor(DEN);
+    expect(absent).not.toContain('RUNTIME CAPABILITIES:');
+    expect(absent).toContain('an absent block means no event-driven capability');
+  });
+
+  it('keeps a recent "the plan?" follow-up playful when a capability is unavailable', () => {
+    const prompt = promptFor(DEN, {
+      text: 'the plan?',
+      recentMessages: [
+        {
+          authorName: 'Eirvargr',
+          authorTag: '@eirvargr',
+          content: 'Can you welcome every new arrival automatically?',
+        },
+        {
+          authorName: 'Coda',
+          authorTag: '@coda',
+          isCoda: true,
+          content: 'I cannot claim a listener is configured here, but I can make the welcome gloriously fluffy.',
+        },
+      ],
+    });
+
+    expect(prompt).toContain('When the requested capability is unavailable, state the limitation briefly, then keep participating creatively in the current reply');
+    expect(prompt).toContain('offer the plan, write the welcome, play out the hypothetical');
+    expect(prompt).toContain('Do not turn the whole response into a capability or policy recital');
+    expect(prompt).toContain('Read short follow-ups such as "the plan?" against the supplied recent messages');
+    expect(prompt).toContain('Respond with social awareness and energy');
+    expect(prompt).toContain('without inventing actions, listeners, reservations, status, or work performed between messages');
+    expect(prompt).toContain('Can you welcome every new arrival automatically?');
+    expect(prompt).toContain('"message":"the plan?"');
   });
 
   it('applies response length and proactive execution in every room, not just the lab', () => {
