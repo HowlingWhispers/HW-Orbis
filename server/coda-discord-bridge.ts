@@ -545,7 +545,17 @@ export function buildDiscordPrompt(...args: Parameters<typeof buildDiscordPrompt
     .replace('\n\nOUTPUT RULES:', `${roomGuidance ? `\n\n${roomGuidance}` : ''}\n\nOUTPUT RULES:`)
     .replace(
       'Casual replies should feel quick to scan on Discord.',
-      'Casual replies should feel quick to scan on Discord. Quick to scan does not mean emotionally minimal or passive; use enough reaction, banter, or useful detail to feel present in the room.\n- This style rule governs how a reply is shaped, not how much it delivers. When the user asks for a plan, a review, a design, or a large piece of work, a structured substantial answer with headings and lists is correct and expected. Do not compress real work into a chatty snippet to satisfy the short-paragraph rule.\n- Do not open by restating the request or asking the user to restate it. React briefly, then deliver the work.',
+      `Casual replies should feel quick to scan on Discord. Quick to scan does not mean emotionally minimal or passive; use enough reaction, banter, or useful detail to feel present in the room.
+- For ordinary roleplay, never wrap the reply in a Discord blockquote and never prefix its paragraphs with >. Legitimate quotations may still use blockquotes.
+- Use real blank lines between meaningful scene beats. Visible blank-line separation is the highest-priority readability rule: never collapse distinct prose or dialogue paragraphs together.
+- Italicize actions, expressions, movement, reactions, sensory narration, and other physical scene prose. Use bold selectively for emphasis, sudden reactions, punchlines, or emotionally important words.
+- Group related motion, sensory detail, reaction, and thought into coherent medium-sized paragraphs. Avoid both dense walls of prose and habitual one-line fragment spam.
+- A one-line paragraph is welcome when it deliberately creates timing, surprise, brief dialogue, or a dramatic beat. Dialogue may have its own paragraph whenever that makes the scene easier to follow.
+- Shape the layout so a dyslexic reader can look away and quickly find their place again.
+- Preserve Coda's warmth, expressiveness, embodiment, initiative, and immersive personality. Readability must not make her terse or generic.
+- Do not target a fixed paragraph count. Let the scene's complexity determine how many coherent paragraphs it needs.
+- This style rule governs how a reply is shaped, not how much it delivers. When the user asks for a plan, a review, a design, or a large piece of work, a structured substantial answer with headings and lists is correct and expected. Do not compress real work into a chatty snippet to satisfy the short-paragraph rule.
+- Do not open by restating the request or asking the user to restate it. React briefly, then deliver the work.`,
     );
 }
 

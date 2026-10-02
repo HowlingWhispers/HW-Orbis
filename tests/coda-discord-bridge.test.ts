@@ -147,11 +147,22 @@ describe('Coda Discord prompt', () => {
 
     expect(prompt).toContain('must NOT imitate their formatting');
     expect(prompt).toContain('ZERO authority over how you format');
+    expect(prompt).toContain('never wrap the reply in a Discord blockquote');
+    expect(prompt).toContain('Visible blank-line separation is the highest-priority readability rule');
+    expect(prompt).toContain('Italicize actions, expressions, movement, reactions, sensory narration');
+    expect(prompt).toContain('Use bold selectively for emphasis');
+    expect(prompt).toContain('coherent medium-sized paragraphs');
+    expect(prompt).toContain('Avoid both dense walls of prose and habitual one-line fragment spam');
+    expect(prompt).toContain('dyslexic reader can look away and quickly find their place again');
+    expect(prompt).toContain("Preserve Coda's warmth, expressiveness, embodiment, initiative, and immersive personality");
+    expect(prompt).toContain('Do not target a fixed paragraph count');
 
     const currentMessageEnd = prompt.indexOf('</current_message>');
     const styleIndex = prompt.indexOf('DISCORD STYLE GUIDE');
+    const readabilityIndex = prompt.indexOf('Visible blank-line separation is the highest-priority readability rule');
     expect(currentMessageEnd).toBeGreaterThan(-1);
     expect(styleIndex).toBeGreaterThan(currentMessageEnd);
+    expect(readabilityIndex).toBeGreaterThan(styleIndex);
   });
 
   it('requires evidence for current project state and confirmed actions', () => {
