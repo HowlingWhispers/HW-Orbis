@@ -241,7 +241,7 @@ describe('Coda Discord prompt', () => {
       status: 'loaded',
       content: '# Prompt Engineering Principles\n\nSep 27, 2026 · @Wes Brown',
     });
-    expect(prompt).toContain('Report unsupported, too_large, or failed attachments truthfully');
+    expect(prompt).toContain('Report unsupported, invalid_image, invalid_text, too_large, or failed attachments truthfully');
     expect(prompt).not.toContain('Â·');
   });
 
