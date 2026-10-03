@@ -19,10 +19,10 @@ const config = loadConfig({
   CODA_DISCORD_GUEST_ACCESS: 'true',
 });
 
-function appFor(query: ReturnType<typeof vi.fn>) {
+function appFor(query: ReturnType<typeof vi.fn>, appConfig = config) {
   const app = express();
   app.use(express.json());
-  app.use('/api/internal/coda-discord', createCodaDiscordBridgeRouter(config, { query } as unknown as DatabasePool));
+  app.use('/api/internal/coda-discord', createCodaDiscordBridgeRouter(appConfig, { query } as unknown as DatabasePool));
   return app;
 }
 
@@ -70,6 +70,67 @@ describe('Coda Discord context bridge', () => {
     const query = vi.fn();
     await request(appFor(query)).post('/api/internal/coda-discord/context').send(body).expect(401);
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it('builds Browser Coda context from the authenticated member only', async () => {
+    const query = vi.fn(async (sql: string, values?: unknown[]) => {
+      if (sql.includes('FROM users WHERE discord_id')) {
+        expect(values?.[0]).toBe(body.discordUserId);
+        return { rowCount: 1, rows: [{ id: 'eirvargr-user' }] };
+      }
+      if (sql.includes('FROM coda.member_profiles')) {
+        expect(values?.[0]).toBe('eirvargr-user');
+        return { rowCount: 0, rows: [] };
+      }
+      if (sql.includes('FROM coda.member_notes')) {
+        expect(values?.[0]).toBe('eirvargr-user');
+        return { rowCount: 1, rows: [{
+          id: '42', orbis_user_id: 'eirvargr-user', kind: 'memory',
+          content: 'AmbiProp is a known friend from Discord.', visibility: 'private',
+          provenance_type: 'member_confirmed', importance: 5, pinned: true,
+          corrected_from: null, created_at: '2026-10-01T00:00:00.000Z', updated_at: '2026-10-01T00:00:00.000Z',
+        }] };
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    });
+
+    const response = await request(appFor(query))
+      .post('/api/internal/coda-discord/context')
+      .set('authorization', `Bearer ${bridgeSecret}`)
+      .send({ ...body, surface: 'web', guildId: '', channelId: '', channelName: 'Coda Web', privacyScope: 'dm' })
+      .expect(200);
+
+    expect(response.body.prompt).toContain('CODA WEB MODE');
+    expect(response.body.prompt).toContain('speaking inside private Coda Web rooms');
+    expect(response.body.prompt).toContain('AmbiProp is a known friend from Discord.');
+    expect(response.body.prompt).not.toContain('speaking directly inside Discord');
+    expect(query.mock.calls.every(call => !call.flat().includes('another-user'))).toBe(true);
+  });
+
+  it('gives a fresh Browser account a canonical prompt with no invented member memory', async () => {
+    const strictConfig = loadConfig({
+      NODE_ENV: 'test', APP_ORIGIN: 'http://localhost:5174', DATABASE_URL: 'postgres://test:test@localhost/test',
+      SESSION_SECRET: 'test-session-secret-at-least-32-characters', DISCORD_CLIENT_ID: '', DISCORD_CLIENT_SECRET: 'test',
+      DISCORD_REDIRECT_URI: 'http://localhost:5174/api/auth/discord/callback', CODA_INTERNAL_BRIDGE_SECRET: bridgeSecret,
+      CODA_DISCORD_GUEST_ACCESS: 'false',
+    });
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes('FROM users WHERE discord_id')) return { rowCount: 0, rows: [] };
+      throw new Error(`Fresh account must not read memory: ${sql}`);
+    });
+    const web = await request(appFor(query, strictConfig))
+      .post('/api/internal/coda-discord/context')
+      .set('authorization', `Bearer ${bridgeSecret}`)
+      .send({ ...body, surface: 'web', guildId: '', channelId: '', channelName: 'Coda Web', privacyScope: 'dm' })
+      .expect(200);
+    expect(web.body.prompt).toContain('Anything not in it is not remembered');
+    expect(web.body.prompt).not.toContain('CODA MEMORY:');
+
+    await request(appFor(query, strictConfig))
+      .post('/api/internal/coda-discord/context')
+      .set('authorization', `Bearer ${bridgeSecret}`)
+      .send({ ...body, surface: 'discord' })
+      .expect(409);
   });
 
   it('accepts structured Discord identity, reply, mention, and attachment context', async () => {

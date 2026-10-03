@@ -142,6 +142,7 @@ const runtimeCapabilitySchema = z.object({
 
 const requestSchema = z.object({
   discordUserId: z.string().regex(/^\d{17,20}$/),
+  surface: z.enum(['discord', 'web']).optional().default('discord'),
   messageId: z.string().regex(/^\d{17,20}$/).optional(),
   text: z.string().trim().min(1).max(4_000),
   trigger: z.enum(['slash', 'name', 'ambient', 'reply', 'forum-initial', 'welcome']).optional().default('slash'),
@@ -353,7 +354,7 @@ function bridgeAuthorized(config: AppConfig, authorization: string | undefined) 
 }
 
 function buildDiscordPromptBase(
-  body: Omit<BridgeRequest, 'guildId' | 'channelId'> & Partial<Pick<BridgeRequest, 'guildId' | 'channelId'>>,
+  body: Omit<BridgeRequest, 'guildId' | 'channelId' | 'surface'> & Partial<Pick<BridgeRequest, 'guildId' | 'channelId' | 'surface'>>,
   projectReference = '',
 ) {
   const context = body.recentMessages.length
@@ -529,10 +530,19 @@ export function buildDiscordPrompt(...args: Parameters<typeof buildDiscordPrompt
   const perception = perceptionGuidance(body.perception);
   const capabilities = runtimeCapabilityGuidance(body);
 
-  return buildDiscordPromptBase(...args)
+  const basePrompt = buildDiscordPromptBase(...args);
+  const surfacePrompt = body.surface === 'web'
+    ? basePrompt
+        .replace('CODA DISCORD MODE', 'CODA WEB MODE')
+        .replace('speaking directly inside Discord', 'speaking inside private Coda Web rooms')
+        .replace('because Discord already shows your name', 'because Coda Web already shows your name')
+        .replace('Return only the message Coda should visibly send to Discord.', 'Return only the message Coda should visibly send to the Coda Web room.')
+    : basePrompt;
+
+  return surfacePrompt
     .replace(
       'CONVERSATION CONTINUITY:',
-      `AUTHORITATIVE DISCORD IDENTITY:\n- The current speaker is defined only by current_message.authorId, author, and tag. Never infer the current speaker from history or the reply target.\n- reply_target is the message being answered, never the identity of the current speaker.\n- Only users listed in current_message.explicitMentions were explicitly tagged in this message. Never invent a tag from names in prose, history, or reply_target.\n- Attachment content is available only when its status is "loaded". Report unsupported, invalid_image, invalid_text, too_large, or failed attachments truthfully; never claim to have read their contents.\n- status="office_queued" means the complete document was durably accepted for private background reading. Acknowledge that it is going to the office and will return when finished, but do not claim it has already been read.\n${capabilities ? `${capabilities}\n\n` : ''}${perception}\n\nCONVERSATION CONTINUITY:`,
+      `AUTHORITATIVE CALLER IDENTITY:\n- The current speaker is defined only by current_message.authorId, author, and tag. Never infer the current speaker from history or the reply target.\n- reply_target is the message being answered, never the identity of the current speaker.\n- Only users listed in current_message.explicitMentions were explicitly tagged in this message. Never invent a tag from names in prose, history, or reply_target.\n- Attachment content is available only when its status is "loaded". Report unsupported, invalid_image, invalid_text, too_large, or failed attachments truthfully; never claim to have read their contents.\n- status="office_queued" means the complete document was durably accepted for private background reading. Acknowledge that it is going to the office and will return when finished, but do not claim it has already been read.\n${capabilities ? `${capabilities}\n\n` : ''}${perception}\n\nCONVERSATION CONTINUITY:`,
     )
     .replace(
       /<current_message[^>]*>[\s\S]*?<\/current_message>/,
@@ -682,7 +692,7 @@ export function createCodaDiscordBridgeRouter(config: AppConfig, pool: DatabaseP
         `SELECT id::text FROM users WHERE discord_id = $1 LIMIT 1`,
         [body.discordUserId],
       );
-      if (!userResult.rowCount && !config.codaDiscordGuestAccess) {
+      if (!userResult.rowCount && !config.codaDiscordGuestAccess && body.surface !== 'web') {
         return response.status(409).json({
           code: 'orbis_account_not_linked',
           error: "Coda cannot match this Discord account to Orbis yet.",
