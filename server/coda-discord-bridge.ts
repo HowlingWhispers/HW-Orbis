@@ -1,3 +1,4 @@
+import { buildTurnQuality, replyQualityIssues, repairGuidance } from './coda-turn-quality.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { buildCodaCapabilityContext } from './coda-capabilities.js';
@@ -550,7 +551,7 @@ export function buildDiscordPrompt(...args: Parameters<typeof buildDiscordPrompt
     )
     .replace(
       '\n\nOUTPUT RULES:',
-      `\n\n${codaSocialSpontaneityGuidance}\n\n${codaResponseEnergyGuidance}\n\n${codaResponseLengthGuidance}\n\n${codaProactiveExecutionGuidance}\n\n${codaMemoryLanguageGuidance}\n\n${codaExpressiveStyleGuidance}\n\n${codaPrivacyGuidance}\n\n${codaMemoryUseGuidance}\n\nOUTPUT RULES:`,
+      `\n\n${buildTurnQuality(body.recentMessages, body.text).guidance}\n\n${codaSocialSpontaneityGuidance}\n\n${codaResponseEnergyGuidance}\n\n${codaResponseLengthGuidance}\n\n${codaProactiveExecutionGuidance}\n\n${codaMemoryLanguageGuidance}\n\n${codaExpressiveStyleGuidance}\n\n${codaPrivacyGuidance}\n\n${codaMemoryUseGuidance}\n\nOUTPUT RULES:`,
     )
     .replace('\n\nOUTPUT RULES:', `${roomGuidance ? `\n\n${roomGuidance}` : ''}\n\nOUTPUT RULES:`)
     .replace(
@@ -764,6 +765,8 @@ export function createCodaDiscordBridgeRouter(config: AppConfig, pool: DatabaseP
       // admin memory or provider data is read into the prompt on this path.
       const reference = await buildDiscordReference(config, pool, body);
       const prompt = buildDiscordPrompt(body, reference);
+      const quality = buildTurnQuality(body.recentMessages, body.text);
+      let repairUsed = false;
 
       type Candidate = {
         userId: string | null;
@@ -785,7 +788,20 @@ export function createCodaDiscordBridgeRouter(config: AppConfig, pool: DatabaseP
 
       const runCandidate = async (candidate: Candidate): Promise<AttemptResult> => {
         attempted = true;
-        const outcome = await callNovelAi(config, candidate.credential, candidate.model, prompt);
+        let outcome = await callNovelAi(config, candidate.credential, candidate.model, prompt);
+        if (outcome.ok) {
+          const issues = replyQualityIssues(sanitizeDiscordCodaProviderReply(outcome.text), quality);
+          if (issues.length) {
+            if (!repairUsed) {
+              repairUsed = true;
+              outcome = await callNovelAi(config, candidate.credential, candidate.model, `${prompt}\n\n${repairGuidance(issues)}\n\nCODA REPLY:`);
+            }
+            if (outcome.ok && replyQualityIssues(sanitizeDiscordCodaProviderReply(outcome.text), quality).length) {
+              // A bad draft is not a credential failure and must not rotate keys.
+              outcome = { ok: false, kind: 'failure', failure: { status: 200, failureClass: 'unknown_upstream', reason: 'reply quality rejected' } };
+            }
+          }
+        }
         if (outcome.ok) {
           const reply = sanitizeDiscordCodaProviderReply(outcome.text);
           if (reply) {

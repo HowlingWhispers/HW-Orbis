@@ -262,6 +262,43 @@ const success = (text = '*wiggles* Hello there.') => ({ status: 200, body: { cho
 beforeEach(() => { fetchCalls = []; });
 afterEach(() => { vi.unstubAllGlobals(); });
 
+describe('Coda reply quality on the NovelAI fallback', () => {
+  const routine = '*My ears flatten. The clipboard appears.* Article 3! The Bath Clause!';
+  const recentMessages = [1, 2].map(() => ({ authorName: 'Coda', content: routine, isCoda: true }));
+
+  it('repairs a stale draft once with the same credential and preserves canonical guidance', async () => {
+    const state = newPoolState();
+    state.users.push({ id: OWNER, discordId: LINKED_DISCORD, displayName: 'Owner' });
+    state.credentials.set(OWNER, { model: 'xialong-v1', sealed: sealedFor('owner') });
+    stubProvider([success(routine), success('*I pause.* "Ambi, did you see that?"')]);
+    const response = await request(bridgeApp(state, buildConfig(), []))
+      .post('/api/internal/coda-discord').set('authorization', `Bearer ${bridgeSecret}`)
+      .send(bridgeRequest({ recentMessages })).expect(200);
+    expect(response.body.reply).toContain('did you see that');
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls[0].prompt).toContain('RECENT CODA LOOP COOLDOWNS');
+    expect(fetchCalls[1].prompt).toContain('REWRITE THIS TURN ONCE');
+    expect(fetchCalls[0].authorization).toBe(fetchCalls[1].authorization);
+  });
+
+  it('rejects two failed drafts without rotating shared credentials for a style failure', async () => {
+    const state = newPoolState();
+    state.users.push({ id: OWNER, discordId: LINKED_DISCORD, displayName: 'Owner' });
+    state.credentials.set(OWNER, { model: 'xialong-v1', sealed: sealedFor('owner') });
+    state.credentials.set(MEMBER_B, { model: 'xialong-v1', sealed: sealedFor('memberb') });
+    state.members.push(member({ userId: MEMBER_B }));
+    trust(state, MEMBER_B, LINKED_DISCORD);
+    stubProvider([success(routine)]);
+    const log: QueryLog = [];
+    const response = await request(bridgeApp(state, buildConfig({ CODA_DISCORD_SHARED_POOL_ENABLED: 'true' }), log))
+      .post('/api/internal/coda-discord').set('authorization', `Bearer ${bridgeSecret}`)
+      .send(bridgeRequest({ recentMessages })).expect(502);
+    expect(response.body.reply).toBeUndefined();
+    expect(fetchCalls).toHaveLength(2);
+    expect(log.some(entry => entry.startsWith('pool-select:') || entry.startsWith('mark-failed:'))).toBe(false);
+  });
+});
+
 describe('upstream failure classification', () => {
   it('recognises the exact NovelAI entitlement response observed in production', () => {
     const failure = classifyProviderFailure(400, ENTITLEMENT_BODY);
