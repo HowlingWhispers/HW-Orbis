@@ -3,8 +3,10 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
 import { createAdminRouter, requireAdmin } from '../server/admin';
+import { SUPER_ADMIN_DISCORD_ID } from '../server/auth';
 import { loadConfig } from '../server/config';
 import type { DatabasePool } from '../server/db';
+import { credentialKey, openCredential } from '../server/provider-settings';
 import { PostgresSettingsStore, resolveSettings, type AuditEntry, type EffectiveSettings, type OperationalSettings, type SettingsStore } from '../server/settings';
 
 const ids = {
@@ -19,6 +21,7 @@ const config = loadConfig({
   DISCORD_ADULT_ROLE_IDS: ids.adult, DISCORD_CREATOR_ROLE_IDS: '', DISCORD_ADMIN_ROLE_IDS: ids.admin,
   DISCORD_BOOTSTRAP_ADMIN_ROLE_IDS: ids.recovery, DISCORD_INVITE_URL: '', VITE_DISCORD_INVITE_URL: '',
   ORBIS_VERSION: 'test-version', ORBIS_BUILD_SHA: 'test-sha',
+  ORBIS_CREDENTIAL_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
 });
 
 class MemorySettingsStore implements SettingsStore {
@@ -33,14 +36,14 @@ class MemorySettingsStore implements SettingsStore {
   async getAudit() { return this.audit; }
 }
 
-function testApp(access: 'none' | 'ordinary' | 'admin', store = new MemorySettingsStore()) {
+function testApp(access: 'none' | 'ordinary' | 'admin', store = new MemorySettingsStore(), poolOverride?: DatabasePool, superAdmin = false) {
   const app = express(); app.use(express.json());
   app.use((req, _res, next) => {
-    if (access !== 'none') Object.defineProperty(req, 'session', { value: { userId: '00000000-0000-4000-8000-000000000001', access: { isGuildMember: true, canViewAdult: false, canCreate: false, canAdmin: access === 'admin', checkedAt: Date.now() } }, configurable: true });
+    if (access !== 'none') Object.defineProperty(req, 'session', { value: { userId: '00000000-0000-4000-8000-000000000001', discordUserId: superAdmin ? SUPER_ADMIN_DISCORD_ID : ids.admin, access: { isGuildMember: true, canViewAdult: false, canCreate: false, canAdmin: access === 'admin', checkedAt: Date.now() } }, configurable: true });
     else Object.defineProperty(req, 'session', { value: {}, configurable: true });
     next();
   });
-  const pool = { query: async () => ({ rows: [{ '?column?': 1 }], rowCount: 1 }) } as unknown as DatabasePool;
+  const pool = poolOverride ?? { query: async () => ({ rows: [{ '?column?': 1 }], rowCount: 1 }) } as unknown as DatabasePool;
   const viewPreferences = { get: async () => ({ hidePrivateUserWorlds: true }), set: async () => ({ hidePrivateUserWorlds: true }) };
   app.use('/api/admin', requireAdmin(config, store), createAdminRouter(config, pool, store, viewPreferences));
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -77,6 +80,32 @@ describe('Orbis administration API', () => {
     expect(body).not.toContain('postgres://secret-db-value');
     expect(body).not.toContain('session-secret-value-that-is-long-enough');
     expect(response.body.secrets.discordClientSecret).toBe('configured');
+  });
+  it('restricts the OpenAI credential to the super-administrator', async () => {
+    await request(testApp('admin').app).get('/api/admin/provider-credentials/openai').expect(403);
+    await request(testApp('admin').app).put('/api/admin/provider-credentials/openai').send({ apiKey: 'sk-test-secret-value-1234567890', model: 'gpt-4.1-mini' }).expect(403);
+  });
+  it('stores the OpenAI key encrypted and never returns it', async () => {
+    let stored: { ciphertext: Buffer; iv: Buffer; tag: Buffer; model: string; updatedAt: string } | undefined;
+    const pool = { query: async (sql: string, values?: unknown[]) => {
+      if (sql.includes('SELECT model, updated_at')) return { rowCount: stored ? 1 : 0, rows: stored ? [{ model: stored.model, updated_at: stored.updatedAt }] : [] };
+      if (sql.includes('INSERT INTO admin_provider_credentials')) {
+        stored = { ciphertext: values?.[0] as Buffer, iv: values?.[1] as Buffer, tag: values?.[2] as Buffer, model: String(values?.[3]), updatedAt: new Date().toISOString() };
+        return { rowCount: 1, rows: [{ model: stored.model, updated_at: stored.updatedAt }] };
+      }
+      if (sql.includes('DELETE FROM admin_provider_credentials')) { stored = undefined; return { rowCount: 1, rows: [] }; }
+      return { rowCount: 0, rows: [] };
+    } } as unknown as DatabasePool;
+    const app = testApp('admin', new MemorySettingsStore(), pool, true).app;
+    const apiKey = 'sk-test-secret-value-1234567890';
+    const saved = await request(app).put('/api/admin/provider-credentials/openai').send({ apiKey, model: 'gpt-4.1-mini' }).expect(200);
+    expect(JSON.stringify(saved.body)).not.toContain(apiKey);
+    expect(stored?.ciphertext.toString('utf8')).not.toContain(apiKey);
+    expect(openCredential(stored!, credentialKey(config.ORBIS_CREDENTIAL_ENCRYPTION_KEY))).toBe(apiKey);
+    const status = await request(app).get('/api/admin/provider-credentials/openai').expect(200);
+    expect(status.body).toMatchObject({ configured: true, model: 'gpt-4.1-mini' });
+    expect(JSON.stringify(status.body)).not.toContain(apiKey);
+    await request(app).delete('/api/admin/provider-credentials/openai').expect(204);
   });
 });
 

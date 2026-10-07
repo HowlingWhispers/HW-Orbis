@@ -6,6 +6,7 @@ import type { AdminViewPreferenceStore } from './admin-view-preferences.js';
 import { ensureSuperAdminAccess, refreshSessionAccess, SUPER_ADMIN_DISCORD_ID } from './auth.js';
 import { listCodaLogs, listCodaLogUsers } from './coda-log.js';
 import { adminSettingsSchema, SettingsLockoutError, type SettingsStore } from './settings.js';
+import { credentialKey, sealCredential } from './provider-settings.js';
 import {
   CodaDiscordError, cancelCodaScheduledMessage, codaControlSchema, codaDirectMessageSchema, codaDiscordMessageSchema,
   codaMessageEditSchema, codaScheduleSchema, createCodaScheduledMessage, createCodaTemplate, deleteCodaDiscordMessage,
@@ -22,6 +23,12 @@ import './types.js';
  */
 const adminViewPreferenceSchema = z.object({
   hidePrivateUserWorlds: z.boolean().optional(),
+}).strict();
+
+const openAiModels = ['gpt-4.1-mini', 'gpt-4o-mini'] as const;
+const openAiCredentialSchema = z.object({
+  apiKey: z.string().trim().min(20).max(4096).refine((value) => value.startsWith('sk-'), 'Use an OpenAI API key.'),
+  model: z.enum(openAiModels).default('gpt-4.1-mini'),
 }).strict();
 
 export function requireAdmin(config: AppConfig, poolOrSettingsStore: DatabasePool | SettingsStore, maybeSettingsStore?: SettingsStore) {
@@ -125,11 +132,57 @@ export function createAdminRouter(
   const requireSuperAdmin = async (request: Request, response: Response) => {
     const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
     if (!isSuperAdmin) {
-      response.status(403).json({ error: 'Only the Orbis super-administrator can grant adult access overrides.' });
+      response.status(403).json({ error: 'Only the Orbis super-administrator can manage this protected setting.' });
       return false;
     }
     return true;
   };
+
+  router.get('/provider-credentials/openai', async (request, response, next) => {
+    try {
+      if (!await requireSuperAdmin(request, response)) return;
+      const result = await pool.query(
+        `SELECT model, updated_at FROM admin_provider_credentials WHERE provider = 'openai'`,
+      );
+      response.json(result.rowCount
+        ? { configured: true, model: result.rows[0].model, updatedAt: result.rows[0].updated_at }
+        : { configured: false, model: 'gpt-4.1-mini' });
+    } catch (error) { next(error); }
+  });
+
+  router.put('/provider-credentials/openai', async (request, response, next) => {
+    try {
+      if (!await requireSuperAdmin(request, response)) return;
+      const value = openAiCredentialSchema.parse(request.body);
+      const sealed = sealCredential(value.apiKey, credentialKey(config.ORBIS_CREDENTIAL_ENCRYPTION_KEY));
+      const result = await pool.query(
+        `INSERT INTO admin_provider_credentials (
+           provider, secret_ciphertext, secret_iv, secret_tag, model, updated_by_user_id
+         ) VALUES ('openai', $1, $2, $3, $4, $5)
+         ON CONFLICT (provider) DO UPDATE SET
+           secret_ciphertext = excluded.secret_ciphertext,
+           secret_iv = excluded.secret_iv,
+           secret_tag = excluded.secret_tag,
+           model = excluded.model,
+           updated_by_user_id = excluded.updated_by_user_id,
+           updated_at = now()
+         RETURNING model, updated_at`,
+        [sealed.ciphertext, sealed.iv, sealed.tag, value.model, request.session.userId],
+      );
+      response.json({ configured: true, model: result.rows[0].model, updatedAt: result.rows[0].updated_at });
+    } catch (error) {
+      if (error instanceof ZodError) return response.status(400).json({ error: 'Enter a valid OpenAI API key and supported model.' });
+      next(error);
+    }
+  });
+
+  router.delete('/provider-credentials/openai', async (request, response, next) => {
+    try {
+      if (!await requireSuperAdmin(request, response)) return;
+      await pool.query(`DELETE FROM admin_provider_credentials WHERE provider = 'openai'`);
+      response.status(204).end();
+    } catch (error) { next(error); }
+  });
 
   router.get('/adult-overrides', async (request, response, next) => {
     try {

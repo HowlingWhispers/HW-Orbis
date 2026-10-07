@@ -1,12 +1,14 @@
 // @vitest-environment node
 import express from 'express';
 import request from 'supertest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../server/config';
 import { createCodaDiscordBridgeRouter } from '../server/coda-discord-bridge';
 import type { DatabasePool } from '../server/db';
+import { sealCredential } from '../server/provider-settings';
 
 const bridgeSecret = 'context-test-secret-that-never-enters-the-prompt';
+const credentialSecret = Buffer.alloc(32, 9).toString('base64');
 const config = loadConfig({
   NODE_ENV: 'test',
   APP_ORIGIN: 'http://localhost:5174',
@@ -17,7 +19,10 @@ const config = loadConfig({
   DISCORD_REDIRECT_URI: 'http://localhost:5174/api/auth/discord/callback',
   CODA_INTERNAL_BRIDGE_SECRET: bridgeSecret,
   CODA_DISCORD_GUEST_ACCESS: 'true',
+  ORBIS_CREDENTIAL_ENCRYPTION_KEY: credentialSecret,
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 function appFor(query: ReturnType<typeof vi.fn>, appConfig = config) {
   const app = express();
@@ -39,6 +44,29 @@ const body = {
 };
 
 describe('Coda Discord context bridge', () => {
+  it('generates through the encrypted admin OpenAI key without disclosing it', async () => {
+    const apiKey = 'sk-test-openai-secret-1234567890';
+    const sealed = sealCredential(apiKey, Buffer.from(credentialSecret, 'base64'));
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes('FROM admin_provider_credentials')) return { rowCount: 1, rows: [{ secret_ciphertext: sealed.ciphertext, secret_iv: sealed.iv, secret_tag: sealed.tag, model: 'gpt-4.1-mini' }] };
+      if (sql.includes('FROM users')) return { rowCount: 1, rows: [{ id: 'linked-user' }] };
+      return { rowCount: 0, rows: [] };
+    });
+    const upstream = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>).Authorization).toBe(`Bearer ${apiKey}`);
+      expect(String(init?.body)).not.toContain(apiKey);
+      return Response.json({ output_text: '*tail wag* Hello from Coda!' });
+    });
+    vi.stubGlobal('fetch', upstream);
+
+    const response = await request(appFor(query)).post('/api/internal/coda-discord/openai')
+      .set('authorization', `Bearer ${bridgeSecret}`).send(body).expect(200);
+    expect(response.body).toMatchObject({ ok: true, provider: 'openai', model: 'gpt-4.1-mini' });
+    expect(response.body.reply).toContain('Hello from Coda');
+    expect(JSON.stringify(response.body)).not.toContain(apiKey);
+    expect(upstream).toHaveBeenCalledOnce();
+  });
+
   it('returns canonical Coda context and only explicitly model-safe memories', async () => {
     const query = vi.fn(async (sql: string) => {
       if (sql.includes('FROM users')) return { rowCount: 1, rows: [{ id: 'linked-user' }] };

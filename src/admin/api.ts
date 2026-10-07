@@ -159,6 +159,12 @@ export interface AdminViewPreferences {
   hidePrivateUserWorlds: boolean;
 }
 
+export interface AdminOpenAiCredential {
+  configured: boolean;
+  model: 'gpt-4.1-mini' | 'gpt-4o-mini';
+  updatedAt?: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -235,4 +241,8 @@ export const adminApi = {
   viewPreferences: () => request<{ preferences: AdminViewPreferences }>('/view-preferences'),
   updateViewPreferences: (preferences: Partial<AdminViewPreferences>) =>
     request<{ preferences: AdminViewPreferences }>('/view-preferences', { method: 'PUT', body: JSON.stringify(preferences) }),
+  openAiCredential: () => request<AdminOpenAiCredential>('/provider-credentials/openai'),
+  saveOpenAiCredential: (apiKey: string, model: AdminOpenAiCredential['model']) =>
+    request<AdminOpenAiCredential>('/provider-credentials/openai', { method: 'PUT', body: JSON.stringify({ apiKey, model }) }),
+  deleteOpenAiCredential: () => request<void>('/provider-credentials/openai', { method: 'DELETE' }),
 };

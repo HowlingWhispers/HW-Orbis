@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   adminApi, type AdminAdultOverrideAccount, type AdminAuditEntry, type AdminCodaChannel, type AdminCodaMember, type AdminCodaMessage,
   type AdminCodaLog, type AdminCodaLogUser, type AdminCodaScheduled, type AdminCodaStatus, type AdminCodaTemplate, type AdminOverview,
-  type AdminSettings, type AdminViewPreferences,
+  type AdminOpenAiCredential, type AdminSettings, type AdminViewPreferences,
 } from '../admin/api';
 import { CODA_COMPOSED_MAX_LENGTH, CODA_MESSAGE_MAX_LENGTH, codaMessagePartCount } from '../admin/codaMessage';
 import { discordLoginPath, useAuth } from '../auth/AuthContext';
@@ -85,7 +85,7 @@ export function AdminView() {
         {tab === 'discord' && <DiscordPanel settings={settings} roleResolution={roleResolution} onSaved={(next) => { setSettings(next); void load(); }} />}
         {tab === 'coda' && <CodaDiscordPanel />}
         {tab === 'access' && <AccessPanel settings={settings} />}
-        {tab === 'system' && <SystemPanel overview={overview} settings={settings} />}
+        {tab === 'system' && <SystemPanel overview={overview} settings={settings} isSuperAdmin={user.isSuperAdmin} />}
         {tab === 'bigbrother' && <BigBrotherConsole />}
       </>}
     </AdminFrame>
@@ -592,8 +592,42 @@ function CodaPreview({ content, privateMessage = false }: { content: string; pri
   return <aside className="coda-console__preview" aria-label="Coda message preview"><span className="coda-preview-label">{privateMessage ? 'Private preview' : 'Preview'}</span><div className="coda-preview-message"><div className="coda-preview-avatar">C</div><div><strong>Coda <small>APP</small></strong><pre>{content || (privateMessage ? 'Coda will whisper your message here.' : 'Your message will appear here.')}</pre></div></div><p>Discord applies its normal Markdown formatting after delivery.</p></aside>;
 }
 
-function SystemPanel({ overview, settings }: { overview: AdminOverview; settings: AdminSettings }) {
-  return <div className="admin-stack"><section className="admin-section"><div className="admin-section__title"><Database /><div><h2>System information</h2><p>Read-only status. Secret values are never returned.</p></div></div><dl className="system-list"><div><dt>Orbis version</dt><dd>{overview.system.version}</dd></div><div><dt>Build commit</dt><dd>{overview.system.buildSha ?? 'Not supplied'}</dd></div><div><dt>Environment</dt><dd>{overview.system.environment}</dd></div><div><dt>Database</dt><dd>{overview.status.databaseConnected ? 'Connected' : 'Unavailable'}</dd></div><div><dt>Database URL</dt><dd>{overview.secrets.databaseUrl === 'configured' ? 'Configured' : 'Missing'}</dd></div><div><dt>Session secret</dt><dd>{overview.secrets.sessionSecret === 'configured' ? 'Configured' : 'Missing'}</dd></div><div><dt>Discord client secret</dt><dd>{overview.secrets.discordClientSecret === 'configured' ? 'Configured' : 'Missing'}</dd></div><div><dt>Coda bot token</dt><dd>{overview.secrets.codaDiscordBotToken === 'configured' ? 'Configured' : 'Missing'}</dd></div><div><dt>Creator fallback</dt><dd>{settings.creatorUsesAdultFallback ? 'Adult Access roles' : 'Disabled'}</dd></div></dl></section></div>;
+function SystemPanel({ overview, settings, isSuperAdmin }: { overview: AdminOverview; settings: AdminSettings; isSuperAdmin: boolean }) {
+  return <div className="admin-stack"><section className="admin-section"><div className="admin-section__title"><Database /><div><h2>System information</h2><p>Read-only status. Secret values are never returned.</p></div></div><dl className="system-list"><div><dt>Orbis version</dt><dd>{overview.system.version}</dd></div><div><dt>Build commit</dt><dd>{overview.system.buildSha ?? 'Not supplied'}</dd></div><div><dt>Environment</dt><dd>{overview.system.environment}</dd></div><div><dt>Database</dt><dd>{overview.status.databaseConnected ? 'Connected' : 'Unavailable'}</dd></div><div><dt>Database URL</dt><dd>{overview.secrets.databaseUrl === 'configured' ? 'Configured' : 'Missing'}</dd></div><div><dt>Session secret</dt><dd>{overview.secrets.sessionSecret === 'configured' ? 'Configured' : 'Missing'}</dd></div><div><dt>Discord client secret</dt><dd>{overview.secrets.discordClientSecret === 'configured' ? 'Configured' : 'Missing'}</dd></div><div><dt>Coda bot token</dt><dd>{overview.secrets.codaDiscordBotToken === 'configured' ? 'Configured' : 'Missing'}</dd></div><div><dt>Creator fallback</dt><dd>{settings.creatorUsesAdultFallback ? 'Adult Access roles' : 'Disabled'}</dd></div></dl></section>{isSuperAdmin && <OpenAiProviderPanel />}</div>;
+}
+
+function OpenAiProviderPanel() {
+  const [status, setStatus] = useState<AdminOpenAiCredential>({ configured: false, model: 'gpt-4.1-mini' });
+  const [apiKey, setApiKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    void adminApi.openAiCredential().then(setStatus).catch((error) => setMessage(error instanceof Error ? error.message : 'OpenAI status could not be loaded.'));
+  }, []);
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault(); setBusy(true); setMessage('');
+    try {
+      setStatus(await adminApi.saveOpenAiCredential(apiKey, status.model));
+      setApiKey('');
+      setMessage('OpenAI saved. Discord Coda will try it before Auto Free and NovelAI.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'OpenAI could not be saved.'); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    setBusy(true); setMessage('');
+    try {
+      await adminApi.deleteOpenAiCredential();
+      setStatus({ configured: false, model: 'gpt-4.1-mini' });
+      setApiKey('');
+      setMessage('OpenAI removed. Coda will use Auto Free, then NovelAI.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'OpenAI could not be removed.'); }
+    finally { setBusy(false); }
+  };
+
+  return <section className="admin-section"><div className="admin-section__title"><KeyRound /><div><h2>Discord Coda OpenAI</h2><p>Super-administrator only. OpenAI is tried first, followed by Kilo Auto Free and then NovelAI.</p></div></div><form className="admin-form" onSubmit={save}><AdminField label="OpenAI API key" source={status.configured ? 'database' : 'default'} hint="Write-only and encrypted. Orbis never returns the saved key to this browser."><input type="password" autoComplete="off" value={apiKey} minLength={20} maxLength={4096} required onChange={(event) => setApiKey(event.target.value)} placeholder={status.configured ? 'Key saved. Paste a new key to replace it.' : 'sk-...'} /></AdminField><AdminField label="Coda model" source="database"><select value={status.model} onChange={(event) => setStatus({ ...status, model: event.target.value as AdminOpenAiCredential['model'] })}><option value="gpt-4.1-mini">GPT-4.1 Mini</option><option value="gpt-4o-mini">GPT-4o Mini</option></select></AdminField><p className="admin-resolution">{status.configured ? `Configured${status.updatedAt ? ` · updated ${new Date(status.updatedAt).toLocaleString()}` : ''}.` : 'Not configured.'} API usage is billed directly by OpenAI under the saved key.</p><div className="admin-form__footer"><span role="status">{message}</span><div><button type="button" className="button button--ghost" disabled={busy || !status.configured} onClick={() => void remove()}><Trash2 size={16} /> Remove</button> <button className="button button--primary" disabled={busy || !apiKey.trim()}><Save size={16} /> {busy ? 'Saving...' : status.configured ? 'Replace key' : 'Save key'}</button></div></div></form></section>;
 }
 
 function AuditPanel({ audit }: { audit: AdminAuditEntry[] }) {
