@@ -43,13 +43,13 @@ describe('Speculus security bridge', () => {
     expect(() => openCredential(sealed, Buffer.alloc(32, 8))).toThrow();
   });
 
-  it('boxes a record for V3 and deposits only an opaque grant', async () => {
+  it('boxes a record for V4 and deposits only an opaque grant via /api/v4/launch', async () => {
     const captured: { body?: Record<string, unknown>; authorization?: string; url?: string } = {};
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       captured.url = String(url);
       captured.body = JSON.parse(String(init?.body));
       captured.authorization = new Headers(init?.headers).get('authorization') ?? undefined;
-      return new Response(JSON.stringify({ launchUrl: 'https://spec.thehowlingwhispers.com/v2?launch=once' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ launchUrl: 'https://spec.thehowlingwhispers.com/v4?launch=v4-code' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
     }));
     const pool = { query: vi.fn(async (sql: string) => {
       if (sql.includes('FROM library_assets a') && sql.includes('WHERE a.id')) return { rowCount: 1, rows: [{
@@ -91,6 +91,8 @@ describe('Speculus security bridge', () => {
 
     const response = await request(app).post(`/api/v1/library/assets/${assetId}/simulate`).send({ personaId }).expect(201);
     expect(response.body.launchUrl).toContain('spec.thehowlingwhispers.com');
+    expect(response.body.launchUrl).toContain('/v4?launch=');
+    expect(response.body.launchUrl).not.toContain('/v2');
     expect(captured.authorization).toBe('Bearer shared-test-bridge-secret');
     expect(captured.body).toMatchObject({
       version: 2, engine: 'v2', model: 'xialong-v1',
@@ -119,9 +121,8 @@ describe('Speculus security bridge', () => {
     });
     expect(JSON.stringify(relatedAssets[0])).not.toContain('privateNarrativeField');
     expect(String(captured.body?.generationGrant)).toHaveLength(43);
-    expect(captured.url).toBe('http://127.0.0.1:8790/api/v2/launch');
+    expect(captured.url).toBe('http://127.0.0.1:8790/api/v4/launch');
     expect(captured.body?.engine).toBe('v2');
-    expect(response.body.launchUrl).toBe('https://spec.thehowlingwhispers.com/?launch=once');
     expect(JSON.stringify(captured.body)).not.toContain('novelai-secret-token');
     expect(JSON.stringify(captured.body)).not.toContain('personaSettings');
     expect(JSON.stringify(captured.body)).not.toContain('Must not leak');

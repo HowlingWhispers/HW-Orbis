@@ -534,7 +534,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
-        const bridgeResponse = await fetch(`${config.SPECULUS_BRIDGE_URL.replace(/\/$/, '')}/api/v2/launch`, {
+        const bridgeResponse = await fetch(`${config.SPECULUS_BRIDGE_URL.replace(/\/$/, '')}/api/v4/launch`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${config.SPECULUS_BRIDGE_SECRET}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(resumeSave ? { package: packageBody, resumeSave } : packageBody),
@@ -542,10 +542,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
         });
         const bridgeBody = await bridgeResponse.json().catch(() => ({})) as { launchUrl?: string; error?: string };
         if (!bridgeResponse.ok || !bridgeBody.launchUrl) throw new Error(bridgeBody.error || `Speculus returned HTTP ${bridgeResponse.status}.`);
-        const url = new URL(bridgeBody.launchUrl);
-        if (url.pathname === '/v2') url.pathname = '/';
-        else if (url.pathname.startsWith('/v2/')) url.pathname = `/${url.pathname.slice(4)}`;
-        response.status(201).json({ launchUrl: url.toString(), expiresAt });
+        response.status(201).json({ launchUrl: bridgeBody.launchUrl, expiresAt });
       } catch (error) {
         await pool.query('UPDATE generation_grants SET revoked_at = now() WHERE launch_id = $1', [launchId]);
         throw error;
