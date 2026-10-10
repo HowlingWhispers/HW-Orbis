@@ -64,11 +64,15 @@ const hashGrant = (grant: string) => createHash('sha256').update(grant).digest('
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const stringValue = (value: unknown) => typeof value === 'string' ? value : '';
 const simulationType = (type: string) => type === 'species' || type === 'society' || type === 'family' || type === 'memory' ? 'other' : type;
-const isStructuredSpeculusPrompt = (prompt: string) => prompt.startsWith('SPECULUS V2 /') || prompt.startsWith('SPECULUS V3 EXPERIMENTAL /');
-const isV2OrV3StructuredPrompt = (prompt: string) => prompt.startsWith('SPECULUS V2 /') || prompt.startsWith('SPECULUS V3 EXPERIMENTAL /');
+// V4 renderer and delimiter-only repair calls use the same protected bridge as V2/V3.
+const isStructuredSpeculusPrompt = (prompt: string) =>
+  prompt.startsWith('SPECULUS V2 /')
+  || prompt.startsWith('SPECULUS V3 EXPERIMENTAL /')
+  || prompt.startsWith('SPECULUS V4 EXPERIMENTAL /')
+  || prompt.startsWith('SPECULUS V4 ROLEPLAY FORMAT CONTRACT');
 
 function withSentenceControl(prompt: string) {
-  if (!isV2OrV3StructuredPrompt(prompt)) return `${prompt}\n${sentenceControl}`;
+  if (!isStructuredSpeculusPrompt(prompt)) return `${prompt}\n${sentenceControl}`;
   const v2ResponseMarker = '\n[IN-WORLD RESPONSE]\n';
   if (prompt.endsWith(v2ResponseMarker)) {
     return `${prompt.slice(0, -v2ResponseMarker.length)}\n${sentenceControl}${v2ResponseMarker}`;

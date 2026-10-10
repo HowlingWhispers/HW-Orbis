@@ -34,7 +34,7 @@ function fixture() {
   });
   const app = express(); app.use(express.json());
   app.use('/api/v1/generation', createSpeculusGenerationRouter(config, { query } as unknown as DatabasePool));
-  return { query, send: () => request(app).post('/api/v1/generation/speculus').set('Authorization', `Bearer ${grant}`).send(body) };
+  return { query, send: (overrides: Record<string, unknown> = {}) => request(app).post('/api/v1/generation/speculus').set('Authorization', `Bearer ${grant}`).send({ ...body, ...overrides }) };
 }
 beforeEach(() => { vi.spyOn(console, 'warn').mockImplementation(() => {}); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -72,6 +72,33 @@ describe('actionable, private Speculus generation errors', () => {
     expect(response.body).toMatchObject({ text: '*A usable short reply.*', finishReason: 'stop' });
     expect(response.body.text).not.toContain(token);
     expect(response.body.text).not.toContain(prompt);
+  });
+
+  it('keeps V4 narration cues last and avoids injecting legacy stop sequences', async () => {
+    let sent: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ choices: [{ text: '*Jori turns toward Luna.*', finish_reason: 'stop' }] }));
+    }));
+    const promptV4 = 'SPECULUS V4 EXPERIMENTAL / RENDERING CONTRACT\nCurrent scene\n\n[IN-WORLD RESPONSE]\n';
+    const response = await fixture().send({ prompt: promptV4, stopSequences: ['PLAYER:'] }).expect(200);
+    expect(response.body.text).toBe('*Jori turns toward Luna.*');
+    expect(sent.stop).toEqual(['PLAYER:']);
+    const submitted = String(sent.prompt);
+    expect(submitted).toMatch(/<generation_control>[^\n]+<\/generation_control>\n\[IN-WORLD RESPONSE\]\n$/);
+    expect(submitted).not.toContain('[IN-WORLD RESPONSE]\n<generation_control>');
+  });
+
+  it('does not add legacy stops to V4 format-only repairs', async () => {
+    let sent: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ choices: [{ text: '*Jori nods.*', finish_reason: 'stop' }] }));
+    }));
+    const repair = 'SPECULUS V4 ROLEPLAY FORMAT CONTRACT\nFORMAT REPAIR ONLY';
+    await fixture().send({ prompt: repair, stopSequences: [], continueToEndOfSentence: false }).expect(200);
+    expect(sent.stop).toEqual([]);
+    expect(sent.prompt).toBe(repair);
   });
 
   it.each([[502, 'NOVELAI_UNAVAILABLE'], [200, 'NOVELAI_INVALID_RESPONSE']])('handles non-JSON provider HTTP %s', async (status, code) => {
