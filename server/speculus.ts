@@ -74,8 +74,13 @@ const isStructuredSpeculusPrompt = (prompt: string) =>
 function withSentenceControl(prompt: string) {
   if (!isStructuredSpeculusPrompt(prompt)) return `${prompt}\n${sentenceControl}`;
   const v2ResponseMarker = '\n[IN-WORLD RESPONSE]\n';
+  // V4 renders the cue without a final newline. Keep both cue spellings last.
+  const v4ResponseMarker = '\n\n[IN-WORLD RESPONSE]';
   if (prompt.endsWith(v2ResponseMarker)) {
     return `${prompt.slice(0, -v2ResponseMarker.length)}\n${sentenceControl}${v2ResponseMarker}`;
+  }
+  if (prompt.endsWith(v4ResponseMarker)) {
+    return `${prompt.slice(0, -v4ResponseMarker.length)}\n${sentenceControl}${v4ResponseMarker}`;
   }
   return `${prompt}\n${sentenceControl}`;
 }

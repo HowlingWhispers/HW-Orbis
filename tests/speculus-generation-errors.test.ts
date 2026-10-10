@@ -89,6 +89,21 @@ describe('actionable, private Speculus generation errors', () => {
     expect(submitted).not.toContain('[IN-WORLD RESPONSE]\n<generation_control>');
   });
 
+  it('keeps the actual V4 response cue last when no trailing newline exists', async () => {
+    let sent: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ choices: [{ text: '*Jori looks up.*', finish_reason: 'stop' }] }));
+    }));
+    const promptV4 = 'SPECULUS V4 EXPERIMENTAL / RENDERING CONTRACT\nScene context\n\n[IN-WORLD RESPONSE]';
+    const response = await fixture().send({ prompt: promptV4, stopSequences: [] }).expect(200);
+    expect(response.body.text).toBe('*Jori looks up.*');
+    expect(sent.stop).toEqual([]);
+    const submitted = String(sent.prompt);
+    expect(submitted).toMatch(/<generation_control>[^\n]+<\/generation_control>\n\n\[IN-WORLD RESPONSE\]$/);
+    expect(submitted).not.toContain('[IN-WORLD RESPONSE]\n<generation_control>');
+  });
+
   it('does not add legacy stops to V4 format-only repairs', async () => {
     let sent: Record<string, unknown> = {};
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
