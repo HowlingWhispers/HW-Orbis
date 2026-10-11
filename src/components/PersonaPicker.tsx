@@ -19,7 +19,7 @@ const toneOptions: Array<{ value: SimulationTone; label: string; help: string }>
   { value: 'world-default', label: 'World default', help: 'Follow the world and character canon without adding a special content filter.' },
   { value: 'family-friendly', label: 'Family-friendly', help: 'Keep the session suitable for general audiences and avoid sexual or graphic material.' },
   { value: 'mature', label: 'Mature', help: 'Allow serious themes, stronger language and non-sexual violence without explicit sexual content.' },
-  { value: 'adult-erotic', label: 'Adult / erotic (18+)', help: 'Allow adult erotic focus. This requires 18+ access and a Persona whose age is explicitly 18 or older.' },
+  { value: 'adult-erotic', label: 'Adult / erotic (18+)', help: 'Allow adult erotic focus. Requires 18+ account access and a clearly adult Persona; non-human species may have a different canonical age of adulthood.' },
 ];
 
 function parseFocusTags(value: string) {
@@ -145,7 +145,7 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
         </option>)}
       </select>
       <small>{selectedTone.help}</small>
-      {blockedAdultTone && <small role="status">Admin QA preview only: an erotic session cannot launch with this Persona. {selectedPersona?.age === undefined ? 'This Persona has no explicit adult age.' : selectedPersona.age < 18 ? 'This Persona is under 18.' : 'Your account lacks adult-content access.'} Use an 18+ eligible test Persona for end-to-end testing.</small>}
+      {blockedAdultTone && <small role="status">Admin QA preview only: an erotic session cannot launch with this Persona. {selectedPersona?.age === undefined ? 'This Persona has no explicit chronological age.' : selectedPersona.age < 18 ? 'This Persona lacks validated species-adult status or adult presentation.' : 'Your account lacks adult-content access.'} Use a Persona with verified adult standing for end-to-end testing.</small>}
     </label>
 
     <label className="world-delete-review__confirm">
