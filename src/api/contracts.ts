@@ -72,6 +72,20 @@ export interface SimulationLaunchOptions {
   resumeSaveId?: string;
 }
 
+/** Authenticated administrator-only read-only server-side launch policy probe. */
+export interface SimulationPolicyProbeResult {
+  allowed: boolean;
+  checks: {
+    accountAdultAccess: boolean;
+    personaAdultEligible: boolean;
+    toneSupported: boolean;
+  };
+  reasons: string[];
+  personaAge?: number;
+  species: string;
+  lifeStage: string;
+}
+
 export interface SimulationPersona {
   id: string;
   name: string;
@@ -106,6 +120,7 @@ export interface LibraryApi {
   searchOwnershipTransferTargets(id: string, search: string): Promise<OwnershipTransferTarget[]>;
   transferWorldOwnership(id: string, input: { targetUserId: string; confirmName: string }): Promise<OwnershipTransferResult>;
   listSimulationPersonas(signal?: AbortSignal): Promise<SimulationPersona[]>;
+  probeSimulationPolicy(assetId: string, personaId: string, tone: SimulationTone): Promise<SimulationPolicyProbeResult>;
   listSimulationPlaces(id: string, signal?: AbortSignal): Promise<SimulationPlace[]>;
   simulateAsset(id: string, personaId: string, startingPlaceId?: string, options?: SimulationLaunchOptions): Promise<{ launchUrl: string; expiresAt: number }>;
   listAssetImages(assetId: string, signal?: AbortSignal): Promise<AssetImage[]>;
