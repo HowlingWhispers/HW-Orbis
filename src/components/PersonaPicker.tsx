@@ -11,6 +11,8 @@ interface PersonaPickerProps {
   error?: string;
   onCancel: () => void;
   onSelect: (personaId: string, startingPlaceId?: string) => void;
+  /** Preview restricted launch states without bypassing the server-side adult Persona gate. */
+  adminDiagnostics?: boolean;
 }
 
 const toneOptions: Array<{ value: SimulationTone; label: string; help: string }> = [
@@ -24,13 +26,14 @@ function parseFocusTags(value: string) {
   return [...new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean))].slice(0, 12);
 }
 
-export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, error = '', onCancel, onSelect }: PersonaPickerProps) {
+export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, error = '', onCancel, onSelect, adminDiagnostics = false }: PersonaPickerProps) {
   const titleId = useId();
   const [personas, setPersonas] = useState<SimulationPersona[]>([]);
   const [places, setPlaces] = useState<SimulationPlace[]>([]);
   const [selectedPersonaId, setSelectedPersonaId] = useState('');
   const [selectedPlaceId, setSelectedPlaceId] = useState('');
   const [tone, setTone] = useState<SimulationTone>('world-default');
+  const [qaPreview, setQaPreview] = useState(false);
   const [focusTags, setFocusTags] = useState('');
   const [direction, setDirection] = useState('');
   const [loading, setLoading] = useState(true);
@@ -69,16 +72,20 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
   const selectedPersona = useMemo(() => personas.find((persona) => persona.id === selectedPersonaId), [personas, selectedPersonaId]);
   const selectedPlace = useMemo(() => places.find((place) => place.id === selectedPlaceId), [places, selectedPlaceId]);
 
+  const mayPreviewRestrictedTone = adminDiagnostics && qaPreview;
   useEffect(() => {
-    if (tone === 'adult-erotic' && selectedPersona && !selectedPersona.adultToneEligible) setTone('world-default');
-  }, [selectedPersona, tone]);
+    if (tone === 'adult-erotic' && selectedPersona && !selectedPersona.adultToneEligible && !mayPreviewRestrictedTone) setTone('world-default');
+  }, [selectedPersona, tone, mayPreviewRestrictedTone]);
 
   const selectedTone = toneOptions.find((option) => option.value === tone) ?? toneOptions[0];
   // A canonical starting Place is only required when the world actually has
   // Places. With none defined, the launch proceeds without a location anchor
   // rather than substituting an unrelated one.
   const placeRequired = places.length > 0;
-  const canStart = !busy && !loading && Boolean(selectedPersonaId) && (!placeRequired || Boolean(selectedPlaceId));
+  // Diagnostic preview intentionally stops before launching. The backend still
+  // rejects adult erotic sessions without an explicitly 18+ Persona.
+  const blockedAdultTone = tone === 'adult-erotic' && selectedPersona?.adultToneEligible !== true;
+  const canStart = !busy && !loading && Boolean(selectedPersonaId) && (!placeRequired || Boolean(selectedPlaceId)) && !blockedAdultTone;
 
   const start = () => {
     if (!canStart) return;
@@ -124,14 +131,21 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
       {selectedPlace?.summary && <small>{selectedPlace.summary}</small>}
     </label>}
 
+    {adminDiagnostics && selectedPersona && <label className="world-delete-review__confirm">
+      <span><strong>Admin QA preview</strong> <small>Local UI diagnostics only</small></span>
+      <span><input type="checkbox" disabled={busy} checked={qaPreview} onChange={(event) => setQaPreview(event.target.checked)} /> Inspect restricted tone choices</span>
+      <small>Allows testing disabled selection states. It does not bypass 18+ Persona requirements or enable restricted simulation launches.</small>
+    </label>}
+
     <label className="world-delete-review__confirm">
       <span><strong>Content / tone</strong></span>
       <select aria-label="Content / tone" disabled={busy || !selectedPersonaId} value={tone} onChange={(event) => setTone(event.target.value as SimulationTone)}>
-        {toneOptions.map((option) => <option key={option.value} value={option.value} disabled={option.value === 'adult-erotic' && !selectedPersona?.adultToneEligible}>
-          {option.label}{option.value === 'adult-erotic' && selectedPersona && !selectedPersona.adultToneEligible ? ' · unavailable for this Persona' : ''}
+        {toneOptions.map((option) => <option key={option.value} value={option.value} disabled={option.value === 'adult-erotic' && !selectedPersona?.adultToneEligible && !mayPreviewRestrictedTone}>
+          {option.label}{option.value === 'adult-erotic' && selectedPersona && !selectedPersona.adultToneEligible ? (mayPreviewRestrictedTone ? ' · QA preview only' : ' · unavailable for this Persona') : ''}
         </option>)}
       </select>
       <small>{selectedTone.help}</small>
+      {blockedAdultTone && <small role="status">Admin QA preview only: an erotic session cannot launch with this Persona. {selectedPersona?.age === undefined ? 'This Persona has no explicit adult age.' : selectedPersona.age < 18 ? 'This Persona is under 18.' : 'Your account lacks adult-content access.'} Use an 18+ eligible test Persona for end-to-end testing.</small>}
     </label>
 
     <label className="world-delete-review__confirm">
