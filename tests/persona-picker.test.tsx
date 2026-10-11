@@ -67,6 +67,32 @@ describe('Persona picker', () => {
     expect(screen.getByRole('option', { name: /Adult \/ erotic.*unavailable/ })).toBeDisabled();
   });
 
+  it('lets admins probe a restricted Persona/tone combination without launching a simulation', async () => {
+    vi.spyOn(libraryApi, 'listSimulationPersonas').mockResolvedValue([
+      { id: 'luna', name: 'Luna', summary: '', owned: true, age: 12, adultToneEligible: false },
+    ]);
+    vi.spyOn(libraryApi, 'listSimulationPlaces').mockResolvedValue([]);
+    const probe = vi.spyOn(libraryApi, 'probeSimulationPolicy').mockResolvedValue({
+      allowed: false,
+      checks: { accountAdultAccess: true, personaAdultEligible: false, toneSupported: true },
+      reasons: ['Persona adult eligibility failed.'],
+      personaAge: 12, species: 'wolf folk', lifeStage: 'juvenile',
+    });
+    const select = vi.fn();
+    render(<PersonaPicker adminDiagnostics targetId="world" targetName="Bitterroot" busy={false} onCancel={vi.fn()} onSelect={select} />);
+    await screen.findByRole('combobox', { name: 'Player Persona' });
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Inspect restricted tone choices/ }));
+    const restrictedOption = screen.getByRole('option', { name: /Adult \/ erotic.*QA preview only/ });
+    expect(restrictedOption).toBeEnabled();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Content / tone' }), { target: { value: 'adult-erotic' } });
+    expect(screen.getByRole('button', { name: 'Start simulation' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Test server policy' }));
+    expect(await screen.findByText(/Server policy: BLOCKED/)).toBeInTheDocument();
+    expect(probe).toHaveBeenCalledWith('world', 'luna', 'adult-erotic');
+    expect(select).not.toHaveBeenCalled();
+  });
+
   it('lets a world with zero Places launch without a location anchor', async () => {
     vi.spyOn(libraryApi, 'listSimulationPersonas').mockResolvedValue([
       { id: 'owned', name: 'Eirvargr', summary: 'A wandering wolf.', owned: true, age: 25, adultToneEligible: true },
