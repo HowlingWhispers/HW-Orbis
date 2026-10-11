@@ -146,6 +146,10 @@ export class FixtureLibraryApi implements LibraryApi {
     return [];
   }
 
+  async probeSimulationPolicy(_assetId: string, _personaId: string, _tone: import('./contracts').SimulationTone): Promise<import('./contracts').SimulationPolicyProbeResult> {
+    throw new Error('Simulation policy diagnostics require the live Orbis API.');
+  }
+
   async listSimulationPlaces(id: string): Promise<SimulationPlace[]> {
     await pause();
     const target = fixtures.find((item) => item.id === id);
