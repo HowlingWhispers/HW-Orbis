@@ -1,4 +1,4 @@
-import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput, SimulationLaunchOptions, SimulationPersona, SimulationPlace, WorldChildCreate, WorldChildren, WorldChildUpdate } from './contracts';
+import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput, SimulationLaunchOptions, SimulationPersona, SimulationPlace, SimulationPolicyProbeResult, SimulationTone, WorldChildCreate, WorldChildren, WorldChildUpdate } from './contracts';
 import { LibraryApiError } from './contracts';
 import { consumeSimulationLaunchSetup } from './simulation-launch-setup';
 import type { AssetImage, AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
@@ -126,6 +126,10 @@ export class HttpLibraryApi implements LibraryApi {
     const data = await response.json().catch(() => ({})) as OwnershipTransferResult & { error?: string };
     if (!response.ok) throw new LibraryApiError(data.error ?? `Library request failed with status ${response.status}.`, response.status);
     return data;
+  }
+
+  probeSimulationPolicy(assetId: string, personaId: string, tone: SimulationTone) {
+    return this.send<SimulationPolicyProbeResult>(`/v1/library/assets/${encodeURIComponent(assetId)}/simulation-policy-check`, 'POST', { personaId, tone });
   }
 
   async listSimulationPersonas(signal?: AbortSignal) {
