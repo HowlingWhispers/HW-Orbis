@@ -13,6 +13,11 @@ import { bitterrootDirectTravelFromHollowmere } from './bitterroot-travel-canon.
 const launchableTypes = ['world', 'character', 'place', 'item', 'faction', 'species', 'society', 'family', 'memory'] as const;
 const simulationTones = ['world-default', 'family-friendly', 'mature', 'adult-erotic'] as const;
 type SimulationTone = typeof simulationTones[number];
+const policyProbeSchema = z.object({
+  personaId: z.string().uuid(),
+  tone: z.enum(simulationTones),
+}).strict();
+
 const launchSchema = z.object({
   personaId: z.string().uuid(),
   // Optional only for compatibility with older Orbis clients. The current UI
@@ -328,6 +333,73 @@ async function requireLaunchUser(request: Request, config: AppConfig, pool: Data
 
 export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
   const router = Router();
+
+  // No generation, launch grant or provider call. This read-only QA probe lets
+  // administrators observe the same Persona/tone eligibility rules used below.
+  // It does not bypass asset visibility or Persona sharing permissions.
+  router.post('/assets/:id/simulation-policy-check', async (request, response, next) => {
+    try {
+      if (!await requireLaunchUser(request, config, pool, settingsStore)) return response.status(401).json({ error: 'Sign in to test simulation policy.' });
+      const isSuperAdmin = request.session.discordUserId === SUPER_ADMIN_DISCORD_ID;
+      if (!isSuperAdmin && request.session.access?.canAdmin !== true) {
+        return response.status(403).json({ error: 'Orbis administrator access is required to run this policy probe.' });
+      }
+      const parsedBody = policyProbeSchema.safeParse(request.body);
+      if (!parsedBody.success) return response.status(400).json({ error: 'Policy probe input is invalid.' });
+      const assetResult = await pool.query(
+        `SELECT a.*, origin.document AS origin_world_document,
+                origin.creator_user_id AS origin_world_creator_user_id
+         FROM library_assets a
+         LEFT JOIN library_assets origin ON origin.id = a.origin_world_id
+         WHERE a.id = $1 AND a.type = ANY($2::text[])`,
+        [request.params.id, launchableTypes],
+      );
+      if (!assetResult.rowCount) return response.status(404).json({ error: 'Record not found.' });
+      const asset = assetResult.rows[0];
+      if (!canDirectViewAssetRow(asset, request.session.userId, isSuperAdmin)) return response.status(404).json({ error: 'Record not found.' });
+      const canViewAdult = request.session.access?.canViewAdult === true;
+      if (asset.content_rating === 'adult' && !canViewAdult && asset.creator_user_id !== request.session.userId) {
+        return response.status(403).json({ error: 'Adult record access required.' });
+      }
+      const personaResult = await pool.query(
+        `SELECT id, type, name, summary, creator_user_id, content_rating, document
+         FROM library_assets WHERE id = $1 AND type = 'persona'`,
+        [parsedBody.data.personaId],
+      );
+      if (!personaResult.rowCount) return response.status(404).json({ error: 'Persona not found.' });
+      const persona = personaResult.rows[0];
+      if (!canDirectViewAssetRow(persona, request.session.userId, false) && !isSuperAdmin) {
+        return response.status(404).json({ error: 'Persona not found.' });
+      }
+      if (!canUsePersonaAssetRow(persona, request.session.userId) && !isSuperAdmin) {
+        return response.status(403).json({ error: 'This Persona is not shared for use.' });
+      }
+      if (isAdultRestrictedAssetRow(persona, request.session.userId, canViewAdult)) {
+        return response.status(403).json({ error: 'Adult Persona access required.' });
+      }
+
+      const adultEligible = simulationPersonaAdultToneEligible(persona, canViewAdult);
+      const identity = asRecord(asRecord(persona.document).identity);
+      const reasons: string[] = [];
+      if (parsedBody.data.tone === 'adult-erotic' && !canViewAdult) reasons.push('The account lacks adult access.');
+      if (parsedBody.data.tone === 'adult-erotic' && !adultEligible) {
+        reasons.push('Persona adult eligibility failed. Check species adulthood age, adult life stage, adult presentation and chronological age.');
+      }
+      const age = simulationPersonaAge(persona);
+      response.json({
+        allowed: reasons.length === 0,
+        checks: {
+          accountAdultAccess: canViewAdult,
+          personaAdultEligible: adultEligible,
+          toneSupported: true,
+        },
+        reasons,
+        ...(age === undefined ? {} : { personaAge: age }),
+        species: stringValue(identity.species),
+        lifeStage: stringValue(identity.lifeStage),
+      });
+    } catch (error) { next(error); }
+  });
 
   router.get('/simulation-personas', async (request, response, next) => {
     try {
