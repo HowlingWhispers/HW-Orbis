@@ -95,7 +95,7 @@ describe('Persona picker', () => {
 
     expect(screen.queryByText('Admin QA preview')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Test server policy' })).not.toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Adult \\/ erotic.*unavailable/ })).toBeDisabled();
+    expect(screen.getByRole('option', { name: /Adult.*unavailable/ })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Content / tone' })).toHaveValue('world-default');
 
     const start = screen.getByRole('button', { name: 'Start simulation' });
