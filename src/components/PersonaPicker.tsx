@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { libraryApi } from '../api/client';
 import { stageSimulationLaunchSetup } from '../api/simulation-launch-setup';
-import type { SimulationPersona, SimulationPlace, SimulationPolicyProbeResult, SimulationTone } from '../api/contracts';
+import type { SimulationPersona, SimulationPlace, SimulationTone } from '../api/contracts';
 
 interface PersonaPickerProps {
   targetId: string;
@@ -11,8 +11,6 @@ interface PersonaPickerProps {
   error?: string;
   onCancel: () => void;
   onSelect: (personaId: string, startingPlaceId?: string) => void;
-  /** Preview restricted launch states without bypassing the server-side adult Persona gate. */
-  adminDiagnostics?: boolean;
 }
 
 const toneOptions: Array<{ value: SimulationTone; label: string; help: string }> = [
@@ -26,17 +24,13 @@ function parseFocusTags(value: string) {
   return [...new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean))].slice(0, 12);
 }
 
-export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, error = '', onCancel, onSelect, adminDiagnostics = false }: PersonaPickerProps) {
+export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, error = '', onCancel, onSelect }: PersonaPickerProps) {
   const titleId = useId();
   const [personas, setPersonas] = useState<SimulationPersona[]>([]);
   const [places, setPlaces] = useState<SimulationPlace[]>([]);
   const [selectedPersonaId, setSelectedPersonaId] = useState('');
   const [selectedPlaceId, setSelectedPlaceId] = useState('');
   const [tone, setTone] = useState<SimulationTone>('world-default');
-  const [qaPreview, setQaPreview] = useState(false);
-  const [qaResult, setQaResult] = useState<SimulationPolicyProbeResult | null>(null);
-  const [qaError, setQaError] = useState('');
-  const [qaBusy, setQaBusy] = useState(false);
   const [focusTags, setFocusTags] = useState('');
   const [direction, setDirection] = useState('');
   const [loading, setLoading] = useState(true);
@@ -75,37 +69,20 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
   const selectedPersona = useMemo(() => personas.find((persona) => persona.id === selectedPersonaId), [personas, selectedPersonaId]);
   const selectedPlace = useMemo(() => places.find((place) => place.id === selectedPlaceId), [places, selectedPlaceId]);
 
-  const mayPreviewRestrictedTone = adminDiagnostics && qaPreview;
+  // Selecting another Persona must never strand the launch dialog in a
+  // disabled diagnostic-only tone. Restore a launchable default instead.
   useEffect(() => {
-    if (tone === 'adult-erotic' && selectedPersona && !selectedPersona.adultToneEligible && !mayPreviewRestrictedTone) setTone('world-default');
-  }, [selectedPersona, tone, mayPreviewRestrictedTone]);
-
-  useEffect(() => {
-    setQaResult(null);
-    setQaError('');
-  }, [selectedPersonaId, tone]);
-
-  const probePolicy = async () => {
-    if (!adminDiagnostics || !selectedPersonaId || qaBusy) return;
-    setQaBusy(true);
-    setQaError('');
-    setQaResult(null);
-    try {
-      setQaResult(await libraryApi.probeSimulationPolicy(targetId, selectedPersonaId, tone));
-    } catch (cause) {
-      setQaError(cause instanceof Error ? cause.message : 'Orbis could not check the launch policy.');
-    } finally {
-      setQaBusy(false);
+    if (tone === 'adult-erotic' && selectedPersona && !selectedPersona.adultToneEligible) {
+      setTone('world-default');
     }
-  };
+  }, [selectedPersona, tone]);
 
   const selectedTone = toneOptions.find((option) => option.value === tone) ?? toneOptions[0];
   // A canonical starting Place is only required when the world actually has
   // Places. With none defined, the launch proceeds without a location anchor
   // rather than substituting an unrelated one.
   const placeRequired = places.length > 0;
-  // Diagnostic preview intentionally stops before launching. The backend still
-  // rejects adult erotic sessions without an explicitly 18+ Persona.
+  // Restricted adult tone remains gated by the live server policy.
   const blockedAdultTone = tone === 'adult-erotic' && selectedPersona?.adultToneEligible !== true;
   const canStart = !busy && !loading && Boolean(selectedPersonaId) && (!placeRequired || Boolean(selectedPlaceId)) && !blockedAdultTone;
 
@@ -153,28 +130,16 @@ export function PersonaPicker({ targetId, targetName, initialPlaceId, busy, erro
       {selectedPlace?.summary && <small>{selectedPlace.summary}</small>}
     </label>}
 
-    {adminDiagnostics && selectedPersona && <label className="world-delete-review__confirm">
-      <span><strong>Admin QA preview</strong> <small>Local UI diagnostics only</small></span>
-      <span><input type="checkbox" disabled={busy} checked={qaPreview} onChange={(event) => setQaPreview(event.target.checked)} /> Inspect restricted tone choices</span>
-      <small>Allows testing disabled selection states. It does not bypass 18+ Persona requirements or enable restricted simulation launches.</small>
-    </label>}
-
     <label className="world-delete-review__confirm">
       <span><strong>Content / tone</strong></span>
       <select aria-label="Content / tone" disabled={busy || !selectedPersonaId} value={tone} onChange={(event) => setTone(event.target.value as SimulationTone)}>
-        {toneOptions.map((option) => <option key={option.value} value={option.value} disabled={option.value === 'adult-erotic' && !selectedPersona?.adultToneEligible && !mayPreviewRestrictedTone}>
-          {option.label}{option.value === 'adult-erotic' && selectedPersona && !selectedPersona.adultToneEligible ? (mayPreviewRestrictedTone ? ' · QA preview only' : ' · unavailable for this Persona') : ''}
+        {toneOptions.map((option) => <option key={option.value} value={option.value} disabled={option.value === 'adult-erotic' && !selectedPersona?.adultToneEligible}>
+          {option.label}{option.value === 'adult-erotic' && selectedPersona && !selectedPersona.adultToneEligible ? ' · unavailable for this Persona' : ''}
         </option>)}
       </select>
       <small>{selectedTone.help}</small>
-      {blockedAdultTone && <small role="status">Admin QA preview only: an erotic session cannot launch with this Persona. {selectedPersona?.age === undefined ? 'This Persona has no explicit chronological age.' : selectedPersona.age < 18 ? 'This Persona lacks validated species-adult status or adult presentation.' : 'Your account lacks adult-content access.'} Use a Persona with verified adult standing for end-to-end testing.</small>}
+      {blockedAdultTone && <small role="status">This Persona is not eligible for the restricted tone. Choose World default, Family-friendly or Mature to start a simulation.</small>}
     </label>
-
-    {adminDiagnostics && <div className="world-delete-review__confirm">
-      <button type="button" className="button button--secondary" disabled={busy || loading || !selectedPersonaId || qaBusy} onClick={() => void probePolicy()}>{qaBusy ? 'Checking server policy...' : 'Test server policy'}</button>
-      {qaResult && <p role="status"><strong>Server policy: {qaResult.allowed ? 'ALLOWED' : 'BLOCKED'}</strong> · Account adult access: {qaResult.checks.accountAdultAccess ? 'yes' : 'no'} · Persona adult-eligible: {qaResult.checks.personaAdultEligible ? 'yes' : 'no'}{qaResult.reasons.length > 0 ? ` · ${qaResult.reasons.join(' ')}` : ''}. This checks the server without creating a session.</p>}
-      {qaError && <p role="alert">{qaError}</p>}
-    </div>}
 
     <label className="world-delete-review__confirm">
       <span><strong>Focus tags</strong> <small>Optional, comma-separated</small></span>

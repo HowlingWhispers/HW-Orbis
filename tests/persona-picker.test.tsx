@@ -83,30 +83,27 @@ describe('Persona picker', () => {
     expect(select).toHaveBeenCalledWith('adult-wolf', undefined);
   });
 
-  it('lets admins probe a restricted Persona/tone combination without launching a simulation', async () => {
+  it('keeps normal simulation available without admin QA controls for a restricted Persona', async () => {
     vi.spyOn(libraryApi, 'listSimulationPersonas').mockResolvedValue([
       { id: 'luna', name: 'Luna', summary: '', owned: true, age: 12, adultToneEligible: false },
     ]);
     vi.spyOn(libraryApi, 'listSimulationPlaces').mockResolvedValue([]);
-    const probe = vi.spyOn(libraryApi, 'probeSimulationPolicy').mockResolvedValue({
-      allowed: false,
-      checks: { accountAdultAccess: true, personaAdultEligible: false, toneSupported: true },
-      reasons: ['Persona adult eligibility failed.'],
-      personaAge: 12, species: 'wolf folk', lifeStage: 'juvenile',
-    });
+    const probe = vi.spyOn(libraryApi, 'probeSimulationPolicy');
     const select = vi.fn();
-    render(<PersonaPicker adminDiagnostics targetId="world" targetName="Bitterroot" busy={false} onCancel={vi.fn()} onSelect={select} />);
+    render(<PersonaPicker targetId="world" targetName="Bitterroot" busy={false} onCancel={vi.fn()} onSelect={select} />);
     await screen.findByRole('combobox', { name: 'Player Persona' });
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /Inspect restricted tone choices/ }));
-    const restrictedOption = screen.getByRole('option', { name: /Adult \/ erotic.*QA preview only/ });
-    expect(restrictedOption).toBeEnabled();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Content / tone' }), { target: { value: 'adult-erotic' } });
-    expect(screen.getByRole('button', { name: 'Start simulation' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Test server policy' }));
-    expect(await screen.findByText(/Server policy: BLOCKED/)).toBeInTheDocument();
-    expect(probe).toHaveBeenCalledWith('world', 'luna', 'adult-erotic');
-    expect(select).not.toHaveBeenCalled();
+    expect(screen.queryByText('Admin QA preview')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Test server policy' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Adult \\/ erotic.*unavailable/ })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Content / tone' })).toHaveValue('world-default');
+
+    const start = screen.getByRole('button', { name: 'Start simulation' });
+    expect(start).toBeEnabled();
+    fireEvent.click(start);
+    expect(consumeSimulationLaunchSetup()?.tone).toBe('world-default');
+    expect(select).toHaveBeenCalledWith('luna', undefined);
+    expect(probe).not.toHaveBeenCalled();
   });
 
   it('lets a world with zero Places launch without a location anchor', async () => {

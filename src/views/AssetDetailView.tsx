@@ -249,7 +249,6 @@ export function AssetDetailView() {
             targetName={asset.name}
             initialPlaceId={asset.type === 'place' ? asset.id : undefined}
             busy={launching}
-            adminDiagnostics={Boolean(user?.permissions.canAdmin || user?.isSuperAdmin)}
             error={launchError}
             onCancel={() => { if (!launching) { setPersonaPickerOpen(false); setLaunchError(''); } }}
             onSelect={(personaId, startingPlaceId) => void simulate(personaId, startingPlaceId)}
