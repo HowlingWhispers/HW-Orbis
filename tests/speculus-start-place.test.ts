@@ -46,6 +46,32 @@ describe('Speculus launch-only steering', () => {
     expect(simulationPersonaAdultToneEligible(minor, true)).toBe(false);
   });
 
+  it('supports an unambiguously adult non-human species whose adulthood starts before age 18', () => {
+    const adult = { document: { identity: {
+      age: 12, species: 'wolf folk', speciesAdulthoodAge: '4',
+      lifeStage: 'adult', adultPresentation: true,
+    } } };
+    expect(simulationPersonaAdultToneEligible(adult, true)).toBe(true);
+    expect(simulationPersonaAdultToneEligible(adult, false)).toBe(false);
+  });
+
+  it('does not equate early reproductive maturity or child-coded appearance with adult status', () => {
+    const identity = {
+      age: 12, species: 'wolf folk', speciesAdulthoodAge: 4,
+      lifeStage: 'adult', adultPresentation: true,
+    };
+    const eligible = (patch: Record<string, unknown>) =>
+      simulationPersonaAdultToneEligible({ document: { identity: { ...identity, ...patch } } }, true);
+
+    expect(eligible({ age: 3 })).toBe(false);
+    expect(eligible({ lifeStage: 'juvenile' })).toBe(false);
+    expect(eligible({ lifeStage: 'adolescent' })).toBe(false);
+    expect(eligible({ adultPresentation: false })).toBe(false);
+    expect(eligible({ speciesAdulthoodAge: 'unknown' })).toBe(false);
+    expect(eligible({ species: 'human' })).toBe(false);
+    expect(eligible({ species: '' })).toBe(false);
+  });
+
   it('renders tone, tags and freeform direction as launch-only non-canon steering', () => {
     const direction = buildSimulationLaunchDirection({
       tone: 'mature',
