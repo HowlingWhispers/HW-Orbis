@@ -222,9 +222,33 @@ export function simulationPersonaAge(row: Record<string, unknown>) {
   return Number.isFinite(age) && age >= 0 ? age : undefined;
 }
 
+/**
+ * Chronological age is not the same thing as adulthood for fictional species.
+ * The exception is deliberately explicit: a non-human Persona under 18 must
+ * state the species' age of adulthood, be in its adult life stage, and be
+ * described as clearly adult in appearance and behavior. Biological or
+ * reproductive maturity alone never qualifies a Persona for erotic tone.
+ * An explicitly juvenile/adolescent Persona is ineligible at any age.
+ */
 export function simulationPersonaAdultToneEligible(row: Record<string, unknown>, canViewAdult: boolean) {
+  if (!canViewAdult) return false;
   const age = simulationPersonaAge(row);
-  return canViewAdult && age !== undefined && age >= 18;
+  if (age === undefined) return false;
+  const identity = asRecord(asRecord(row.document).identity);
+  const lifeStage = stringValue(identity.lifeStage).trim().toLowerCase();
+  if (['child', 'juvenile', 'adolescent', 'minor', 'preteen', 'teen'].includes(lifeStage)) return false;
+  if (age >= 18) return true;
+
+  const species = stringValue(identity.species).trim();
+  if (!species || /\bhuman\b/i.test(species)) return false;
+  const adulthoodAgeRaw = identity.speciesAdulthoodAge;
+  const adulthoodAge = typeof adulthoodAgeRaw === 'number'
+    ? adulthoodAgeRaw
+    : typeof adulthoodAgeRaw === 'string' && adulthoodAgeRaw.trim()
+      ? Number(adulthoodAgeRaw.trim())
+      : NaN;
+  return Number.isFinite(adulthoodAge) && adulthoodAge > 0 && age >= adulthoodAge
+    && lifeStage === 'adult' && identity.adultPresentation === true;
 }
 
 export function buildSimulationLaunchDirection(input: { tone: SimulationTone; focusTags: string[]; direction: string }) {
@@ -252,7 +276,7 @@ export function buildSimulationLaunchDirection(input: { tone: SimulationTone; fo
 }
 
 const personaCoreKeys = ['appearance', 'personality', 'background', 'speech', 'preferences', 'skills', 'notes'] as const;
-const personaIdentityKeys = ['displayName', 'species', 'age', 'pronouns', 'description'] as const;
+const personaIdentityKeys = ['displayName', 'species', 'age', 'speciesAdulthoodAge', 'lifeStage', 'adultPresentation', 'pronouns', 'description'] as const;
 
 export function simulationPersona(row: Record<string, unknown>) {
   const document = asRecord(row.document);
@@ -446,7 +470,7 @@ export function createSpeculusLaunchRouter(config: AppConfig, pool: DatabasePool
           return response.status(403).json({ error: '18+ verification is required for Adult / erotic simulation tone.', verificationPath: '/verification' });
         }
         if (!simulationPersonaAdultToneEligible(persona, true)) {
-          return response.status(400).json({ error: 'Adult / erotic simulation tone requires a Persona whose age is explicitly 18 or older.' });
+          return response.status(400).json({ error: 'Adult / erotic simulation tone requires an unambiguously adult Persona. For species maturing before 18, specify the non-human species adulthood age, adult life stage, and clearly adult presentation.' });
         }
       }
 
