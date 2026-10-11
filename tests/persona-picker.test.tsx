@@ -67,6 +67,22 @@ describe('Persona picker', () => {
     expect(screen.getByRole('option', { name: /Adult \/ erotic.*unavailable/ })).toBeDisabled();
   });
 
+  it('lets a species-defined adult Persona choose adult tone regardless of human chronological age', async () => {
+    vi.spyOn(libraryApi, 'listSimulationPersonas').mockResolvedValue([
+      { id: 'adult-wolf', name: 'Adult wolf', summary: '', owned: true, age: 12, adultToneEligible: true },
+    ]);
+    vi.spyOn(libraryApi, 'listSimulationPlaces').mockResolvedValue([]);
+    const select = vi.fn();
+    render(<PersonaPicker targetId="world" targetName="Bitterroot" busy={false} onCancel={vi.fn()} onSelect={select} />);
+    await screen.findByRole('combobox', { name: 'Player Persona' });
+    expect(screen.getByRole('option', { name: 'Adult / erotic (18+)' })).toBeEnabled();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Content / tone' }), { target: { value: 'adult-erotic' } });
+    expect(screen.getByRole('button', { name: 'Start simulation' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Start simulation' }));
+    expect(consumeSimulationLaunchSetup()?.tone).toBe('adult-erotic');
+    expect(select).toHaveBeenCalledWith('adult-wolf', undefined);
+  });
+
   it('lets admins probe a restricted Persona/tone combination without launching a simulation', async () => {
     vi.spyOn(libraryApi, 'listSimulationPersonas').mockResolvedValue([
       { id: 'luna', name: 'Luna', summary: '', owned: true, age: 12, adultToneEligible: false },
