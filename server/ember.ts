@@ -10,10 +10,21 @@ import type { AppConfig } from './config.js';
 import type { DatabasePool } from './db.js';
 import type { SettingsStore } from './settings.js';
 import { canDirectViewAssetRow, isAdultRestrictedAssetRow } from './world-access.js';
+import { EmberGenerationError, generateEmberNarration, type EmberTurn } from './ember-generation.js';
 
 const uuid = z.string().uuid();
 const ticketSchema = z.object({ ticket: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
 const linkSchema = z.object({ linkId: uuid }).strict();
+const generationTurnSchema = z.object({
+  source: z.enum(['player','provider']),
+  mode: z.enum(['action','speech','thought','narrator']),
+  text: z.string().min(1).max(16000),
+}).strict().refine(turn => turn.source !== 'player' || turn.mode !== 'narrator');
+const generationRequestSchema = z.object({
+  linkId: uuid,
+  turns: z.array(generationTurnSchema).min(1).max(48),
+}).strict().refine(value => value.turns.at(-1)?.source === 'player'
+  && value.turns.at(-1)?.mode !== 'narrator', { message: 'The last turn must be the player.' });
 const SANDBOX = 'sandbox' as const;
 const sandboxLaunchTtlMs = 90_000;
 const sandboxSessionTtlMs = 8 * 60 * 60_000;
@@ -162,6 +173,9 @@ export function createEmberConnectRouter(config: AppConfig, pool: DatabasePool, 
 
 export function createEmberInternalRouter(config: AppConfig, pool: DatabasePool) {
   const router = Router();
+  // Prevent concurrent charges/duplicate continuations for one Orbis user.
+  // No transcript data is stored in the lock set.
+  const generating = new Set<string>();
   router.use((request, response, next) => {
     response.setHeader('Cache-Control', 'no-store');
     if (!trustedBridge(request, config)) return response.status(401).json({ error: 'Unauthorized.' });
@@ -183,6 +197,32 @@ export function createEmberInternalRouter(config: AppConfig, pool: DatabasePool)
       return response.json(context);
     } catch (error) { return next(error); }
   });
+  router.post('/generate', async (request, response, next) => {
+    response.setHeader('Cache-Control', 'no-store');
+    const parsed = generationRequestSchema.safeParse(request.body);
+    if (!parsed.success) return response.status(400).json({ error: 'Invalid Ember generation request.' });
+    try {
+      const context = await readLinkedContext(pool, parsed.data.linkId);
+      if (!context) return response.status(401).json({ error: 'Orbis session expired or access revoked.' });
+      if (generating.has(context.userId)) {
+        return response.status(429).json({ error: 'A NovelAI generation is already running for this account.' });
+      }
+      generating.add(context.userId);
+      try {
+        const result = await generateEmberNarration(config, pool, context,
+          parsed.data.turns as EmberTurn[]);
+        return response.json({ text: result.text, model: result.model });
+      } catch (error) {
+        if (error instanceof EmberGenerationError) {
+          return response.status(error.status).json({ error: error.message, code: error.code });
+        }
+        return next(error);
+      } finally {
+        generating.delete(context.userId);
+      }
+    } catch (error) { return next(error); }
+  });
+
   router.post('/check', async (request, response, next) => {
     try {
       const parsed = linkSchema.safeParse(request.body);
