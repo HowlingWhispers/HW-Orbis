@@ -43,6 +43,8 @@ const envSchema = z.object({
   // Local image uploads live on disk outside the repository. PostgreSQL stores
   // only the relative path and display metadata for each image.
   ORBIS_MEDIA_ROOT: z.string().min(1).default('/srv/howling-whispers/orbis-media'),
+  EMBER_BRIDGE_SECRET: z.string().default(''),
+  EMBER_LAUNCH_URL: z.string().url().default('https://thehowlingwhispers.com/ember/launch'),
   SPECULUS_BRIDGE_URL: z.string().url().default('http://127.0.0.1:8790'),
   SPECULUS_BRIDGE_SECRET: z.string().default(''),
   SPECULUS_LAUNCH_TTL_SECONDS: z.coerce.number().int().min(300).max(86_400).default(14_400),

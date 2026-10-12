@@ -31,6 +31,7 @@ import { createSaveArchiveRouter } from './save-archive.js';
 import { createSimulationSettingsRouter } from './simulation-settings.js';
 import { PostgresSettingsStore } from './settings.js';
 import { createSpeculusGenerationRouter, createSpeculusLaunchRouter } from './speculus.js';
+import { createEmberLaunchRouter, createEmberInternalRouter } from './ember.js';
 import { createWorldDeleteRouter } from './world-delete.js';
 import { createWorldBrainRouter } from './world-brain.js';
 import { canDiscoverAssetRow } from './world-access.js';
@@ -68,6 +69,8 @@ app.use('/api/v1/generation', createSpeculusGenerationRouter(config, pool));
 // Machine-to-machine bridge used by Coda Core's Discord slash command. It has its
 // own bearer secret and must be mounted before the browser Origin check below.
 app.use('/api/internal/coda-discord', createCodaDiscordBridgeRouter(config, pool));
+// Trusted server-to-server bridge must sit before the browser Origin guard.
+app.use('/api/internal/ember', createEmberInternalRouter(config, pool));
 // Coda image generation uses the requester's own encrypted NovelAI credential.
 // The route is Coda-only by design and never exposes a general image proxy.
 app.use('/api/internal/coda-discord-image', createCodaDiscordImageRouter(config, pool, settingsStore));
@@ -160,6 +163,7 @@ app.use('/api/v1/changelog', createChangelogRouter(pool));
 app.use('/api/admin/big-brother', requireAdmin(config, pool, settingsStore), createCodaSurveillanceAdminRouter(pool));
 app.use('/api/admin', requireAdmin(config, pool, settingsStore), createAdminRouter(config, pool, settingsStore, adminViewPreferences));
 app.use('/api/v1/library', createSpeculusLaunchRouter(config, pool, settingsStore));
+app.use('/api/v1/library', createEmberLaunchRouter(config, pool, settingsStore));
 app.use('/api/v1/library', createSaveArchiveRouter(pool));
 app.use('/api/v1/library', createWorldDeleteRouter(pool));
 app.use('/api/v1/library', createWorldBrainRouter(pool));
