@@ -109,7 +109,9 @@ export function AssetDetailView() {
       const input = document.createElement('input');
       input.type = 'hidden'; input.name = 'ticket'; input.value = launch.ticket;
       form.append(input); document.body.append(form);
-      try { form.submit(); } finally { form.remove(); }
+      // Let the browser complete navigation; detaching a submitted form immediately
+      // may cancel submission in some browsers.
+      form.submit();
     } catch (reason) {
       setEmberError(reason instanceof Error ? reason.message : 'Ember could not open.');
       setEmberLaunching(false);
