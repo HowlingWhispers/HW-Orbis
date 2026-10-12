@@ -171,6 +171,10 @@ export class FixtureLibraryApi implements LibraryApi {
       });
   }
 
+  async launchEmber(_id: string): Promise<import('./contracts').EmberLaunch> {
+    throw new Error('Ember requires the authenticated live Orbis API.');
+  }
+
   async simulateAsset(_id: string, _personaId: string, _startingPlaceId?: string): Promise<{ launchUrl: string; expiresAt: number }> {
     throw new Error('Speculus launches require the live Orbis API.');
   }

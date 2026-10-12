@@ -104,6 +104,13 @@ export interface SimulationPlace {
   isTarget: boolean;
 }
 
+export interface EmberLaunch {
+  mode: 'character' | 'world';
+  ticket: string;
+  launchUrl: string;
+  expiresAt: number;
+}
+
 export interface LibraryApi {
   getOverview(signal?: AbortSignal): Promise<LibraryOverview>;
   listAssets(query?: AssetQuery, signal?: AbortSignal): Promise<AssetListResponse>;
@@ -123,6 +130,7 @@ export interface LibraryApi {
   probeSimulationPolicy(assetId: string, personaId: string, tone: SimulationTone): Promise<SimulationPolicyProbeResult>;
   listSimulationPlaces(id: string, signal?: AbortSignal): Promise<SimulationPlace[]>;
   simulateAsset(id: string, personaId: string, startingPlaceId?: string, options?: SimulationLaunchOptions): Promise<{ launchUrl: string; expiresAt: number }>;
+  launchEmber(id: string): Promise<EmberLaunch>;
   listAssetImages(assetId: string, signal?: AbortSignal): Promise<AssetImage[]>;
   uploadAssetImage(assetId: string, input: AssetImageUploadInput): Promise<AssetImage>;
   addExternalAssetImage(assetId: string, input: AssetImageExternalInput): Promise<AssetImage>;

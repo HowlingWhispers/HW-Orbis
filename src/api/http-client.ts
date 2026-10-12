@@ -1,4 +1,4 @@
-import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput, SimulationLaunchOptions, SimulationPersona, SimulationPlace, SimulationPolicyProbeResult, SimulationTone, WorldChildCreate, WorldChildren, WorldChildUpdate } from './contracts';
+import type { LibraryApi, DeleteImpact, OwnershipTransferResult, OwnershipTransferTarget, AssetImageExternalInput, AssetImageUpdateInput, AssetImageUploadInput, EmberLaunch, SimulationLaunchOptions, SimulationPersona, SimulationPlace, SimulationPolicyProbeResult, SimulationTone, WorldChildCreate, WorldChildren, WorldChildUpdate } from './contracts';
 import { LibraryApiError } from './contracts';
 import { consumeSimulationLaunchSetup } from './simulation-launch-setup';
 import type { AssetImage, AssetListResponse, AssetQuery, LibraryAsset, LibraryAssetCreate, LibraryAssetUpdate, LibraryOverview } from '../types/library';
@@ -140,6 +140,10 @@ export class HttpLibraryApi implements LibraryApi {
   async listSimulationPlaces(id: string, signal?: AbortSignal) {
     const data = await this.request<{ items: SimulationPlace[] }>(`/v1/library/assets/${encodeURIComponent(id)}/simulation-places`, signal);
     return data.items;
+  }
+
+  launchEmber(id: string): Promise<EmberLaunch> {
+    return this.send<EmberLaunch>(`/v1/library/assets/${encodeURIComponent(id)}/ember-launch`, 'POST', {});
   }
 
   async simulateAsset(id: string, personaId: string, startingPlaceId?: string, options?: SimulationLaunchOptions) {

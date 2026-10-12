@@ -1,4 +1,4 @@
-import { Archive, ArrowLeft, ArrowRightLeft, Boxes, Clock3, Download, MapPin, Pencil, Search, Sparkles, Trash2, UserRound } from 'lucide-react';
+import { Archive, ArrowLeft, ArrowRightLeft, Boxes, Clock3, Download, Flame, MapPin, Pencil, Search, Sparkles, Trash2, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
@@ -22,6 +22,8 @@ export function AssetDetailView() {
   const { user } = useAuth();
   const [launching, setLaunching] = useState(false);
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false);
+  const [emberLaunching, setEmberLaunching] = useState(false);
+  const [emberError, setEmberError] = useState('');
   const [launchError, setLaunchError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -92,6 +94,27 @@ export function AssetDetailView() {
   const canTransfer = asset.type === 'world' && asset.isOwner === true;
   const canSimulate = asset.type !== 'persona';
   const coverUrl = assetImageUrl(asset.coverImage);
+
+  const enterEmber = async () => {
+    if (asset.type !== 'world' && asset.type !== 'character') return;
+    if (!user) { navigate('/account'); return; }
+    setEmberLaunching(true); setEmberError('');
+    try {
+      const launch = await libraryApi.launchEmber(asset.id);
+      // Keep the one-use ticket out of URLs, referrers and browser history.
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = launch.launchUrl;
+      form.style.display = 'none';
+      const input = document.createElement('input');
+      input.type = 'hidden'; input.name = 'ticket'; input.value = launch.ticket;
+      form.append(input); document.body.append(form);
+      try { form.submit(); } finally { form.remove(); }
+    } catch (reason) {
+      setEmberError(reason instanceof Error ? reason.message : 'Ember could not open.');
+      setEmberLaunching(false);
+    }
+  };
 
   const openPersonaPicker = () => {
     if (!canSimulate) return;
@@ -232,6 +255,7 @@ export function AssetDetailView() {
             {canEdit
               ? <Link className="button button--primary" to={`/asset/${asset.id}/edit`}><Pencil size={16} /> Edit record</Link>
               : <button className="button button--disabled" disabled title="Only the owner can edit this record"><Pencil size={16} /> Owner protected</button>}
+            {(asset.type === 'world' || asset.type === 'character') && <button type="button" className="button button--primary" disabled={emberLaunching} onClick={() => void enterEmber()}><Flame size={16} /> {emberLaunching ? 'Opening Ember...' : asset.type === 'world' ? 'Enter world in Ember' : 'Roleplay in Ember'}</button>}
             {canSimulate && <button className="button button--secondary" disabled={launching} onClick={openPersonaPicker}><Sparkles size={16} /> {asset.type === 'place' ? 'Simulate from here' : 'Simulate'}</button>}
             {asset.type === 'world' && <Link className="button button--secondary" to={`/asset/${asset.id}/saves`}><Archive size={16} /> Save Archive</Link>}
             {canEdit && <button className="button button--secondary" disabled={downloading} onClick={() => void download()}><Download size={16} /> {downloading ? 'Downloading...' : asset.type === 'world' ? 'Download world' : 'Download SPC'}</button>}
@@ -239,6 +263,7 @@ export function AssetDetailView() {
             {canEdit && asset.type === 'persona' && <button className="button button--danger" disabled={deleting} onClick={() => void deletePersona()}><Trash2 size={16} /> {deleting ? 'Deleting...' : 'Delete Persona'}</button>}
             {canEdit && asset.type === 'world' && <button className="button button--danger" disabled={deleting} onClick={() => void reviewDeleteWorld()}><Trash2 size={16} /> {deleting ? 'Checking...' : 'Delete World'}</button>}
           </div>
+          {emberError && <p className="form-message" role="alert">{emberError}</p>}
           {launchError && <p className="form-message" role="alert">{launchError} {launchError.includes('Account settings') && <Link to="/account">Open Account</Link>}</p>}
           {deleteError && <p className="form-message" role="alert">{deleteError}</p>}
           {downloadError && <p className="form-message" role="alert">{downloadError}</p>}
