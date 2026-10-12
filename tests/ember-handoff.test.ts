@@ -21,7 +21,7 @@ const settings = { getEffective: async () => ({}) } as SettingsStore;
 const makeAsset = (type: 'character' | 'world', kind: 'public'|'private'|'adult'='public') => ({
   id:assetId, type, name:type==='world'?'Bitterroot':'Ragna Holt',
   summary:'Orbis description', document:{worldSettings:{visibility:kind==='private'?'private':'public'}},
-  creator_user_id:kind==='private'?'88888888-8888-4888-8888-888888888888':userId,
+  creator_user_id:kind==='private'||kind==='adult'?'88888888-8888-4888-8888-888888888888':userId,
   content_rating:kind==='adult'?'adult':'sfw',
   origin_world_id:null,
 });
