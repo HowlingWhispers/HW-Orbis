@@ -31,7 +31,7 @@ import { createSaveArchiveRouter } from './save-archive.js';
 import { createSimulationSettingsRouter } from './simulation-settings.js';
 import { PostgresSettingsStore } from './settings.js';
 import { createSpeculusGenerationRouter, createSpeculusLaunchRouter } from './speculus.js';
-import { createEmberLaunchRouter, createEmberInternalRouter } from './ember.js';
+import { createEmberLaunchRouter, createEmberInternalRouter, createEmberConnectRouter } from './ember.js';
 import { createWorldDeleteRouter } from './world-delete.js';
 import { createWorldBrainRouter } from './world-brain.js';
 import { canDiscoverAssetRow } from './world-access.js';
@@ -156,6 +156,7 @@ ${allUrls.map(u => `  <url>
 });
 
 app.use('/api/auth', createAuthRouter(config, pool, settingsStore));
+app.use('/ember', createEmberConnectRouter(config, pool, settingsStore));
 app.use('/api/provider-settings', createProviderSettingsRouter(config, pool));
 app.use('/api/coda-assistant', createCodaAssistantRouter(config, pool, settingsStore));
 app.use('/api/simulation-settings', createSimulationSettingsRouter(pool));

@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
-import { createEmberInternalRouter, createEmberLaunchRouter } from '../server/ember';
+import { createEmberInternalRouter, createEmberLaunchRouter, createEmberConnectRouter } from '../server/ember';
 import { loadConfig } from '../server/config';
 import type { DatabasePool } from '../server/db';
 import type { SettingsStore } from '../server/settings';
@@ -25,7 +25,7 @@ const makeAsset = (type: 'character' | 'world', kind: 'public'|'private'|'adult'
   content_rating:kind==='adult'?'adult':'sfw',
   origin_world_id:null,
 });
-function makePool(type: 'character'|'world'='character', kind:'public'|'private'|'adult'='public', sessionValid=true) {
+function makePool(type: 'character'|'world'|'sandbox'='character', kind:'public'|'private'|'adult'='public', sessionValid=true) {
   let redeemed=false;
   const asset=makeAsset(type, kind);
   const query=vi.fn(async (sql:string)=>{
@@ -37,7 +37,9 @@ function makePool(type: 'character'|'world'='character', kind:'public'|'private'
       redeemed=true; return {rowCount:1,rows:[{id:linkId}]};
     }
     if (sql.includes('JOIN "session"')) return sessionValid ? {
-      rowCount:1, rows:[{...asset,asset_id:asset.id,user_id:userId,link_id:linkId,mode:type,
+      rowCount:1, rows:[{...asset,asset_id:type==='sandbox'?null:asset.id,
+        type:type==='sandbox'?null:asset.type,
+        user_id:userId,link_id:linkId,mode:type,
         orbis_session:{userId,discordUserId:'999999999999999999',access:{isGuildMember:true,canViewAdult:false}}}]
     } : {rowCount:0,rows:[]};
     return {rowCount:0,rows:[]};
@@ -68,6 +70,33 @@ describe('Ember launch handoff',()=>{
   it('requires active Discord membership',async()=>{
     const r=await request(app(makePool(),true,false)).post(launchPath).send({});
     expect(r.status).toBe(403);
+  });
+  it('opens a package-free sandbox directly with an existing Orbis session', async () => {
+    const api=app(makePool());
+    api.use('/ember', createEmberConnectRouter(config, makePool(), settings));
+    const result=await request(api).get('/ember/connect');
+    expect(result.status).toBe(200);
+    expect(result.text).toContain('method="POST"');
+    expect(result.text).toContain('action="https://thehowlingwhispers.com/ember/launch"');
+    expect(result.text).toContain('src="/ember-handoff.js"');
+    expect(result.text).toMatch(/name="ticket" value="[A-Za-z0-9_-]{43}"/);
+    expect(result.text).not.toContain('Bitterroot');
+    expect(result.headers['cache-control']).toBe('no-store');
+  });
+  it('redirects unsigned visitors through existing Orbis Discord sign-in', async () => {
+    const api=app(makePool(),false);
+    api.use('/ember', createEmberConnectRouter(config, makePool(), settings));
+    const r=await request(api).get('/ember/connect');
+    expect(r.status).toBe(302);
+    expect(r.headers.location).toBe('/api/auth/discord/login?returnTo=%2Fember%2Fconnect');
+  });
+  it('redeems a sandbox ticket without inventing an Orbis asset',async()=>{
+    const api=app(makePool('sandbox'));
+    const reply=await request(api).post('/api/internal/ember/redeem')
+      .set('Authorization',`Bearer ${secret}`).send({ticket:'a'.repeat(43)});
+    expect(reply.status).toBe(200);
+    expect(reply.body.mode).toBe('sandbox');
+    expect(reply.body.asset).toBe(null);
   });
   it('launches world and character as separate modes without putting ticket into a URL',async()=>{
     for(const type of ['character','world'] as const) {

@@ -1,5 +1,8 @@
 # Orbis Discord authentication and permissions
 
+Ember direct entry: `https://thehowlingwhispers.com/ember/` sends an unauthenticated-to-Ember browser to the Orbis-domain `/ember/connect` route. Existing Orbis Discord session is reused to mint a one-use **sandbox** ticket with no asset. If not signed in, the same Orbis Discord login is used before returning to this handoff. World and character asset buttons continue using their own optional launch modes. Migration `032_ember_sandbox_launch.sql` must be applied before deploying the new backend. The handoff script lives in `public/ember-handoff.js` and must be allowed by the Orbis script-src CSP; cross-domain form-action must permit `https://thehowlingwhispers.com`.
+
+
 Orbis uses its Discord OAuth application to identify users. The bot token is not used for website login and must never be added to the browser build.
 
 ## Access policy

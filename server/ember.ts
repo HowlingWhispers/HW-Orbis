@@ -14,6 +14,27 @@ import { canDirectViewAssetRow, isAdultRestrictedAssetRow } from './world-access
 const uuid = z.string().uuid();
 const ticketSchema = z.object({ ticket: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
 const linkSchema = z.object({ linkId: uuid }).strict();
+const SANDBOX = 'sandbox' as const;
+const sandboxLaunchTtlMs = 90_000;
+const sandboxSessionTtlMs = 8 * 60 * 60_000;
+async function mintEmberTicket(
+  config: AppConfig, pool: DatabasePool, sessionId: string, userId: string,
+  mode: 'character' | 'world' | 'sandbox', assetId: string | null,
+) {
+  if (config.EMBER_BRIDGE_SECRET.length < 32) throw new Error('Ember bridge not configured');
+  const ticket = randomBytes(32).toString('base64url');
+  const expiresAt = Date.now() + sandboxLaunchTtlMs;
+  await pool.query(`
+    INSERT INTO ember_launch_tickets
+      (id, token_hash, orbis_session_id, user_id, asset_id, mode, expires_at, session_expires_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  `, [randomUUID(), digest(ticket), sessionId, userId, assetId, mode,
+    new Date(expiresAt), new Date(Date.now() + sandboxSessionTtlMs)]);
+  return { ticket, expiresAt, launchUrl: config.EMBER_LAUNCH_URL, mode };
+}
+const htmlEscape = (text: string) => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const constantTimeEqual = (a: string, b: string) => {
@@ -37,9 +58,10 @@ async function readLinkedContext(pool: DatabasePool, id: string) {
       origin.document AS origin_world_document, origin.creator_user_id AS origin_world_creator_user_id
     FROM ember_launch_tickets t
     JOIN "session" s ON s.sid = t.orbis_session_id AND s.expire > now()
-    JOIN library_assets a ON a.id = t.asset_id AND a.type = t.mode
+    LEFT JOIN library_assets a ON a.id = t.asset_id AND a.type = t.mode
     LEFT JOIN library_assets origin ON origin.id = a.origin_world_id
     WHERE t.id = $1 AND t.consumed_at IS NOT NULL AND t.session_expires_at > now()
+      AND (t.mode = 'sandbox' OR a.id IS NOT NULL)
   `, [id]);
   if (!result.rowCount) return null;
   const row = result.rows[0] as Record<string, unknown>;
@@ -47,6 +69,11 @@ async function readLinkedContext(pool: DatabasePool, id: string) {
   const access = record(session.access);
   const superAdmin = session.discordUserId === SUPER_ADMIN_DISCORD_ID;
   if (session.userId !== row.user_id || (!superAdmin && access.isGuildMember !== true)) return null;
+  if (row.mode === SANDBOX) {
+    // Blank canvas: no character, world, inventory or hidden canon is attached.
+    if (row.asset_id !== null || row.type !== null) return null;
+    return { linkId: String(row.link_id), userId: String(row.user_id), mode: SANDBOX, asset: null };
+  }
   if (!canDirectViewAssetRow(row, String(row.user_id), superAdmin)) return null;
   if (isAdultRestrictedAssetRow(row, String(row.user_id), superAdmin || access.canViewAdult === true)) return null;
   return {
@@ -84,15 +111,50 @@ export function createEmberLaunchRouter(config: AppConfig, pool: DatabasePool, s
       if (isAdultRestrictedAssetRow(asset, request.session.userId, superAdmin || request.session.access?.canViewAdult === true)) {
         return response.status(403).json({ error: 'Verification required.', verificationPath: '/verification' });
       }
-      const ticket = randomBytes(32).toString('base64url');
-      const expiresAt = Date.now() + 90_000;
-      await pool.query(`
-        INSERT INTO ember_launch_tickets
-          (id, token_hash, orbis_session_id, user_id, asset_id, mode, expires_at, session_expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `, [randomUUID(), digest(ticket), request.sessionID, request.session.userId, asset.id, asset.type,
-        new Date(expiresAt), new Date(Date.now() + 8 * 60 * 60_000)]);
-      return response.status(201).json({ mode: asset.type, ticket, launchUrl: config.EMBER_LAUNCH_URL, expiresAt });
+      const launch = await mintEmberTicket(config, pool, request.sessionID, request.session.userId,
+        asset.type as 'world' | 'character', String(asset.id));
+      return response.status(201).json(launch);
+    } catch (error) { return next(error); }
+  });
+  return router;
+}
+
+/**
+ * Entry without a package. Direct /ember/ opens this on the Orbis domain, so
+ * the browser supplies its EXISTING host-only Orbis session cookie.
+ * The form posts a one-time ticket to Ember; no cross-domain cookie sharing.
+ */
+export function createEmberConnectRouter(config: AppConfig, pool: DatabasePool, settingsStore: SettingsStore) {
+  const router = Router();
+  router.get('/connect', async (request, response, next) => {
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('Referrer-Policy', 'no-referrer');
+    response.setHeader('X-Frame-Options', 'DENY');
+    try {
+      if (!request.session.userId) {
+        return response.redirect(302, '/api/auth/discord/login?returnTo=%2Fember%2Fconnect');
+      }
+      if (config.EMBER_BRIDGE_SECRET.length < 32) {
+        return response.status(503).send('Ember sign-in is temporarily unavailable.');
+      }
+      const isSuperAdmin = await ensureSuperAdminAccess(request, pool);
+      if (!isSuperAdmin) await refreshSessionAccess(request, config, settingsStore, pool);
+      if (!isSuperAdmin && request.session.access?.isGuildMember !== true) {
+        return response.status(403).send('An active Howling Whispers Discord membership is required.');
+      }
+      const launch = await mintEmberTicket(config, pool, request.sessionID, request.session.userId, SANDBOX, null);
+      const action = htmlEscape(launch.launchUrl);
+      // Separate, same-origin static JS works with a strict script-src 'self' CSP.
+      // No token in the URL, cookies, referrer or logged query string.
+      return response.type('html').send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Opening Ember</title></head><body>
+<main><h1>Opening your Ember sandbox</h1><p>Using your existing Orbis session.</p>
+<form id="ember-handoff" method="POST" action="${action}">
+<input type="hidden" name="ticket" value="${launch.ticket}">
+<button type="submit">Continue to Ember</button></form></main>
+<script src="/ember-handoff.js" defer></script></body></html>`);
     } catch (error) { return next(error); }
   });
   return router;
