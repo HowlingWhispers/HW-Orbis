@@ -31,10 +31,11 @@ const supportedModels = new Set(['xialong-v1', 'glm-4-6']);
 const stop = ['\nPLAYER (', '\nPlayer:', '\nUSER:', '\n<|user|>', '\nSystem:', '\nAnalysis:', '\nThinking:'];
 
 export function buildEmberPrompt(context: EmberContext, turns: EmberTurn[]) {
+  const safeSummary = context.asset?.summary?.slice(0, 3500) || '(no summary provided)';
   const focus = context.mode === 'character'
-    ? `Character roleplay. Portray ${context.asset!.name} consistently and respond directly as that character, including natural actions. The Orbis character description is: ${context.asset!.summary || '(no description provided)'}.`
+    ? `Character roleplay. Portray ${context.asset!.name} consistently and respond directly as that character, including natural actions. The Orbis character description is: ${safeSummary}.`
     : context.mode === 'world'
-      ? `World adventure set in ${context.asset!.name}. Existing Orbis world summary: ${context.asset!.summary || '(no summary provided)'}. Preserve this canon: do not create named locations or definitive lore that was not provided. Unknown connections and places remain unknown.`
+      ? `World adventure set in ${context.asset!.name}. Existing Orbis world summary: ${safeSummary}. Preserve this canon: do not create named locations or definitive lore that was not provided. Unknown connections and places remain unknown.`
       : 'Blank freeform sandbox. No world, character, location, quest or opening scene is assumed. Build only on the player’s words and what has happened in the transcript.';
   const lines = turns.map((turn) => {
     const who = turn.source === 'player' ? `PLAYER (${turn.mode.toUpperCase()})` : 'NARRATOR';
@@ -52,13 +53,14 @@ export function buildEmberPrompt(context: EmberContext, turns: EmberTurn[]) {
     'This is a roleplay response, not a JSON or markdown report.',
     'Recent story transcript (JSON-escaped text follows each role):',
   ].join('\n');
-  let selected = [];
+  const selected: string[] = [];
   let budget = 29_000 - header.length;
   // Prefer the newest context while keeping complete player/AI exchanges.
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].length > budget) break;
-    selected.unshift(lines[i]);
-    budget -= lines[i].length + 1;
+    const line = lines[i];
+    if (line === undefined || line.length > budget) break;
+    selected.unshift(line);
+    budget -= line.length + 1;
   }
   return `${header}\n${selected.join('\n')}\nNARRATOR:`;
 }
