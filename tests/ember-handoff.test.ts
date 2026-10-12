@@ -27,7 +27,7 @@ const makeAsset = (type: 'character' | 'world', kind: 'public'|'private'|'adult'
 });
 function makePool(type: 'character'|'world'|'sandbox'='character', kind:'public'|'private'|'adult'='public', sessionValid=true) {
   let redeemed=false;
-  const asset=makeAsset(type, kind);
+  const asset=makeAsset(type === 'sandbox' ? 'character' : type, kind);
   const query=vi.fn(async (sql:string)=>{
     if (sql.includes('adult_access_override')) return { rowCount:1, rows:[{adult_access_override:false}] };
     if (sql.includes('SELECT a.*, origin.document')) return {rowCount:1,rows:[asset]};
