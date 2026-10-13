@@ -1,5 +1,5 @@
 import { Archive, ArrowLeft, ArrowRightLeft, Boxes, Clock3, Download, Flame, MapPin, Pencil, Search, Sparkles, Trash2, UserRound } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { libraryApi } from '../api/client';
 import type { DeleteImpact, OwnershipTransferTarget } from '../api/contracts';
@@ -24,6 +24,8 @@ export function AssetDetailView() {
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false);
   const [emberLaunching, setEmberLaunching] = useState(false);
   const [emberError, setEmberError] = useState('');
+  const emberTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emberPending = useRef(false);
   const [launchError, setLaunchError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -45,9 +47,16 @@ export function AssetDetailView() {
     const resetSimulationLaunch = () => {
       setLaunching(false);
       setLaunchError('');
+      if (emberTimeout.current) clearTimeout(emberTimeout.current);
+      emberTimeout.current = null;
+      emberPending.current = false;
+      setEmberLaunching(false);
     };
     window.addEventListener('pageshow', resetSimulationLaunch);
-    return () => window.removeEventListener('pageshow', resetSimulationLaunch);
+    return () => {
+      window.removeEventListener('pageshow', resetSimulationLaunch);
+      if (emberTimeout.current) clearTimeout(emberTimeout.current);
+    };
   }, []);
 
   const category = asset ? findNavigationItem(asset.type) : undefined;
@@ -98,21 +107,47 @@ export function AssetDetailView() {
   const enterEmber = async () => {
     if (asset.type !== 'world' && asset.type !== 'character') return;
     if (!user) { navigate('/account'); return; }
-    setEmberLaunching(true); setEmberError('');
+    if (emberPending.current) return;
+    emberPending.current = true;
+    setEmberLaunching(true);
+    setEmberError('');
     try {
       const launch = await libraryApi.launchEmber(asset.id);
-      // Keep the one-use ticket out of URLs, referrers and browser history.
+      // A ticket is one-use and must never appear in URL, logs or browser history.
+      const destination = new URL(launch.launchUrl);
+      if (destination.protocol !== 'https:' || destination.pathname !== '/ember/launch'
+        || destination.username || destination.password || destination.search || destination.hash) {
+        throw new Error('Ember returned an invalid launch destination.');
+      }
       const form = document.createElement('form');
       form.method = 'POST';
-      form.action = launch.launchUrl;
+      form.action = destination.href;
       form.style.display = 'none';
       const input = document.createElement('input');
-      input.type = 'hidden'; input.name = 'ticket'; input.value = launch.ticket;
-      form.append(input); document.body.append(form);
-      // Let the browser complete navigation; detaching a submitted form immediately
-      // may cancel submission in some browsers.
-      form.submit();
+      input.type = 'hidden';
+      input.name = 'ticket';
+      input.value = launch.ticket;
+      form.append(input);
+      document.body.append(form);
+      // If the browser refuses to navigate, restore the button and give a
+      // retry path. The retry obtains a NEW ticket, never reuses this one.
+      emberTimeout.current = setTimeout(() => {
+        if (!emberPending.current) return;
+        emberPending.current = false;
+        setEmberLaunching(false);
+        setEmberError('Ember did not open. Please try again. If it keeps happening, report this launch failure to the Orbis team.');
+        form.remove();
+      }, 12000);
+      try {
+        form.submit();
+      } catch (error) {
+        if (emberTimeout.current) clearTimeout(emberTimeout.current);
+        emberTimeout.current = null;
+        form.remove();
+        throw error;
+      }
     } catch (reason) {
+      emberPending.current = false;
       setEmberError(reason instanceof Error ? reason.message : 'Ember could not open.');
       setEmberLaunching(false);
     }
