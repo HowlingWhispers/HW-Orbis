@@ -23,6 +23,7 @@ const generationTurnSchema = z.object({
 const generationRequestSchema = z.object({
   linkId: uuid,
   turns: z.array(generationTurnSchema).min(1).max(48),
+  appFormattingGuidance: z.string().max(1800).optional(),
 }).strict().refine(value => value.turns.at(-1)?.source === 'player'
   && value.turns.at(-1)?.mode !== 'narrator', { message: 'The last turn must be the player.' });
 const SANDBOX = 'sandbox' as const;
@@ -210,7 +211,7 @@ export function createEmberInternalRouter(config: AppConfig, pool: DatabasePool)
       generating.add(context.userId);
       try {
         const result = await generateEmberNarration(config, pool, context,
-          parsed.data.turns as EmberTurn[]);
+          parsed.data.turns as EmberTurn[], undefined, parsed.data.appFormattingGuidance ?? '');
         return response.json({ text: result.text, model: result.model });
       } catch (error) {
         if (error instanceof EmberGenerationError) {
