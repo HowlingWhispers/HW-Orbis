@@ -28,7 +28,7 @@ export class EmberGenerationError extends Error {
 }
 
 const supportedModels = new Set(['xialong-v1', 'glm-4-6']);
-const stop = ['\nPLAYER (', '\nPlayer:', '\nUSER:', '\n<|user|>', '\nSystem:', '\nAnalysis:', '\nThinking:'];
+const stop = ['\nPLAYER:', '\nPLAYER (', '\nPlayer:', '\nUSER:', '\n<|user|>', '\nSystem:', '\nAnalysis:', '\nThinking:'];
 
 export function buildEmberPrompt(context: EmberContext, turns: EmberTurn[], appFormattingGuidance = "") {
   const safeSummary = context.asset?.summary?.slice(0, 3500) || '(no summary provided)';
