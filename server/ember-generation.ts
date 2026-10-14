@@ -38,7 +38,7 @@ export function buildEmberPrompt(context: EmberContext, turns: EmberTurn[], appF
       ? `World adventure set in ${context.asset!.name}. Existing Orbis world summary: ${safeSummary}. Preserve this canon: do not create named locations or definitive lore that was not provided. Unknown connections and places remain unknown.`
       : 'Blank freeform sandbox. No world, character, location, quest or opening scene is assumed. Build only on the player’s words and what has happened in the transcript.';
   const lines = turns.map((turn) => {
-    const who = turn.source === 'player' ? `PLAYER (${turn.mode.toUpperCase()})` : 'NARRATOR';
+    const who = turn.source === 'player' ? 'PLAYER' : 'NARRATOR';
     // JSON encoding keeps multi-line story text distinguishable from role labels.
     return `${who}: ${JSON.stringify(turn.text)}`;
   });
