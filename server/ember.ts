@@ -24,8 +24,11 @@ const generationRequestSchema = z.object({
   linkId: uuid,
   turns: z.array(generationTurnSchema).min(1).max(48),
   appFormattingGuidance: z.string().max(1800).optional(),
-}).strict().refine(value => value.turns.at(-1)?.source === 'player'
-  && value.turns.at(-1)?.mode !== 'narrator', { message: 'The last turn must be the player.' });
+  task: z.enum(['narration','discovery']).optional(),
+}).strict().refine(value => value.task === 'discovery'
+  ? value.turns.at(-1)?.source === 'provider' && value.turns.filter(t => t.source === 'player').length >= 3
+  : value.turns.at(-1)?.source === 'player' && value.turns.at(-1)?.mode !== 'narrator',
+  { message: 'Invalid last turn for generation task.' });
 const SANDBOX = 'sandbox' as const;
 const sandboxLaunchTtlMs = 90_000;
 const sandboxSessionTtlMs = 8 * 60 * 60_000;
@@ -211,7 +214,7 @@ export function createEmberInternalRouter(config: AppConfig, pool: DatabasePool)
       generating.add(context.userId);
       try {
         const result = await generateEmberNarration(config, pool, context,
-          parsed.data.turns as EmberTurn[], undefined, parsed.data.appFormattingGuidance ?? '');
+          parsed.data.turns as EmberTurn[], undefined, parsed.data.appFormattingGuidance ?? '', parsed.data.task ?? 'narration');
         return response.json({ text: result.text, model: result.model });
       } catch (error) {
         if (error instanceof EmberGenerationError) {
