@@ -38,6 +38,18 @@ describe('Ember NovelAI bridge', () => {
     expect(prompt).not.toContain('Ragna');
     expect(prompt).not.toContain('Ranger Station');
   });
+  it('distinguishes three player input modes in the narrator prompt', () => {
+    const prompt = buildEmberPrompt(sandbox, [
+      {source:'player',mode:'speech',text:'Hello'},
+      {source:'player',mode:'action',text:'I wave.'},
+      {source:'player',mode:'thought',text:'I wonder.'},
+    ]);
+    expect(prompt).toContain('PLAYER (SPEECH)');
+    expect(prompt).toContain('PLAYER (ACTION)');
+    expect(prompt).toContain('PLAYER (THOUGHT)');
+    expect(prompt).toContain('private internal thinking, never audible dialogue');
+    expect(prompt).toContain('Narrate the outcome and reactions');
+  });
   it('does not generate unprovided world locations from canonical references',()=>{
     const world: EmberContext={userId:uid,mode:'world',asset:{
       id:'22222222-2222-4222-8222-222222222222',type:'world',name:'Bitterroot',summary:'The land is foggy.',
