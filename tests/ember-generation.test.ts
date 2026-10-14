@@ -44,9 +44,9 @@ describe('Ember NovelAI bridge', () => {
       {source:'player',mode:'action',text:'I wave.'},
       {source:'player',mode:'thought',text:'I wonder.'},
     ], 'Ember-owned marker rules: *action*, "speech", (thought).');
-    expect(prompt).toContain('PLAYER (SPEECH)');
-    expect(prompt).toContain('PLAYER (ACTION)');
-    expect(prompt).toContain('PLAYER (THOUGHT)');
+    expect(prompt).toContain('PLAYER: "Hello"');
+    expect(prompt).toContain('PLAYER: "I wave."');
+    expect(prompt).toContain('PLAYER: "I wonder."');
     expect(prompt).toContain('Ember-owned marker rules');
     expect(prompt).not.toContain('private internal thinking, never audible dialogue');
   });
