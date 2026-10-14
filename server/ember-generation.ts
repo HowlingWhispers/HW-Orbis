@@ -67,6 +67,23 @@ export function buildEmberPrompt(context: EmberContext, turns: EmberTurn[], appF
   return `${header}\n${selected.join('\n')}\nNARRATOR:`;
 }
 
+// A companion discovery request uses app-authored guidance; Orbis does not
+// define Ember's character rules, profiles, or roleplay markup.
+export function buildEmberCompanionPrompt(turns: EmberTurn[], guidance: string) {
+  const lines = turns.map(turn =>
+    `${turn.source === 'player' ? 'PLAYER' : 'NARRATOR'}: ${JSON.stringify(turn.text)}`);
+  const header = `${guidance}\nRecent story transcript follows (JSON-escaped text):`;
+  const selected: string[] = [];
+  let budget = 29_000 - header.length;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (!line || line.length > budget) break;
+    selected.unshift(line);
+    budget -= line.length + 1;
+  }
+  return `${header}\n${selected.join('\n')}\nCODA RESULT:`;
+}
+
 function parseText(value: unknown): string {
   if (!value || typeof value !== 'object') return '';
   const list = (value as { choices?: unknown }).choices;
@@ -82,6 +99,7 @@ export async function generateEmberNarration(
   config: AppConfig, pool: DatabasePool, context: EmberContext, turns: EmberTurn[],
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
   appFormattingGuidance = "",
+  task: 'narration' | 'discovery' = 'narration',
 ) {
   const provider = await pool.query(
     `SELECT model, token_ciphertext, token_iv, token_tag
@@ -110,8 +128,8 @@ export async function generateEmberNarration(
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: entry.model,
-          prompt: buildEmberPrompt(context, turns, appFormattingGuidance),
-          max_tokens: 384, temperature: 0.82, top_k: 250, top_p: 0.95,
+          prompt: task === "discovery" ? buildEmberCompanionPrompt(turns, appFormattingGuidance) : buildEmberPrompt(context, turns, appFormattingGuidance),
+          max_tokens: task === "discovery" ? 512 : 384, temperature: task === "discovery" ? 0.45 : 0.82, top_k: 250, top_p: 0.95,
           frequency_penalty: 0, presence_penalty: 0,
           stop, stream: false,
         }),
