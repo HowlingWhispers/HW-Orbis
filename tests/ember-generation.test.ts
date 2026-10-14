@@ -43,12 +43,12 @@ describe('Ember NovelAI bridge', () => {
       {source:'player',mode:'speech',text:'Hello'},
       {source:'player',mode:'action',text:'I wave.'},
       {source:'player',mode:'thought',text:'I wonder.'},
-    ]);
+    ], 'Ember-owned marker rules: *action*, "speech", (thought).');
     expect(prompt).toContain('PLAYER (SPEECH)');
     expect(prompt).toContain('PLAYER (ACTION)');
     expect(prompt).toContain('PLAYER (THOUGHT)');
-    expect(prompt).toContain('private internal thinking, never audible dialogue');
-    expect(prompt).toContain('Narrate the outcome and reactions');
+    expect(prompt).toContain('Ember-owned marker rules');
+    expect(prompt).not.toContain('private internal thinking, never audible dialogue');
   });
   it('does not generate unprovided world locations from canonical references',()=>{
     const world: EmberContext={userId:uid,mode:'world',asset:{
