@@ -30,7 +30,7 @@ export class EmberGenerationError extends Error {
 const supportedModels = new Set(['xialong-v1', 'glm-4-6']);
 const stop = ['\nPLAYER (', '\nPlayer:', '\nUSER:', '\n<|user|>', '\nSystem:', '\nAnalysis:', '\nThinking:'];
 
-export function buildEmberPrompt(context: EmberContext, turns: EmberTurn[]) {
+export function buildEmberPrompt(context: EmberContext, turns: EmberTurn[], appFormattingGuidance = "") {
   const safeSummary = context.asset?.summary?.slice(0, 3500) || '(no summary provided)';
   const focus = context.mode === 'character'
     ? `Character roleplay. Portray ${context.asset!.name} consistently and respond directly as that character, including natural actions. The Orbis character description is: ${safeSummary}.`
@@ -48,12 +48,9 @@ export function buildEmberPrompt(context: EmberContext, turns: EmberTurn[]) {
     focus,
     'Continue the story naturally in English. Match the player’s tone, context and pacing.',
     'Do not decide what the player says, thinks or does. Do not impose missions, rules or game mechanics.',
-    'Interpret player input by its explicitly marked mode:',
-    'PLAYER (SPEECH) means words spoken aloud in the scene. Other characters may hear and reply if present; the player does not need to type quotation marks.',
-    'PLAYER (ACTION) describes what the player attempts or physically does. Narrate the outcome and reactions without inventing extra player actions or dialogue.',
-    'PLAYER (THOUGHT) is private internal thinking, never audible dialogue. Other characters cannot hear or know it unless the player explicitly establishes telepathy or another in-world reason.',
-    'Do not turn thoughts into spoken lines. Speech, action and thought must remain distinct even when the writing itself contains quotation marks or asterisks.',
-    'Give an in-character response to speech, or descriptive continuation to actions and thoughts.',
+    // App-specific formatting rules are owned by Ember and passed from its
+    // trusted server through the authenticated internal bridge.
+    ...(appFormattingGuidance ? [appFormattingGuidance] : []),
     'Do not include meta-commentary, analysis, system labels or quotation of the transcript.',
     'This is a roleplay response, not a JSON or markdown report.',
     'Recent story transcript (JSON-escaped text follows each role):',
@@ -84,6 +81,7 @@ function parseText(value: unknown): string {
 export async function generateEmberNarration(
   config: AppConfig, pool: DatabasePool, context: EmberContext, turns: EmberTurn[],
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
+  appFormattingGuidance = "",
 ) {
   const provider = await pool.query(
     `SELECT model, token_ciphertext, token_iv, token_tag
@@ -112,7 +110,7 @@ export async function generateEmberNarration(
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: entry.model,
-          prompt: buildEmberPrompt(context, turns),
+          prompt: buildEmberPrompt(context, turns, appFormattingGuidance),
           max_tokens: 384, temperature: 0.82, top_k: 250, top_p: 0.95,
           frequency_penalty: 0, presence_penalty: 0,
           stop, stream: false,
